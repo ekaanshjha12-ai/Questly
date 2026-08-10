@@ -33,13 +33,19 @@ export default function Nav({ view, onChange }: Props) {
             aria-current={active ? 'page' : undefined}
             // Stacked icon-over-label on phones, inline on wider screens. The
             // min-height keeps every tap target comfortably past 44px.
-            className={`flex min-h-[3rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium leading-none transition-colors sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm ${
+            //
+            // min-w-0 is load-bearing: flex items default to min-width:auto and
+            // refuse to shrink below their content, so without it seven tabs
+            // force the whole page wider than the viewport and clip every
+            // screen, not just this bar.
+            className={`flex min-h-[3rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium leading-none transition-colors sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-2 sm:text-xs ${
               active ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-ink-950' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            <span className="sm:hidden">{tab.short}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
+            {/* Short labels at every width — the full ones need ~990px and the
+                content column is capped at 672px, so they never fit. */}
+            <span className="truncate">{tab.short}</span>
           </button>
         )
       })}
