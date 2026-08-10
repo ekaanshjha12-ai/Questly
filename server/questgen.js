@@ -16,24 +16,18 @@ const POOL_SCHEMA = {
   properties: {
     daily: {
       type: 'array',
-      description: 'Quests doable in one day, 10 to 25 minutes each.',
+      description: 'Exactly 10 quests doable in one day, 10 to 25 minutes each.',
       items: { type: 'string' },
-      minItems: 8,
-      maxItems: 10,
     },
     weekly: {
       type: 'array',
-      description: 'Quests needing a few sessions across a week.',
+      description: 'Exactly 6 quests needing a few sessions across a week.',
       items: { type: 'string' },
-      minItems: 5,
-      maxItems: 6,
     },
     monthly: {
       type: 'array',
-      description: 'Milestones that mark real progress over a month.',
+      description: 'Exactly 5 milestones that mark real progress over a month.',
       items: { type: 'string' },
-      minItems: 4,
-      maxItems: 5,
     },
   },
   required: ['daily', 'weekly', 'monthly'],

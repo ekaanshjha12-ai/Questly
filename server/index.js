@@ -382,7 +382,13 @@ app.post('/api/goals/quests', requireAuth, async (req, res) => {
       return
     }
     console.error('quest generation failed', err)
-    res.status(502).json({ error: 'Could not write quests for that goal.' })
+    res.status(502).json({
+      error: 'Could not write quests for that goal.',
+      // Surfaced so a failure can be diagnosed without shell access to the
+      // container. This endpoint requires a session, so it is not public.
+      detail: String(err?.message ?? err).slice(0, 300),
+      status: err?.status ?? null,
+    })
   }
 })
 
