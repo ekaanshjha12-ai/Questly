@@ -17,6 +17,7 @@ import { VerifyModalHost } from './components/VerifyModal'
 import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
 import NoiseButton from './components/NoiseButton'
+import InstallPrompt from './components/InstallPrompt'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -289,6 +290,7 @@ function AuthedApp({
       />
 
       <NoiseButton noise={noise} />
+      <InstallPrompt />
 
       <ToastStack events={events} onDismiss={dismissEvent} />
       <LevelUpModal events={events} onDismiss={dismissEvent} />

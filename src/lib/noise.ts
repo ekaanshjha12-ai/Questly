@@ -12,7 +12,46 @@
  * been a 9MB download for material that is identical every second.
  */
 
-export type SoundId = 'deep' | 'white' | 'pink' | 'brown' | 'rain' | 'waves'
+export type SoundId =
+  | 'deep'
+  | 'white'
+  | 'pink'
+  | 'brown'
+  | 'rain'
+  | 'downpour'
+  | 'waves'
+  | 'stream'
+  | 'wind'
+  | 'forest'
+  | 'fan'
+  | 'aircon'
+  | 'cabin'
+  | 'train'
+  | 'underwater'
+  | 'cave'
+  | 'night'
+
+/** One filter stage in a sound's chain. */
+export interface FilterSpec {
+  type: BiquadFilterType
+  freq: number
+  q?: number
+  gain?: number
+}
+
+/**
+ * How a sound is built. Declaring the chain rather than branching per sound
+ * keeps sixteen sounds from becoming sixteen special cases in the engine.
+ */
+export interface Recipe {
+  /** Which noise colour feeds the chain. */
+  source: 'white' | 'pink' | 'brown'
+  filters?: FilterSpec[]
+  /** Slowly sweeps one filter's cutoff — wind moving, surf rolling in. */
+  sweep?: { filter: number; rate: number; depth: number }
+  /** Slowly swells the volume. Rate in Hz, depth 0-1. */
+  pulse?: { rate: number; depth: number }
+}
 
 export interface SoundDef {
   id: SoundId
@@ -21,6 +60,8 @@ export interface SoundDef {
   icon: string
   /** Set for recorded sounds. Everything else is generated at runtime. */
   src?: string
+  /** Absent for recordings, which need no synthesis. */
+  recipe?: Recipe
   /**
    * Per-sound level trim. Measured from real output: raw white noise came out
    * roughly three times louder than pink, so without this the volume slider
@@ -37,13 +78,175 @@ export const SOUNDS: SoundDef[] = [
     blurb: 'A soft, warm recording. Easiest to sit with.',
     icon: '🎧',
     src: '/audio/deep-white-noise.mp3',
-    trim: 0.82,
+    trim: 1.32,
   },
-  { id: 'white', name: 'White noise', blurb: 'Flat, bright hiss. Masks voices well.', icon: '⚪', trim: 0.31 },
-  { id: 'pink', name: 'Pink noise', blurb: 'Softer than white. Easiest on the ears.', icon: '🌸', trim: 0.99 },
-  { id: 'brown', name: 'Brown noise', blurb: 'Deep and rumbling, like distant traffic.', icon: '🟤', trim: 0.87 },
-  { id: 'rain', name: 'Rain', blurb: 'Steady rainfall on a window.', icon: '🌧️', trim: 0.45 },
-  { id: 'waves', name: 'Ocean', blurb: 'Slow swells rolling in and out.', icon: '🌊', trim: 1.06 },
+  {
+    id: 'white', name: 'White noise', blurb: 'Flat, bright hiss. Masks voices well.', icon: '⚪',
+    recipe: { source: 'white' }, trim: 0.31,
+  },
+  {
+    id: 'pink', name: 'Pink noise', blurb: 'Softer than white. Easiest on the ears.', icon: '🌸',
+    recipe: { source: 'pink' }, trim: 0.93,
+  },
+  {
+    id: 'brown', name: 'Brown noise', blurb: 'Deep and rumbling, like distant traffic.', icon: '🟤',
+    recipe: { source: 'brown' }, trim: 0.98,
+  },
+  {
+    id: 'rain', name: 'Rain', blurb: 'Steady rainfall on a window.', icon: '🌧️',
+    recipe: {
+      source: 'white',
+      filters: [
+        { type: 'highpass', freq: 500 },
+        { type: 'lowpass', freq: 7000 },
+      ],
+    },
+    trim: 0.45,
+  },
+  {
+    id: 'downpour', name: 'Heavy rain', blurb: 'A real downpour, close and loud.', icon: '⛈️',
+    recipe: {
+      source: 'white',
+      filters: [
+        { type: 'highpass', freq: 260 },
+        { type: 'lowpass', freq: 11000 },
+        { type: 'peaking', freq: 1800, q: 0.7, gain: 4 },
+      ],
+      pulse: { rate: 0.11, depth: 0.14 },
+    },
+    trim: 0.34,
+  },
+  {
+    id: 'waves', name: 'Ocean', blurb: 'Slow swells rolling in and out.', icon: '🌊',
+    recipe: {
+      source: 'brown',
+      filters: [{ type: 'lowpass', freq: 500 }],
+      sweep: { filter: 0, rate: 0.07, depth: 320 },
+      pulse: { rate: 0.07, depth: 0.32 },
+    },
+    trim: 1.19,
+  },
+  {
+    id: 'stream', name: 'Stream', blurb: 'Water running over stones.', icon: '💧',
+    recipe: {
+      source: 'white',
+      filters: [
+        { type: 'bandpass', freq: 1400, q: 0.55 },
+        { type: 'peaking', freq: 3200, q: 1.2, gain: 6 },
+      ],
+      sweep: { filter: 0, rate: 0.5, depth: 420 },
+    },
+    trim: 0.65,
+  },
+  {
+    id: 'wind', name: 'Wind', blurb: 'Gusts moving through an open space.', icon: '🌬️',
+    recipe: {
+      source: 'pink',
+      filters: [{ type: 'bandpass', freq: 420, q: 0.7 }],
+      sweep: { filter: 0, rate: 0.05, depth: 300 },
+      pulse: { rate: 0.05, depth: 0.4 },
+    },
+    trim: 2.92,
+  },
+  {
+    id: 'forest', name: 'Forest', blurb: 'Leaves stirring high in the canopy.', icon: '🌲',
+    recipe: {
+      source: 'white',
+      filters: [
+        { type: 'highpass', freq: 1800 },
+        { type: 'lowpass', freq: 9000 },
+      ],
+      sweep: { filter: 1, rate: 0.09, depth: 2200 },
+      pulse: { rate: 0.09, depth: 0.3 },
+    },
+    trim: 0.42,
+  },
+  {
+    id: 'fan', name: 'Desk fan', blurb: 'A steady blade hum a metre away.', icon: '🌀',
+    recipe: {
+      source: 'brown',
+      filters: [
+        { type: 'lowpass', freq: 1400 },
+        { type: 'peaking', freq: 190, q: 3.5, gain: 9 },
+      ],
+      pulse: { rate: 2.6, depth: 0.06 },
+    },
+    trim: 0.84,
+  },
+  {
+    id: 'aircon', name: 'Air conditioning', blurb: 'The hum of an office that never sleeps.', icon: '❄️',
+    recipe: {
+      source: 'pink',
+      filters: [
+        { type: 'lowpass', freq: 2200 },
+        { type: 'peaking', freq: 120, q: 2.5, gain: 7 },
+        { type: 'notch', freq: 900, q: 1.4 },
+      ],
+    },
+    trim: 1.02,
+  },
+  {
+    id: 'cabin', name: 'Aeroplane cabin', blurb: 'Cruising at altitude, engines behind you.', icon: '✈️',
+    recipe: {
+      source: 'brown',
+      filters: [
+        { type: 'lowpass', freq: 900 },
+        { type: 'peaking', freq: 95, q: 2, gain: 8 },
+        { type: 'peaking', freq: 320, q: 1.5, gain: 3 },
+      ],
+    },
+    trim: 0.72,
+  },
+  {
+    id: 'train', name: 'Train carriage', blurb: 'Rolling stock and rhythm on the rails.', icon: '🚆',
+    recipe: {
+      source: 'brown',
+      filters: [
+        { type: 'lowpass', freq: 1100 },
+        { type: 'peaking', freq: 150, q: 2.2, gain: 6 },
+      ],
+      pulse: { rate: 1.7, depth: 0.22 },
+    },
+    trim: 1.13,
+  },
+  {
+    id: 'underwater', name: 'Underwater', blurb: 'Submerged, everything muffled above.', icon: '🫧',
+    recipe: {
+      source: 'brown',
+      filters: [
+        { type: 'lowpass', freq: 320 },
+        { type: 'peaking', freq: 160, q: 1.8, gain: 5 },
+      ],
+      sweep: { filter: 0, rate: 0.13, depth: 120 },
+      pulse: { rate: 0.13, depth: 0.25 },
+    },
+    trim: 0.9,
+  },
+  {
+    id: 'cave', name: 'Deep cave', blurb: 'Vast, low and still. Almost nothing up top.', icon: '🕳️',
+    recipe: {
+      source: 'brown',
+      filters: [
+        { type: 'lowpass', freq: 180 },
+        { type: 'peaking', freq: 70, q: 1.6, gain: 7 },
+      ],
+      pulse: { rate: 0.04, depth: 0.3 },
+    },
+    trim: 1.08,
+  },
+  {
+    id: 'night', name: 'Night air', blurb: 'Thin, high and quiet. Late and far from traffic.', icon: '🌙',
+    recipe: {
+      source: 'white',
+      filters: [
+        { type: 'highpass', freq: 3200 },
+        { type: 'lowpass', freq: 12000 },
+        { type: 'peaking', freq: 6000, q: 0.8, gain: 3 },
+      ],
+      pulse: { rate: 0.06, depth: 0.25 },
+    },
+    trim: 0.33,
+  },
 ]
 
 const BUFFER_SECONDS = 6
@@ -87,13 +290,13 @@ function fillBrown(data: Float32Array) {
  * no click. Extra samples are generated past the requested length, then folded
  * back over the opening samples and discarded.
  */
-function makeLoopable(ctx: BaseAudioContext, kind: SoundId, seconds: number): AudioBuffer {
+function makeLoopable(ctx: BaseAudioContext, colour: Recipe['source'], seconds: number): AudioBuffer {
   const rate = ctx.sampleRate
   const length = Math.floor(seconds * rate)
   const scratch = new Float32Array(length + SEAM)
 
-  if (kind === 'brown' || kind === 'waves') fillBrown(scratch)
-  else if (kind === 'pink') fillPink(scratch)
+  if (colour === 'brown') fillBrown(scratch)
+  else if (colour === 'pink') fillPink(scratch)
   else fillWhite(scratch)
 
   for (let i = 0; i < SEAM; i++) {
@@ -135,7 +338,7 @@ export function createNoiseEngine(): NoiseEngine {
   let generation = 0
   let meterData: Float32Array | null = null
   let volume = 0.5
-  const buffers = new Map<SoundId, AudioBuffer>()
+  const buffers = new Map<string, AudioBuffer>()
 
   function ensureContext(): AudioContext {
     if (!ctx) {
@@ -179,10 +382,9 @@ export function createNoiseEngine(): NoiseEngine {
   /** Recorded sounds are fetched and decoded once, then cached like the
    * generated ones. The file is already crossfaded to loop cleanly. */
   async function loadBuffer(context: AudioContext, sound: SoundDef): Promise<AudioBuffer> {
-    const cached = buffers.get(sound.id)
-    if (cached) return cached
-
     if (sound.src) {
+      const cached = buffers.get(sound.id)
+      if (cached) return cached
       const res = await fetch(sound.src)
       if (!res.ok) throw new Error(`Could not load ${sound.src}`)
       const decoded = await context.decodeAudioData(await res.arrayBuffer())
@@ -190,68 +392,70 @@ export function createNoiseEngine(): NoiseEngine {
       return decoded
     }
 
-    const generated = makeLoopable(context, sound.id, BUFFER_SECONDS)
-    buffers.set(sound.id, generated)
+    // Keyed by noise colour, not by sound: the filtering is what makes rain
+    // differ from wind, so a dozen sounds share three generated buffers.
+    const colour = sound.recipe?.source ?? 'white'
+    const cached = buffers.get(colour)
+    if (cached) return cached
+    const generated = makeLoopable(context, colour, BUFFER_SECONDS)
+    buffers.set(colour, generated)
     return generated
   }
 
-  /** Wires the buffer through whatever filtering the chosen sound needs. */
+  /** Builds the node chain described by a sound's recipe. */
   function buildVoice(context: AudioContext, sound: SoundDef, buffer: AudioBuffer, destination: AudioNode) {
     const src = context.createBufferSource()
     src.buffer = buffer
     src.loop = true
 
     let tail: AudioNode = src
+    const recipe = sound.recipe
+    const built: BiquadFilterNode[] = []
 
-    if (sound.id === 'rain') {
-      // Roll off the rumble and the very top so it reads as rainfall on glass
-      // rather than undifferentiated hiss.
-      const high = context.createBiquadFilter()
-      high.type = 'highpass'
-      high.frequency.value = 500
-      const low = context.createBiquadFilter()
-      low.type = 'lowpass'
-      low.frequency.value = 7000
-      tail.connect(high)
-      high.connect(low)
-      tail = low
-      chain.push(high, low)
+    for (const spec of recipe?.filters ?? []) {
+      const filter = context.createBiquadFilter()
+      filter.type = spec.type
+      filter.frequency.value = spec.freq
+      if (spec.q !== undefined) filter.Q.value = spec.q
+      if (spec.gain !== undefined) filter.gain.value = spec.gain
+      tail.connect(filter)
+      tail = filter
+      built.push(filter)
+      chain.push(filter)
     }
 
-    if (sound.id === 'waves') {
-      // A slow filter sweep plus a matching volume swell gives the sense of
-      // surf rolling in and receding.
-      const low = context.createBiquadFilter()
-      low.type = 'lowpass'
-      low.frequency.value = 500
+    // A slow oscillator pushed into a filter's frequency makes the sound move —
+    // surf rolling in, wind rising and falling — instead of sitting still.
+    if (recipe?.sweep && built[recipe.sweep.filter]) {
+      const lfo = context.createOscillator()
+      lfo.frequency.value = recipe.sweep.rate
+      const depth = context.createGain()
+      depth.gain.value = recipe.sweep.depth
+      lfo.connect(depth)
+      depth.connect(built[recipe.sweep.filter].frequency)
+      lfo.start()
+      lfos.push(lfo)
+      chain.push(depth)
+    }
+
+    if (recipe?.pulse) {
       const swell = context.createGain()
-      swell.gain.value = 0.65
-
-      const sweep = context.createOscillator()
-      sweep.frequency.value = 0.07 // one swell roughly every 14 seconds
-      const sweepDepth = context.createGain()
-      sweepDepth.gain.value = 320
-      sweep.connect(sweepDepth)
-      sweepDepth.connect(low.frequency)
-
-      const pulse = context.createOscillator()
-      pulse.frequency.value = 0.07
-      const pulseDepth = context.createGain()
-      pulseDepth.gain.value = 0.3
-      pulse.connect(pulseDepth)
-      pulseDepth.connect(swell.gain)
-
-      tail.connect(low)
-      low.connect(swell)
+      // Centre the gain so the modulation swings around it rather than clipping.
+      swell.gain.value = 1 - recipe.pulse.depth
+      const lfo = context.createOscillator()
+      lfo.frequency.value = recipe.pulse.rate
+      const depth = context.createGain()
+      depth.gain.value = recipe.pulse.depth
+      lfo.connect(depth)
+      depth.connect(swell.gain)
+      tail.connect(swell)
       tail = swell
-
-      sweep.start()
-      pulse.start()
-      lfos.push(sweep, pulse)
-      chain.push(low, swell, sweepDepth, pulseDepth)
+      lfo.start()
+      lfos.push(lfo)
+      chain.push(swell, depth)
     }
 
-    // Level trim sits last, so it applies whatever filtering came before.
+    // Level trim sits last, so it applies to whatever filtering came before.
     const trim = context.createGain()
     trim.gain.value = sound.trim
     tail.connect(trim)
@@ -274,8 +478,7 @@ export function createNoiseEngine(): NoiseEngine {
       // Decoding a file is async, so a fast switch between sounds could let an
       // earlier load finish last and win. This token makes stale loads no-ops.
       const token = ++generation
-      // Rain reuses the plain white buffer and shapes it with filters.
-      const buffer = await loadBuffer(context, def.id === 'rain' ? SOUNDS[1] : def)
+      const buffer = await loadBuffer(context, def)
       if (token !== generation) return
 
       teardownVoice()
