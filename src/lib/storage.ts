@@ -80,6 +80,43 @@ export function saveCachedState(userId: string, state: AppState): void {
   }
 }
 
+/** The last account to sign in successfully. Kept so that an offline start can
+ * find which cached state to open — without it the app cannot get past the
+ * session check and the cache it already holds is unreachable. */
+const LAST_USER_KEY = `${PREFIX}:last-user`
+
+export interface RememberedUser {
+  id: string
+  email: string
+}
+
+export function rememberUser(user: RememberedUser): void {
+  try {
+    localStorage.setItem(LAST_USER_KEY, JSON.stringify(user))
+  } catch {
+    // Storage unavailable — offline start just won't be possible.
+  }
+}
+
+export function recallUser(): RememberedUser | null {
+  try {
+    const raw = localStorage.getItem(LAST_USER_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as RememberedUser
+    return parsed?.id ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+export function forgetUser(): void {
+  try {
+    localStorage.removeItem(LAST_USER_KEY)
+  } catch {
+    // Nothing to do.
+  }
+}
+
 export function clearCachedState(userId: string): void {
   try {
     localStorage.removeItem(cacheKey(userId))

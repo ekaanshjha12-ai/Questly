@@ -3,7 +3,7 @@ import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw } from 'lucide-reac
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
 import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
-import { clearCachedState, loadCachedState } from './lib/storage'
+import { clearCachedState, forgetUser, loadCachedState, recallUser, rememberUser } from './lib/storage'
 import AuthScreen from './components/AuthScreen'
 import Onboarding from './components/Onboarding'
 import Dashboard from './components/Dashboard'
@@ -51,6 +51,7 @@ export default function App() {
   const [boot, setBoot] = useState<Boot>({ phase: 'loading' })
 
   const loadForUser = useCallback(async (user: AuthUser) => {
+    rememberUser({ id: user.id, email: user.email })
     try {
       const { state } = await fetchState()
       setBoot({ phase: 'ready', user, initialState: state })
@@ -70,11 +71,29 @@ export default function App() {
         await loadForUser(user)
       } catch (err) {
         if (cancelled) return
+        // A 401 is a real answer: the server is up and says you're signed out.
         if (err instanceof ApiError && err.status === 401) {
+          forgetUser()
           setBoot({ phase: 'anonymous' })
-        } else {
-          setBoot({ phase: 'error', message: 'Could not reach the server. Is it running?' })
+          return
         }
+
+        // Anything else means the server could not be reached. If this device
+        // has been signed in before, open that account from cache rather than
+        // showing a dead end — the whole point of installing the app.
+        const remembered = recallUser()
+        const cached = remembered ? loadCachedState(remembered.id) : null
+        if (remembered && cached) {
+          setBoot({ phase: 'ready', user: remembered, initialState: cached })
+          return
+        }
+
+        setBoot({
+          phase: 'error',
+          message: navigator.onLine
+            ? 'Could not reach Questly. The server may be restarting — try again shortly.'
+            : "You're offline. Connect to the internet to sign in for the first time.",
+        })
       }
     })()
     return () => {
@@ -163,6 +182,9 @@ function AuthedApp({
       // Even if the call fails, drop the local copy and return to sign-in.
     }
     clearCachedState(user.id)
+    // Also drop the remembered account, or an offline start would reopen the
+    // session the user just signed out of.
+    forgetUser()
     onSignedOut()
   }
 
