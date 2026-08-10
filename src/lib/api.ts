@@ -1,4 +1,4 @@
-import type { AppState } from '../types'
+import type { AppState, QuestPool } from '../types'
 
 export interface AuthUser {
   id: string
@@ -102,6 +102,13 @@ export function verifyTask(
   return request<Verdict>('/api/verify', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function generateQuestPool(goal: { title: string; detail?: string; category: string }) {
+  return request<{ pool: QuestPool }>('/api/goals/quests', {
+    method: 'POST',
+    body: JSON.stringify(goal),
   })
 }
 

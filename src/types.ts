@@ -8,15 +8,26 @@ export type GoalCategory =
   | 'social'
   | 'general'
 
+/** Quests written for one specific goal, replacing the generic category
+ * templates. Absent when the server has no key to generate them. */
+export interface QuestPool {
+  daily: string[]
+  weekly: string[]
+  monthly: string[]
+}
+
 export interface Goal {
   id: string
   title: string
   category: GoalCategory
-  /** Optional user-supplied specifics ("3 runs a week, by October") that make
-   * the goal concrete. Purely descriptive — quests are generated from title. */
+  /** Optional user-supplied specifics ("3 runs a week, by October"). Fed to the
+   * quest writer, where it matters more than the title — it reveals level,
+   * constraints and intent. */
   detail?: string
   createdAt: string
   archived: boolean
+  /** Written for this goal when the server can. */
+  questPool?: QuestPool
 }
 
 export interface NewGoalInput {

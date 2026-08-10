@@ -21,7 +21,10 @@ const FILL_ORDER: QuestPeriod[] = ['monthly', 'weekly', 'daily']
  * index always yields the same quest — that keeps ids stable across reloads.
  */
 function buildQuest(goal: Goal, period: QuestPeriod, key: string, index: number): Quest | null {
-  const templates = TASK_TEMPLATES[goal.category][period]
+  // Quests written for this exact goal beat the generic category templates, so
+  // use them whenever the server was able to produce them.
+  const written = goal.questPool?.[period]
+  const templates = written?.length ? written : TASK_TEMPLATES[goal.category][period]
   const ordered = seededShuffle(templates, `${goal.id}:${period}:${key}`)
   const template = ordered[index]
   if (!template) return null

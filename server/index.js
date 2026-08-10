@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isConfigured, verifyPhoto, verifyVoice, MIN_CONFIDENCE } from './verify.js'
 import { perceptualHash, hammingDistance, DUPLICATE_THRESHOLD } from './imagehash.js'
+import { generateQuestPool, isConfigured as questGenConfigured } from './questgen.js'
 import {
   SESSION_COOKIE,
   clearCookieOptions,
@@ -349,6 +350,39 @@ app.post('/api/verify', requireAuth, async (req, res) => {
     }
     console.error('verification failed', err)
     res.status(502).json({ error: 'Could not reach the verification service. Try again.' })
+  }
+})
+
+/**
+ * Writes a bespoke quest set for one goal. Called once when a goal is created,
+ * so the cost is one request per goal for its entire life.
+ */
+app.post('/api/goals/quests', requireAuth, async (req, res) => {
+  const { title, detail, category } = req.body ?? {}
+  if (typeof title !== 'string' || !title.trim()) {
+    res.status(400).json({ error: 'A goal title is required.' })
+    return
+  }
+
+  if (!questGenConfigured()) {
+    res.status(503).json({ error: 'Quest generation is not set up on this server.', code: 'not_configured' })
+    return
+  }
+
+  try {
+    const pool = await generateQuestPool({
+      title: title.trim().slice(0, 200),
+      detail: typeof detail === 'string' ? detail.trim().slice(0, 500) : '',
+      category: typeof category === 'string' ? category : '',
+    })
+    res.json({ pool })
+  } catch (err) {
+    if (err?.code === 'not_configured') {
+      res.status(503).json({ error: 'Quest generation is not set up on this server.', code: 'not_configured' })
+      return
+    }
+    console.error('quest generation failed', err)
+    res.status(502).json({ error: 'Could not write quests for that goal.' })
   }
 })
 

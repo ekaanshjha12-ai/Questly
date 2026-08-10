@@ -10,13 +10,14 @@ import type {
   SessionKind,
   ScheduleEntry,
   StreakState,
+  QuestPool,
   Todo,
   VerificationKind,
 } from '../types'
 import { hydrate, saveCachedState } from '../lib/storage'
-import { saveState as saveStateRemote } from '../lib/api'
+import { generateQuestPool as generateQuestPoolRemote, saveState as saveStateRemote } from '../lib/api'
 import { ensureCurrentQuests } from '../lib/quests'
-import { dailyKey, isYesterday } from '../lib/period'
+import { dailyKey, isYesterday, periodKey } from '../lib/period'
 import { advanceProgression, levelFromXp, proofsOutstanding, PROOFS_PER_LEVEL } from '../lib/leveling'
 import { evaluateAchievements, ACHIEVEMENTS } from '../lib/achievements'
 import { findModel, isModelUnlocked, rankForLevel } from '../data/ranks'
@@ -36,6 +37,7 @@ type Action =
   | { type: 'SYNC_QUESTS' }
   | { type: 'COMPLETE_QUEST'; questId: string }
   | { type: 'UNCOMPLETE_QUEST'; questId: string }
+  | { type: 'SET_QUEST_POOL'; goalId: string; pool: QuestPool }
   | { type: 'BUY_MODEL'; modelId: string }
   | { type: 'EQUIP_MODEL'; modelId: string | null }
   | { type: 'ADD_TODO'; title: string }
@@ -380,6 +382,23 @@ function reducer(state: AppState, action: Action): AppState {
       })
     }
 
+    case 'SET_QUEST_POOL': {
+      const goal = state.goals.find((g) => g.id === action.goalId)
+      if (!goal || goal.questPool) return state
+
+      const goals = state.goals.map((g) => (g.id === action.goalId ? { ...g, questPool: action.pool } : g))
+
+      // Drop this goal's unfinished quests for the current periods so the newly
+      // written ones show up now. Waiting until tomorrow would leave the user
+      // staring at the generic quests they just complained about. Completed
+      // quests stay — their XP is already banked.
+      const quests = state.quests.filter(
+        (q) => q.goalId !== action.goalId || q.completed || q.periodKey !== periodKey(q.period),
+      )
+
+      return withSyncedQuests({ ...state, goals, quests })
+    }
+
     case 'BUY_MODEL': {
       const model = findModel(action.modelId)
       if (!model || state.collection.unlocked.includes(model.id)) return state
@@ -522,6 +541,37 @@ export function useAppState(
     prevSnapshot.current = { xp: state.player.xp, level, streak: state.streak.current }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.player.xp, state.streak.current, state.progression.level])
+
+  // Goals created before the server could write quests, or while it had no key,
+  // are picked up here. Attempts are remembered so a failing server is not hit
+  // once per render.
+  const poolAttempts = useRef(new Set<string>())
+  useEffect(() => {
+    const pending = state.goals.filter(
+      (g) => !g.archived && !g.questPool && !poolAttempts.current.has(g.id),
+    )
+    if (!pending.length) return
+
+    let cancelled = false
+    ;(async () => {
+      for (const goal of pending) {
+        poolAttempts.current.add(goal.id)
+        try {
+          const { pool } = await generateQuestPoolRemote({
+            title: goal.title,
+            detail: goal.detail,
+            category: goal.category,
+          })
+          if (!cancelled) dispatch({ type: 'SET_QUEST_POOL', goalId: goal.id, pool })
+        } catch {
+          // No key, or the model failed. The generic templates still apply.
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.goals])
 
   const dismissEvent = useCallback((id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id))
