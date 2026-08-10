@@ -546,14 +546,27 @@ export function useAppState(
   // are picked up here. Attempts are remembered so a failing server is not hit
   // once per render.
   const poolAttempts = useRef(new Set<string>())
+  const unmounted = useRef(false)
+  useEffect(
+    () => () => {
+      unmounted.current = true
+    },
+    [],
+  )
+
   useEffect(() => {
     const pending = state.goals.filter(
       (g) => !g.archived && !g.questPool && !poolAttempts.current.has(g.id),
     )
     if (!pending.length) return
 
-    let cancelled = false
-    ;(async () => {
+    // Deliberately no cleanup that aborts this loop. Each pool that arrives
+    // changes state.goals, which re-runs the effect — and an abort-on-rerun
+    // would throw away every goal after the first while still marking them
+    // attempted, so with several goals only one would ever be written. The
+    // re-run finds nothing pending because the ids are already recorded, so
+    // letting the loop finish costs nothing and duplicates no work.
+    void (async () => {
       for (const goal of pending) {
         poolAttempts.current.add(goal.id)
         try {
@@ -562,15 +575,12 @@ export function useAppState(
             detail: goal.detail,
             category: goal.category,
           })
-          if (!cancelled) dispatch({ type: 'SET_QUEST_POOL', goalId: goal.id, pool })
+          if (!unmounted.current) dispatch({ type: 'SET_QUEST_POOL', goalId: goal.id, pool })
         } catch {
           // No key, or the model failed. The generic templates still apply.
         }
       }
     })()
-    return () => {
-      cancelled = true
-    }
   }, [state.goals])
 
   const dismissEvent = useCallback((id: string) => {
