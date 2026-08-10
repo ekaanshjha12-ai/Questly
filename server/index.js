@@ -211,10 +211,11 @@ app.post('/api/verify', requireAuth, async (req, res) => {
     return
   }
 
-  // Checked before the quota so an unconfigured server never burns someone's
-  // daily allowance on a call that was never going to happen.
-  if (!isConfigured()) {
-    res.status(503).json({ error: 'Verification is not set up on this server yet.', code: 'not_configured' })
+  // A spoken claim has nothing that can be checked without the model, so voice
+  // needs the API key. Photos still get duplicate and freshness checks locally,
+  // so they keep working on a server with no key at all.
+  if (kind === 'voice' && !isConfigured()) {
+    res.status(503).json({ error: 'Voice confirmation is not set up on this server.', code: 'not_configured' })
     return
   }
 
@@ -281,6 +282,21 @@ app.post('/api/verify', requireAuth, async (req, res) => {
           })
           return
         }
+      }
+
+      if (!isConfigured()) {
+        // No model available, so the photo cannot be judged on content. It has
+        // already passed the checks that do not need one — it decodes, it is not
+        // a photo this account has used before, and it was taken recently. That
+        // is a real bar, so accept rather than blocking progress entirely.
+        recordPhotoHash(req.user.id, hash)
+        res.json({
+          verified: true,
+          confidence: 1,
+          reason: 'Photo accepted. This server does not check what is in the picture.',
+          unchecked: true,
+        })
+        return
       }
 
       // Charged before the call, not after: a failed request may still bill, and

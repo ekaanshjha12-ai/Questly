@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw } from 'lucide-react'
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
-import { ApiError, fetchState, logout as logoutRequest, me, verifyStatus, type AuthUser } from './lib/api'
+import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
 import { clearCachedState, loadCachedState } from './lib/storage'
 import AuthScreen from './components/AuthScreen'
 import Onboarding from './components/Onboarding'
@@ -17,7 +17,6 @@ import { VerifyModalHost } from './components/VerifyModal'
 import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
 import NoiseButton from './components/NoiseButton'
-import { PROOFS_PER_LEVEL } from './lib/leveling'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -119,25 +118,6 @@ function AuthedApp({
   initialState: AppState | null
   onSignedOut: () => void
 }) {
-  // If this server has no verification key, photo proof is impossible, so the
-  // level gate must be off — otherwise nobody could ever level up. Starts
-  // enabled and relaxes only once the server confirms it is unconfigured.
-  const [proofsRequired, setProofsRequired] = useState(PROOFS_PER_LEVEL)
-
-  useEffect(() => {
-    let cancelled = false
-    verifyStatus()
-      .then((status) => {
-        if (!cancelled) setProofsRequired(status.configured ? PROOFS_PER_LEVEL : 0)
-      })
-      .catch(() => {
-        // Older server or a transient failure — leave the gate as it is.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const {
     state,
     syncStatus,
@@ -163,7 +143,7 @@ function AuthedApp({
     verifyQuest,
     buyModel,
     equipModel,
-  } = useAppState(user.id, initialState, proofsRequired)
+  } = useAppState(user.id, initialState)
   const [view, setView] = useState<View>('dashboard')
   const [verifyingQuestId, setVerifyingQuestId] = useState<string | null>(null)
   const verifyingQuest = state.quests.find((q) => q.id === verifyingQuestId) ?? null
