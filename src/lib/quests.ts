@@ -84,12 +84,16 @@ export function generateQuestsForPeriod(
 /**
  * Tops each period up to its cap for the current day/week/month.
  *
- * Periods are filled longest-first — monthly, then weekly, then daily — and each
- * one avoids goals the longer periods already claimed. Because a monthly slate
- * is fixed for the month and a weekly one for the week, going in this order lets
- * the shorter, more frequently regenerated periods work around the fixed ones
- * rather than clashing with them. The result is that the six live quests cover
- * six different goals whenever the player has that many.
+ * Monthly is filled first, then weekly avoiding whatever monthly claimed. Those
+ * two are stable for a month and a week respectively, so between them they keep
+ * four different goals permanently visible.
+ *
+ * Daily deliberately does NOT avoid them. It rotates freely across every goal by
+ * day, because a daily quest's job is to feel different each morning. An earlier
+ * version had daily dodge the goals monthly and weekly held, which sounds
+ * tidier but was much worse: with five goals exactly one was left uncovered, and
+ * since monthly and weekly never move, the daily slate locked onto that single
+ * goal every day for weeks.
  *
  * Only ever adds. Quests already generated for a period hold their slots, so
  * adding a goal midway through a day cannot push you over the cap — the new goal
@@ -114,7 +118,10 @@ export function ensureCurrentQuests(goals: Goal[], existing: Quest[], date: Date
     let slots = QUESTS_PER_PERIOD[period] - live.length
     if (slots <= 0) continue
 
-    for (const quest of generateQuestsForPeriod(goals, period, date, covered)) {
+    // Daily ignores what the longer periods hold — see the note above.
+    const avoid = period === 'daily' ? new Set<string>() : covered
+
+    for (const quest of generateQuestsForPeriod(goals, period, date, avoid)) {
       if (slots <= 0) break
       if (existingIds.has(quest.id)) continue
       additions.push(quest)
