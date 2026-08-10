@@ -9,7 +9,8 @@
     "dev:server": "node server/index.js",
     "build": "tsc -b && vite build",
     "start": "node server/index.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cleanup": "node scripts/cleanup.js"
   },
   "engines": {
     "node": ">=20"
