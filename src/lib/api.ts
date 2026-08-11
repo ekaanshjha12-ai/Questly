@@ -53,9 +53,16 @@ export function authConfig() {
 }
 
 export function signup(email: string, password: string, inviteCode?: string) {
-  return request<{ user: AuthUser }>('/api/auth/signup', {
+  return request<{ user: AuthUser; recoveryCode: string }>('/api/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, inviteCode }),
+  })
+}
+
+export function resetPassword(email: string, code: string, password: string) {
+  return request<{ ok: true }>('/api/auth/reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, password }),
   })
 }
 
@@ -109,6 +116,25 @@ export function generateQuestPool(goal: { title: string; detail?: string; catego
   return request<{ pool: QuestPool }>('/api/goals/quests', {
     method: 'POST',
     body: JSON.stringify(goal),
+  })
+}
+
+export interface SubtopicSuggestion {
+  title: string
+  blurb: string
+}
+
+export function suggestSubtopics(topic: string) {
+  return request<{ subtopics: SubtopicSuggestion[] }>('/api/flashcards/subtopics', {
+    method: 'POST',
+    body: JSON.stringify({ topic }),
+  })
+}
+
+export function writeCards(topic: string, subtopics: string[]) {
+  return request<{ cards: { front: string; back: string; subtopic?: string }[] }>('/api/flashcards/cards', {
+    method: 'POST',
+    body: JSON.stringify({ topic, subtopics }),
   })
 }
 

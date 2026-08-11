@@ -7,11 +7,13 @@ import { fileURLToPath } from 'node:url'
 import { isConfigured, verifyPhoto, verifyVoice, MIN_CONFIDENCE } from './verify.js'
 import { perceptualHash, hammingDistance, DUPLICATE_THRESHOLD } from './imagehash.js'
 import { generateQuestPool, isConfigured as questGenConfigured } from './questgen.js'
+import { isConfigured as cardsConfigured, suggestSubtopics, writeCards } from './flashcards.js'
 import {
   SESSION_COOKIE,
   clearCookieOptions,
   cookieOptions,
   createUser,
+  resetWithCode,
   endSession,
   requireAuth,
   startSession,
@@ -106,10 +108,11 @@ app.post('/api/auth/signup', throttleAuth, async (req, res) => {
       res.status(409).json({ error: 'An account with that email already exists.' })
       return
     }
-    const user = await createUser(email, password)
+    const { user, recoveryCode } = await createUser(email, password)
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
-    res.status(201).json({ user })
+    // The only time this code is ever readable. It is stored hashed.
+    res.status(201).json({ user, recoveryCode })
   } catch (err) {
     console.error('signup failed', err)
     res.status(500).json({ error: 'Could not create the account.' })
@@ -135,6 +138,31 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
   } catch (err) {
     console.error('login failed', err)
     res.status(500).json({ error: 'Could not sign in.' })
+  }
+})
+
+app.post('/api/auth/reset', throttleAuth, async (req, res) => {
+  try {
+    const { email, code, password } = req.body ?? {}
+    if (typeof email !== 'string' || typeof code !== 'string') {
+      res.status(400).json({ error: 'Email and recovery code are required.' })
+      return
+    }
+    const problem = validateCredentials(email, password)
+    if (problem) {
+      res.status(400).json({ error: problem })
+      return
+    }
+    const ok = await resetWithCode(email, code, password)
+    if (!ok) {
+      // Deliberately vague: this must not reveal which accounts exist.
+      res.status(401).json({ error: 'That email and recovery code do not match.' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('password reset failed', err)
+    res.status(500).json({ error: 'Could not reset the password.' })
   }
 })
 
@@ -389,6 +417,51 @@ app.post('/api/goals/quests', requireAuth, async (req, res) => {
       detail: String(err?.message ?? err).slice(0, 300),
       status: err?.status ?? null,
     })
+  }
+})
+
+/** Step one of deck building: break a topic into areas the user can choose from. */
+app.post('/api/flashcards/subtopics', requireAuth, async (req, res) => {
+  const { topic } = req.body ?? {}
+  if (typeof topic !== 'string' || topic.trim().length < 2) {
+    res.status(400).json({ error: 'Enter a topic to study.' })
+    return
+  }
+  if (!cardsConfigured()) {
+    res.status(503).json({ error: 'Flashcards are not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    res.json({ subtopics: await suggestSubtopics(topic.trim().slice(0, 200)) })
+  } catch (err) {
+    console.error('subtopic generation failed', err)
+    res.status(502).json({ error: 'Could not break that topic down.', detail: String(err?.message ?? err).slice(0, 300) })
+  }
+})
+
+/** Step two: write cards for only the subtopics the user kept. */
+app.post('/api/flashcards/cards', requireAuth, async (req, res) => {
+  const { topic, subtopics } = req.body ?? {}
+  if (typeof topic !== 'string' || !topic.trim()) {
+    res.status(400).json({ error: 'A topic is required.' })
+    return
+  }
+  const chosen = Array.isArray(subtopics)
+    ? subtopics.map((s) => String(s ?? '').trim().slice(0, 120)).filter(Boolean).slice(0, 20)
+    : []
+  if (!chosen.length) {
+    res.status(400).json({ error: 'Pick at least one subtopic.' })
+    return
+  }
+  if (!cardsConfigured()) {
+    res.status(503).json({ error: 'Flashcards are not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    res.json({ cards: await writeCards(topic.trim().slice(0, 200), chosen) })
+  } catch (err) {
+    console.error('card generation failed', err)
+    res.status(502).json({ error: 'Could not write cards for that.', detail: String(err?.message ?? err).slice(0, 300) })
   }
 })
 

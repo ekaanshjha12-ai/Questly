@@ -1,19 +1,20 @@
-import { LayoutDashboard, ScrollText, Trophy, Shield, ListChecks, CalendarDays, Timer } from 'lucide-react'
+import { LayoutDashboard, ScrollText, Trophy, Shield, ListChecks, CalendarDays, Timer, Layers } from 'lucide-react'
 
-export type View = 'dashboard' | 'todos' | 'schedule' | 'focus' | 'goals' | 'avatar' | 'achievements'
+export type View = 'dashboard' | 'todos' | 'schedule' | 'focus' | 'cards' | 'goals' | 'avatar' | 'achievements'
 
 interface Props {
   view: View
   onChange: (view: View) => void
 }
 
-/** `short` keeps the phone labels narrow enough that seven tabs still fit on a
+/** `short` keeps the phone labels narrow enough that eight tabs still fit on a
  * 360px screen without scrolling. */
 const TABS: { id: View; label: string; short: string; icon: typeof LayoutDashboard }[] = [
   { id: 'dashboard', label: 'Quest Log', short: 'Quests', icon: LayoutDashboard },
   { id: 'todos', label: 'To-Do', short: 'To-Do', icon: ListChecks },
   { id: 'schedule', label: 'Schedule', short: 'Plan', icon: CalendarDays },
   { id: 'focus', label: 'Focus', short: 'Focus', icon: Timer },
+  { id: 'cards', label: 'Flashcards', short: 'Cards', icon: Layers },
   { id: 'goals', label: 'Goals', short: 'Goals', icon: ScrollText },
   { id: 'avatar', label: 'Avatar', short: 'Hero', icon: Shield },
   { id: 'achievements', label: 'Achievements', short: 'Awards', icon: Trophy },

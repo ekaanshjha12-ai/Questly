@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SessionKind } from '../types'
+import type { PlanItem, SessionKind } from '../types'
 
 export interface SessionDraft {
   kind: SessionKind
   label: string
+  plan: PlanItem[]
   goalId: string | null
   durationMs: number
   targetMs: number | null
@@ -27,7 +28,22 @@ export function useFocusClock({ onSave }: Options) {
   const [mode, setModeRaw] = useState<SessionKind>('timer')
   const [targetMs, setTargetMs] = useState(DEFAULT_TARGET_MS)
   const [label, setLabel] = useState('')
+  const [plan, setPlan] = useState<PlanItem[]>([])
   const [goalId, setGoalId] = useState<string | null>(null)
+
+  const addPlanItem = useCallback((text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setPlan((prev) => [...prev, { id: crypto.randomUUID(), text: trimmed.slice(0, 120), done: false }])
+  }, [])
+
+  const togglePlanItem = useCallback((id: string) => {
+    setPlan((prev) => prev.map((i) => (i.id === id ? { ...i, done: !i.done } : i)))
+  }, [])
+
+  const removePlanItem = useCallback((id: string) => {
+    setPlan((prev) => prev.filter((i) => i.id !== id))
+  }, [])
 
   const [accumulatedMs, setAccumulatedMs] = useState(0)
   const [segmentStart, setSegmentStart] = useState<number | null>(null)
@@ -77,6 +93,7 @@ export function useFocusClock({ onSave }: Options) {
       onSave({
         kind: mode,
         label,
+        plan,
         goalId,
         durationMs,
         targetMs: mode === 'timer' ? targetMs : null,
@@ -85,8 +102,9 @@ export function useFocusClock({ onSave }: Options) {
       })
       clear()
       setLabel('')
+      setPlan([])
     },
-    [clear, goalId, label, mode, onSave, startedAt, targetMs],
+    [clear, goalId, label, mode, onSave, plan, startedAt, targetMs],
   )
 
   /** Save whatever has elapsed so far (used for the stopwatch, or to bank a
@@ -124,6 +142,10 @@ export function useFocusClock({ onSave }: Options) {
     setTargetMs,
     label,
     setLabel,
+    plan,
+    addPlanItem,
+    togglePlanItem,
+    removePlanItem,
     goalId,
     setGoalId,
     running,

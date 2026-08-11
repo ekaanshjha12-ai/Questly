@@ -29,6 +29,16 @@ db.run(`
   )
 `)
 
+// Recovery codes are hashed exactly like passwords. A leaked database must not
+// hand over the means to take over every account.
+for (const column of ['recovery_hash TEXT', 'recovery_salt TEXT']) {
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN ${column}`)
+  } catch {
+    // Already present — SQLite has no ADD COLUMN IF NOT EXISTS.
+  }
+}
+
 db.run(`
   CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
@@ -85,14 +95,22 @@ export function findUserById(id) {
   return db.get('SELECT * FROM users WHERE id = ?', [id]) ?? null
 }
 
-export function insertUser({ id, email, passwordHash, salt }) {
-  db.run('INSERT INTO users (id, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)', [
-    id,
-    normalizeEmail(email),
-    passwordHash,
-    salt,
-    new Date().toISOString(),
-  ])
+export function insertUser({ id, email, passwordHash, salt, recoveryHash, recoverySalt }) {
+  db.run(
+    `INSERT INTO users (id, email, password_hash, salt, created_at, recovery_hash, recovery_salt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, normalizeEmail(email), passwordHash, salt, new Date().toISOString(), recoveryHash, recoverySalt],
+  )
+}
+
+export function updatePassword(userId, passwordHash, salt) {
+  db.run('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', [passwordHash, salt, userId])
+}
+
+/** Every session is dropped after a reset, so a thief holding a stolen session
+ * cookie is logged out the moment the real owner recovers the account. */
+export function deleteSessionsForUser(userId) {
+  db.run('DELETE FROM sessions WHERE user_id = ?', [userId])
 }
 
 export function insertSession({ token, userId, expiresAt }) {

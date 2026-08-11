@@ -31,6 +31,7 @@ export function defaultState(): AppState {
       lastCompletedDay: null,
     },
     unlockedAchievements: {},
+    decks: [],
     collection: {
       unlocked: [],
       active: null,

@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Play, Pause, RotateCcw, Save, Trash2, Timer as TimerIcon, Watch, Zap } from 'lucide-react'
+import { Play, Pause, RotateCcw, Save, Trash2, Timer as TimerIcon, Watch, Zap, Plus, X, ListChecks, Check } from 'lucide-react'
 import type { AppState, FocusSession } from '../types'
 import type { FocusClock } from '../hooks/useFocusClock'
 import { formatClock, formatDuration, sessionXp } from '../lib/time'
@@ -57,6 +57,7 @@ function SessionRow({
 }
 
 export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
+  const [planDraft, setPlanDraft] = useState('')
   const {
     mode,
     setMode,
@@ -64,6 +65,10 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
     setTargetMs,
     label,
     setLabel,
+    plan,
+    addPlanItem,
+    togglePlanItem,
+    removePlanItem,
     goalId,
     setGoalId,
     running,
@@ -252,6 +257,79 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
               name="questly-focus-label"
               className="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60"
             />
+            <div className="rounded-xl border border-ink-600 bg-ink-900/60 p-3 text-left">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+                <ListChecks className="h-3 w-3" />
+                Session plan
+                {plan.length > 0 && (
+                  <span className="ml-auto text-slate-400">
+                    {plan.filter((i) => i.done).length}/{plan.length}
+                  </span>
+                )}
+              </p>
+
+              {plan.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {plan.map((item) => (
+                    <li key={item.id} className="group flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => togglePlanItem(item.id)}
+                        aria-label={item.done ? `Mark "${item.text}" as not done` : `Mark "${item.text}" as done`}
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                          item.done
+                            ? 'border-mystic-400 bg-mystic-500 text-white'
+                            : 'border-ink-500 bg-ink-900 text-transparent hover:border-slate-400'
+                        }`}
+                      >
+                        <Check className="h-3 w-3" strokeWidth={4} />
+                      </button>
+                      <span
+                        className={`flex-1 text-xs ${item.done ? 'text-slate-500 line-through' : 'text-slate-200'}`}
+                      >
+                        {item.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removePlanItem(item.id)}
+                        aria-label={`Remove "${item.text}" from the plan`}
+                        className="shrink-0 rounded p-0.5 text-slate-600 transition-opacity hover:text-ember-400 sm:opacity-0 sm:group-hover:opacity-100"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  addPlanItem(planDraft)
+                  setPlanDraft('')
+                }}
+                className="flex gap-1.5"
+              >
+                <input
+                  value={planDraft}
+                  onChange={(e) => setPlanDraft(e.target.value)}
+                  placeholder={plan.length ? 'Add another step…' : 'What will you get done?'}
+                  maxLength={120}
+                  autoComplete="off"
+                  name="questly-plan-item"
+                  className="flex-1 rounded-lg border border-ink-600 bg-ink-950 px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60"
+                />
+                <button
+                  type="submit"
+                  disabled={!planDraft.trim()}
+                  aria-label="Add to the session plan"
+                  className="shrink-0 rounded-lg border border-ink-600 px-2 text-slate-400 transition-colors hover:border-gold-500/50 hover:text-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </form>
+            </div>
+
             {activeGoals.length > 0 && (
               <select
                 value={goalId ?? ''}

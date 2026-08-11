@@ -10,6 +10,8 @@ import type {
   SessionKind,
   ScheduleEntry,
   StreakState,
+  Deck,
+  PlanItem,
   QuestPool,
   Todo,
   VerificationKind,
@@ -38,6 +40,11 @@ type Action =
   | { type: 'COMPLETE_QUEST'; questId: string }
   | { type: 'UNCOMPLETE_QUEST'; questId: string }
   | { type: 'SET_QUEST_POOL'; goalId: string; pool: QuestPool }
+  | { type: 'ADD_DECK'; topic: string; cards: { front: string; back: string; subtopic?: string }[] }
+  | { type: 'DELETE_DECK'; deckId: string }
+  | { type: 'UPDATE_CARD'; deckId: string; cardId: string; front: string; back: string }
+  | { type: 'DELETE_CARD'; deckId: string; cardId: string }
+  | { type: 'ADD_CARD'; deckId: string }
   | { type: 'BUY_MODEL'; modelId: string }
   | { type: 'EQUIP_MODEL'; modelId: string | null }
   | { type: 'ADD_TODO'; title: string }
@@ -59,6 +66,7 @@ type Action =
       type: 'SAVE_SESSION'
       kind: SessionKind
       label: string
+      plan: PlanItem[]
       goalId: string | null
       durationMs: number
       targetMs: number | null
@@ -321,6 +329,7 @@ function reducer(state: AppState, action: Action): AppState {
         completed: action.completed,
         startedAt: action.startedAt,
         endedAt: now.toISOString(),
+        ...(action.plan?.length ? { plan: action.plan } : {}),
       }
       const xp = sessionXp(action.durationMs)
       return withSyncedQuests({
@@ -398,6 +407,58 @@ function reducer(state: AppState, action: Action): AppState {
 
       return withSyncedQuests({ ...state, goals, quests })
     }
+
+    case 'ADD_DECK': {
+      const cards = action.cards.map((c) => ({
+        id: crypto.randomUUID(),
+        front: c.front,
+        back: c.back,
+        ...(c.subtopic ? { subtopic: c.subtopic } : {}),
+      }))
+      if (!cards.length) return state
+      const deck: Deck = {
+        id: crypto.randomUUID(),
+        topic: action.topic,
+        cards,
+        createdAt: new Date().toISOString(),
+      }
+      return { ...state, decks: [deck, ...state.decks] }
+    }
+
+    case 'DELETE_DECK':
+      return { ...state, decks: state.decks.filter((d) => d.id !== action.deckId) }
+
+    case 'UPDATE_CARD': {
+      const front = action.front.trim()
+      const back = action.back.trim()
+      if (!front) return state
+      return {
+        ...state,
+        decks: state.decks.map((d) =>
+          d.id !== action.deckId
+            ? d
+            : { ...d, cards: d.cards.map((c) => (c.id === action.cardId ? { ...c, front, back } : c)) },
+        ),
+      }
+    }
+
+    case 'DELETE_CARD':
+      return {
+        ...state,
+        decks: state.decks.map((d) =>
+          d.id !== action.deckId ? d : { ...d, cards: d.cards.filter((c) => c.id !== action.cardId) },
+        ),
+      }
+
+    case 'ADD_CARD':
+      return {
+        ...state,
+        decks: state.decks.map((d) =>
+          d.id !== action.deckId
+            ? d
+            : { ...d, cards: [...d.cards, { id: crypto.randomUUID(), front: 'New card', back: '' }] },
+        ),
+      }
 
     case 'BUY_MODEL': {
       const model = findModel(action.modelId)
@@ -649,6 +710,7 @@ export function useAppState(
     (input: {
       kind: SessionKind
       label: string
+      plan: PlanItem[]
       goalId: string | null
       durationMs: number
       targetMs: number | null
@@ -666,6 +728,26 @@ export function useAppState(
 
   const verifyQuest = useCallback((questId: string, kind: VerificationKind, note: string) => {
     dispatch({ type: 'VERIFY_QUEST', questId, kind, note })
+  }, [])
+
+  const addDeck = useCallback((topic: string, cards: { front: string; back: string; subtopic?: string }[]) => {
+    dispatch({ type: 'ADD_DECK', topic, cards })
+  }, [])
+
+  const deleteDeck = useCallback((deckId: string) => {
+    dispatch({ type: 'DELETE_DECK', deckId })
+  }, [])
+
+  const updateCard = useCallback((deckId: string, cardId: string, front: string, back: string) => {
+    dispatch({ type: 'UPDATE_CARD', deckId, cardId, front, back })
+  }, [])
+
+  const deleteCard = useCallback((deckId: string, cardId: string) => {
+    dispatch({ type: 'DELETE_CARD', deckId, cardId })
+  }, [])
+
+  const addCard = useCallback((deckId: string) => {
+    dispatch({ type: 'ADD_CARD', deckId })
   }, [])
 
   const buyModel = useCallback((modelId: string) => {
@@ -724,6 +806,11 @@ export function useAppState(
     saveSession,
     deleteSession,
     verifyQuest,
+    addDeck,
+    deleteDeck,
+    updateCard,
+    deleteCard,
+    addCard,
     buyModel,
     equipModel,
   }

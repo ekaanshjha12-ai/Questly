@@ -96,6 +96,13 @@ export interface Todo {
 
 export type SessionKind = 'timer' | 'stopwatch'
 
+/** One line of a focus session's plan, tickable while the session runs. */
+export interface PlanItem {
+  id: string
+  text: string
+  done: boolean
+}
+
 /** A recorded stretch of focused work. `completed` means a countdown timer
  * actually reached zero, as opposed to being saved early. */
 export interface FocusSession {
@@ -108,6 +115,23 @@ export interface FocusSession {
   completed: boolean
   startedAt: string
   endedAt: string
+  /** What the session was for, written before starting. */
+  plan?: PlanItem[]
+}
+
+export interface Flashcard {
+  id: string
+  front: string
+  back: string
+  /** Which area of the topic it came from. Shown as a hint on the card. */
+  subtopic?: string
+}
+
+export interface Deck {
+  id: string
+  topic: string
+  cards: Flashcard[]
+  createdAt: string
 }
 
 export type PlannerView = 'daily' | 'weekly' | 'monthly'
@@ -142,6 +166,7 @@ export interface AppState {
   sessions: FocusSession[]
   streak: StreakState
   unlockedAchievements: Record<string, string>
+  decks: Deck[]
   collection: Collection
   progression: Progression
 }

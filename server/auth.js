@@ -2,6 +2,8 @@ import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import {
   deleteSession,
+  deleteSessionsForUser,
+  updatePassword,
   findSession,
   findUserByEmail,
   findUserById,
@@ -44,12 +46,65 @@ export function validateCredentials(email, password) {
   return null
 }
 
+/** Ambiguous characters are left out so a code copied off a screen by hand does
+ * not fail on an I/1 or O/0 mix-up. */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+function makeRecoveryCode() {
+  const bytes = randomBytes(20)
+  let out = ''
+  for (let i = 0; i < 20; i++) {
+    if (i > 0 && i % 5 === 0) out += '-'
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
+  }
+  return out
+}
+
+/** Case and dashes are cosmetic, so they are stripped before hashing and the
+ * user can type it back however they like. */
+export function normalizeCode(code) {
+  return String(code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
 export async function createUser(email, password) {
   const salt = randomBytes(16).toString('hex')
   const passwordHash = await hashPassword(password, salt)
+  const recoveryCode = makeRecoveryCode()
+  const recoverySalt = randomBytes(16).toString('hex')
+  const recoveryHash = await hashPassword(normalizeCode(recoveryCode), recoverySalt)
   const id = randomUUID()
-  insertUser({ id, email, passwordHash, salt })
-  return { id, email: normalizeEmail(email) }
+  insertUser({ id, email, passwordHash, salt, recoveryHash, recoverySalt })
+  // Returned once and never stored in the clear — this is the only time anyone
+  // can read it.
+  return { user: { id, email: normalizeEmail(email) }, recoveryCode }
+}
+
+/**
+ * Resets a password using the recovery code issued at signup.
+ *
+ * There is no email provider wired to this app, so a link-based reset is not
+ * possible. A code the user saves at signup gives genuine self-service recovery
+ * with no infrastructure — at the cost that losing the code means losing the
+ * account, which is the same trade-off password managers make.
+ */
+export async function resetWithCode(email, code, newPassword) {
+  const user = findUserByEmail(email)
+  const normalized = normalizeCode(code)
+
+  if (!user || !user.recovery_hash || !user.recovery_salt || normalized.length < 8) {
+    // Hash regardless so a missing account cannot be spotted by how fast this
+    // returns.
+    await hashPassword(normalized || 'x', 'decoy-salt')
+    return false
+  }
+
+  const candidate = await hashPassword(normalized, user.recovery_salt)
+  if (!safeEqualHex(candidate, user.recovery_hash)) return false
+
+  const salt = randomBytes(16).toString('hex')
+  updatePassword(user.id, await hashPassword(newPassword, salt), salt)
+  deleteSessionsForUser(user.id)
+  return true
 }
 
 export async function verifyUser(email, password) {
