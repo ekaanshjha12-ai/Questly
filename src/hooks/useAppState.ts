@@ -7,6 +7,7 @@ import type {
   FocusSession,
   NewGoalInput,
   PlannerView,
+  PlanItemInput,
   SessionKind,
   ScheduleEntry,
   StreakState,
@@ -65,6 +66,7 @@ type Action =
   | { type: 'MOVE_SCHEDULE_ENTRY'; entryId: string; periodKey: string; slot: string }
   | { type: 'UNSCHEDULE'; entryId: string }
   | { type: 'ADD_PLANNED_TODO'; title: string; view: PlannerView; periodKey: string; slot: string }
+  | { type: 'APPLY_PLAN'; items: PlanItemInput[] }
   | {
       type: 'SAVE_SESSION'
       kind: SessionKind
@@ -316,6 +318,26 @@ function reducer(state: AppState, action: Action): AppState {
         todos: [todo, ...state.todos],
         schedule: [...state.schedule, entry],
       }
+    }
+
+    case 'APPLY_PLAN': {
+      // One dispatch for the whole plan: every dated task gets its schedule
+      // entry created right alongside its to-do, so it shows up already
+      // placed on the Schedule tab instead of sitting in the backlog waiting
+      // to be dragged in by hand.
+      const todos: Todo[] = []
+      const entries: ScheduleEntry[] = []
+      for (const item of action.items) {
+        const title = item.title.trim()
+        if (!title) continue
+        const todo = makeTodo(title)
+        todos.push(todo)
+        if (item.placement) {
+          entries.push(makeEntry('todo', todo.id, item.placement.view, item.placement.periodKey, item.placement.slot))
+        }
+      }
+      if (!todos.length) return state
+      return { ...state, todos: [...todos, ...state.todos], schedule: [...state.schedule, ...entries] }
     }
 
     case 'SAVE_SESSION': {
@@ -722,6 +744,10 @@ export function useAppState(
     dispatch({ type: 'ADD_PLANNED_TODO', title, view, periodKey, slot })
   }, [])
 
+  const applyPlan = useCallback((items: PlanItemInput[]) => {
+    dispatch({ type: 'APPLY_PLAN', items })
+  }, [])
+
   const saveSession = useCallback(
     (input: {
       kind: SessionKind
@@ -826,6 +852,7 @@ export function useAppState(
     scheduleTask,
     moveScheduleEntry,
     unschedule,
+    applyPlan,
     addPlannedTodo,
     saveSession,
     deleteSession,

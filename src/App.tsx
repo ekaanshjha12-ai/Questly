@@ -18,6 +18,7 @@ import { VerifyModalHost } from './components/VerifyModal'
 import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
 import NoiseButton from './components/NoiseButton'
+import AiPlanner from './components/AiPlanner'
 import InstallPrompt from './components/InstallPrompt'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
@@ -158,6 +159,7 @@ function AuthedApp({
     scheduleTask,
     moveScheduleEntry,
     unschedule,
+    applyPlan,
     addPlannedTodo,
     saveSession,
     deleteSession,
@@ -310,6 +312,7 @@ function AuthedApp({
       />
 
       <NoiseButton noise={noise} />
+      <AiPlanner onApplyPlan={applyPlan} />
       <InstallPrompt />
 
       <ToastStack events={events} onDismiss={dismissEvent} />

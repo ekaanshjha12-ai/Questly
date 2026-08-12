@@ -170,6 +170,38 @@ export function requestExplainReport(
   })
 }
 
+export interface PlanDailyItem {
+  title: string
+  dayOffset: number
+  block: string
+}
+
+export interface PlanDatedItem {
+  title: string
+  dayOffset: number
+}
+
+export interface GeneratedPlan {
+  todos: string[]
+  daily: PlanDailyItem[]
+  weekly: PlanDatedItem[]
+  monthly: PlanDatedItem[]
+}
+
+export function askPlannerQuestions(goal: string, detail?: string) {
+  return request<{ questions: string[] }>('/api/planner/questions', {
+    method: 'POST',
+    body: JSON.stringify({ goal, detail }),
+  })
+}
+
+export function generatePlan(goal: string, detail: string | undefined, answers: { question: string; answer: string }[]) {
+  return request<{ plan: GeneratedPlan }>('/api/planner/plan', {
+    method: 'POST',
+    body: JSON.stringify({ goal, detail, answers }),
+  })
+}
+
 export function saveState(state: AppState) {
   return request<{ version: number; updatedAt: string }>('/api/state', {
     method: 'PUT',

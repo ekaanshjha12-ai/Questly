@@ -103,3 +103,14 @@ export function slotIdFor(view: PlannerView, value: string | number): string {
   void view
   return String(value)
 }
+
+/** Which weekly-view column a date falls under — Monday-based to match
+ * `weekDays`/`WEEKDAY_LABELS`. */
+export function weekdaySlot(date: Date): string {
+  return String((date.getDay() || 7) - 1)
+}
+
+/** Which monthly-view cell a date falls under. */
+export function monthDaySlot(date: Date): string {
+  return String(date.getDate())
+}

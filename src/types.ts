@@ -162,6 +162,21 @@ export interface ScheduleEntry {
   createdAt: string
 }
 
+/** Where an AI-planned task lands once placed — the same coordinates a manual
+ * drag onto the Planner would produce. */
+export interface PlanPlacement {
+  view: PlannerView
+  periodKey: string
+  slot: string
+}
+
+/** One task from a generated plan, ready to become a to-do. Dated tasks carry
+ * a placement so they show up already scheduled instead of sitting unplaced. */
+export interface PlanItemInput {
+  title: string
+  placement?: PlanPlacement
+}
+
 export interface Achievement {
   id: string
   title: string

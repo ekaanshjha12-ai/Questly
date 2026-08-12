@@ -9,6 +9,7 @@ import { perceptualHash, hammingDistance, DUPLICATE_THRESHOLD } from './imagehas
 import { generateQuestPool, isConfigured as questGenConfigured } from './questgen.js'
 import { isConfigured as cardsConfigured, suggestSubtopics, writeCards } from './flashcards.js'
 import { askQuestions, gradeExplanation, isConfigured as coachConfigured } from './explain.js'
+import { askPlannerQuestions, generatePlan, isConfigured as plannerConfigured } from './planner.js'
 import {
   SESSION_COOKIE,
   clearCookieOptions,
@@ -518,6 +519,73 @@ app.post('/api/explain/report', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('report generation failed', err)
     res.status(502).json({ error: 'Could not mark that.', detail: String(err?.message ?? err).slice(0, 300) })
+  }
+})
+
+/** Step one of the AI planner: a few clarifying questions about the goal. */
+app.post('/api/planner/questions', requireAuth, async (req, res) => {
+  const { goal, detail } = req.body ?? {}
+  if (typeof goal !== 'string' || !goal.trim()) {
+    res.status(400).json({ error: 'A goal is required.' })
+    return
+  }
+  if (!plannerConfigured()) {
+    res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    const questions = await askPlannerQuestions(
+      goal.trim().slice(0, 200),
+      typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
+    )
+    res.json({ questions })
+  } catch (err) {
+    if (err?.code === 'not_configured') {
+      res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
+      return
+    }
+    console.error('planner question generation failed', err)
+    res.status(502).json({
+      error: 'Could not think of questions for that goal.',
+      detail: String(err?.message ?? err).slice(0, 300),
+    })
+  }
+})
+
+/** Step two: the actual daily/weekly/monthly plan plus a prep to-do list. */
+app.post('/api/planner/plan', requireAuth, async (req, res) => {
+  const { goal, detail, answers } = req.body ?? {}
+  if (typeof goal !== 'string' || !goal.trim()) {
+    res.status(400).json({ error: 'A goal is required.' })
+    return
+  }
+  const cleaned = Array.isArray(answers)
+    ? answers
+        .map((a) => ({
+          question: String(a?.question ?? '').trim().slice(0, 200),
+          answer: String(a?.answer ?? '').trim().slice(0, 500),
+        }))
+        .filter((a) => a.question)
+        .slice(0, 8)
+    : []
+  if (!plannerConfigured()) {
+    res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    const plan = await generatePlan(
+      goal.trim().slice(0, 200),
+      typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
+      cleaned,
+    )
+    res.json({ plan })
+  } catch (err) {
+    if (err?.code === 'not_configured') {
+      res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
+      return
+    }
+    console.error('plan generation failed', err)
+    res.status(502).json({ error: 'Could not write a plan for that.', detail: String(err?.message ?? err).slice(0, 300) })
   }
 })
 
