@@ -6,7 +6,7 @@ import { seededShuffle } from './rng'
 /** Total quests handed out per period across *all* goals combined. Adding more
  * goals changes which quests you get, never how many. */
 export const QUESTS_PER_PERIOD: Record<QuestPeriod, number> = {
-  daily: 2,
+  daily: 4,
   weekly: 1,
   monthly: 3,
 }
