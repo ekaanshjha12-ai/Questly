@@ -1,5 +1,6 @@
-import type { AppState } from '../types'
+import type { AppState, LegacyScheduleEntry, ScheduleEntry } from '../types'
 import { levelFromXp } from './leveling'
+import { dateFromLegacyEntry } from './planner'
 
 /** The server is the source of truth; this is only an offline read cache.
  * It is keyed per user so two accounts sharing a browser can never see each
@@ -48,11 +49,53 @@ export function defaultState(): AppState {
  * they stop being round-tripped back to the server on every save. */
 const RETIRED_FIELDS = ['equipment', 'activePowers'] as const
 
+/**
+ * Rewrites schedule entries saved before placements were anchored to a date.
+ *
+ * Without this, every existing placement would vanish from the planner — the
+ * views read `entry.date`, and an old entry has none. Two entries can now
+ * collide (the same task placed in two views, which the old model allowed and
+ * this change is meant to prevent), so the first one wins and the rest are
+ * dropped rather than leaving a task sitting on two days.
+ */
+function migrateSchedule(schedule: unknown): ScheduleEntry[] {
+  if (!Array.isArray(schedule)) return []
+  const out: ScheduleEntry[] = []
+  const claimed = new Set<string>()
+
+  for (const raw of schedule as (ScheduleEntry & LegacyScheduleEntry)[]) {
+    if (!raw?.refId) continue
+    const key = `${raw.refType}:${raw.refId}`
+    if (claimed.has(key)) continue
+
+    if (typeof raw.date === 'string' && raw.date) {
+      claimed.add(key)
+      out.push(raw)
+      continue
+    }
+
+    const placed = dateFromLegacyEntry(raw)
+    if (!placed) continue
+    claimed.add(key)
+    out.push({
+      id: raw.id,
+      refType: raw.refType,
+      refId: raw.refId,
+      date: placed.date,
+      ...(placed.block ? { block: placed.block } : {}),
+      createdAt: raw.createdAt,
+    })
+  }
+  return out
+}
+
 /** Merges onto defaultState so states saved by older versions of the app
  * (missing newer fields like `collection`) still load cleanly. */
 export function hydrate(partial: Partial<AppState> | null | undefined): AppState {
   const merged = { ...defaultState(), ...(partial ?? {}) } as AppState & Record<string, unknown>
   for (const field of RETIRED_FIELDS) delete merged[field]
+
+  merged.schedule = migrateSchedule(merged.schedule)
 
   // Accounts that predate the proof gate have no progression record. Seeding it
   // from their XP grandfathers the level they already earned — defaulting to 1

@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronLeft, ChevronRight, Plus, X, CalendarDays, GripVertical } from 'lucide-react'
 import type { AppState, PlannerView, ScheduleEntry } from '../types'
-import { periodKey as questPeriodKey } from '../lib/period'
+import { periodKey as questPeriodKey, dailyKey } from '../lib/period'
 import {
   DAY_BLOCKS,
   WEEKDAY_LABELS,
   monthGrid,
-  periodKeyFor,
   periodLabel,
   shiftPeriod,
   weekDays,
@@ -16,10 +15,10 @@ import {
 
 interface Props {
   state: AppState
-  onSchedule: (refType: 'todo' | 'quest', refId: string, view: PlannerView, periodKey: string, slot: string) => void
-  onMove: (entryId: string, periodKey: string, slot: string) => void
+  onSchedule: (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => void
+  onMove: (entryId: string, date: string, block?: string | null) => void
   onUnschedule: (entryId: string) => void
-  onAddPlanned: (title: string, view: PlannerView, periodKey: string, slot: string) => void
+  onAddPlanned: (title: string, date: string, block?: string) => void
   onToggleTodo: (todoId: string) => void
   onToggleQuest: (questId: string) => void
 }
@@ -201,10 +200,8 @@ export default function Planner({
 }: Props) {
   const [view, setView] = useState<PlannerView>('daily')
   const [cursor, setCursor] = useState(() => new Date())
-  const [adding, setAdding] = useState<{ slot: string; label: string } | null>(null)
+  const [adding, setAdding] = useState<{ date: string; block?: string; label: string } | null>(null)
   const [draft, setDraft] = useState('')
-
-  const activeKey = periodKeyFor(view, cursor)
 
   const todosById = useMemo(() => new Map(state.todos.map((t) => [t.id, t])), [state.todos])
   const questsById = useMemo(() => new Map(state.quests.map((q) => [q.id, q])), [state.quests])
@@ -218,28 +215,28 @@ export default function Planner({
     return quest ? { title: quest.title, done: quest.completed } : null
   }
 
-  // Entries for the period on screen, grouped by slot. Dangling refs (task
-  // deleted, or a quest from an expired period) are skipped.
-  const entriesBySlot = useMemo(() => {
+  // Every placement, keyed by the day it sits on. All three views read this same
+  // map, which is what makes a task assigned once show up in all of them.
+  // Dangling refs (task deleted, or a quest from an expired period) are skipped.
+  const entriesByDate = useMemo(() => {
     const map = new Map<string, ScheduleEntry[]>()
     for (const entry of state.schedule) {
-      if (entry.view !== view || entry.periodKey !== activeKey) continue
       if (!resolve(entry)) continue
-      const list = map.get(entry.slot) ?? []
+      const list = map.get(entry.date) ?? []
       list.push(entry)
-      map.set(entry.slot, list)
+      map.set(entry.date, list)
     }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.schedule, view, activeKey, todosById, questsById])
+  }, [state.schedule, todosById, questsById])
 
+  // Scheduled anywhere, not just in the period on screen — otherwise a task
+  // already placed on another day would offer itself for placing again.
   const scheduledRefIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const entry of state.schedule) {
-      if (entry.view === view && entry.periodKey === activeKey) ids.add(`${entry.refType}:${entry.refId}`)
-    }
+    for (const entry of state.schedule) ids.add(`${entry.refType}:${entry.refId}`)
     return ids
-  }, [state.schedule, view, activeKey])
+  }, [state.schedule])
 
   // Anything not yet placed in this period, ready to be dragged in.
   const backlog = useMemo(() => {
@@ -264,11 +261,14 @@ export default function Planner({
     return items
   }, [state.todos, state.quests, scheduledRefIds])
 
-  function handleDrop(payload: DragPayload, slot: string) {
+  /** `block` undefined on a move means "keep the time it already had" — dragging
+   * between weekday columns should not silently clear the hour. Dropping into a
+   * daily cell passes one explicitly, and Anytime passes null to clear it. */
+  function handleDrop(payload: DragPayload, date: string, block?: string | null) {
     if (payload.kind === 'move') {
-      onMove(payload.entryId, activeKey, slot)
+      onMove(payload.entryId, date, block)
     } else {
-      onSchedule(payload.refType, payload.refId, view, activeKey, slot)
+      onSchedule(payload.refType, payload.refId, date, block ?? undefined)
     }
   }
 
@@ -280,31 +280,37 @@ export default function Planner({
   function submitAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!adding || !draft.trim()) return
-    onAddPlanned(draft, view, activeKey, adding.slot)
+    onAddPlanned(draft, adding.date, adding.block)
     setDraft('')
     setAdding(null)
   }
 
   function pickForSlot(refType: 'todo' | 'quest', refId: string) {
     if (!adding) return
-    onSchedule(refType, refId, view, activeKey, adding.slot)
+    onSchedule(refType, refId, adding.date, adding.block)
     setAdding(null)
   }
 
-  const slotProps = (slot: string, label: string) => ({
-    entries: entriesBySlot.get(slot) ?? [],
+  /** One day's cell. `block` narrows it to a time of day in the daily view;
+   * weekly and monthly cells hold the whole day. */
+  const cellProps = (date: string, label: string, block?: string | null) => ({
+    entries: (entriesByDate.get(date) ?? []).filter((e) =>
+      block === undefined ? true : block === null ? !e.block : e.block === block,
+    ),
     resolve,
     isDropTarget: true,
-    onDropPayload: (payload: DragPayload) => handleDrop(payload, slot),
+    onDropPayload: (payload: DragPayload) => handleDrop(payload, date, block),
     onOpenAdd: () => {
       setDraft('')
-      setAdding({ slot, label })
+      setAdding({ date, block: block ?? undefined, label })
     },
     onToggleEntry: toggleEntry,
     onRemoveEntry: (entry: ScheduleEntry) => onUnschedule(entry.id),
   })
 
   const today = new Date()
+  const cursorKey = dailyKey(cursor)
+  const anytimeToday = (entriesByDate.get(cursorKey) ?? []).filter((e) => !e.block)
 
   return (
     <div className="space-y-4">
@@ -394,10 +400,28 @@ export default function Planner({
       </div>
 
       {view === 'daily' && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {DAY_BLOCKS.map((block) => (
-            <SlotCell key={block.id} label={block.label} hint={block.hint} minHeight="5.5rem" {...slotProps(block.id, block.label)} />
-          ))}
+        <div className="space-y-2">
+          {/* Placements made from the weekly or monthly grid carry no time of
+              day, so they need somewhere to live here. Hidden when empty. */}
+          {anytimeToday.length > 0 && (
+            <SlotCell
+              label="Anytime"
+              hint="No set time"
+              minHeight="4rem"
+              {...cellProps(cursorKey, 'Anytime', null)}
+            />
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {DAY_BLOCKS.map((block) => (
+              <SlotCell
+                key={block.id}
+                label={block.label}
+                hint={block.hint}
+                minHeight="5.5rem"
+                {...cellProps(cursorKey, block.label, block.id)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -410,7 +434,7 @@ export default function Planner({
               hint={day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
               highlight={isSameDay(day, today)}
               minHeight="7rem"
-              {...slotProps(String(i), WEEKDAY_LABELS[i])}
+              {...cellProps(dailyKey(day), WEEKDAY_LABELS[i])}
             />
           ))}
         </div>
@@ -433,7 +457,7 @@ export default function Planner({
                   label={String(day.getDate())}
                   highlight={isSameDay(day, today)}
                   minHeight="5rem"
-                  {...slotProps(String(day.getDate()), `${day.getDate()}`)}
+                  {...cellProps(dailyKey(day), `${day.getDate()}`)}
                 />
               ) : (
                 <div key={i} className="rounded-xl border border-dashed border-ink-700/40" style={{ minHeight: '5rem' }} />

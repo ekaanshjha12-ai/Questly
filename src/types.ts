@@ -149,10 +149,29 @@ export interface ExplainReport {
 
 export type PlannerView = 'daily' | 'weekly' | 'monthly'
 
-/** A placement of an existing task into a planner slot. The task itself always
- * lives in `todos` or `quests` — the planner only records *where* it sits, so
- * completion and XP stay governed by a single source of truth. */
+/** A placement of an existing task onto a day. The task itself always lives in
+ * `todos` or `quests` — the planner only records *where* it sits, so completion
+ * and XP stay governed by a single source of truth.
+ *
+ * The anchor is a real date, not a view. Daily, weekly and monthly are three
+ * lenses over the same field, so a task placed once is visible in all of them.
+ * Storing a view here instead meant a day assigned in one view was invisible in
+ * the other two, which let the same task be scheduled again on a second day. */
 export interface ScheduleEntry {
+  id: string
+  refType: 'todo' | 'quest'
+  refId: string
+  /** The day it sits on, as `YYYY-MM-DD`. */
+  date: string
+  /** Time-of-day block. Absent means "sometime that day" — weekly and monthly
+   * cells have no time to assign, so placements made there carry none. */
+  block?: string
+  createdAt: string
+}
+
+/** Legacy shape, kept only so `hydrate` can convert states saved before entries
+ * were anchored to dates. Never written. */
+export interface LegacyScheduleEntry {
   id: string
   refType: 'todo' | 'quest'
   refId: string
@@ -165,9 +184,8 @@ export interface ScheduleEntry {
 /** Where an AI-planned task lands once placed — the same coordinates a manual
  * drag onto the Planner would produce. */
 export interface PlanPlacement {
-  view: PlannerView
-  periodKey: string
-  slot: string
+  date: string
+  block?: string
 }
 
 /** One task from a generated plan, ready to become a to-do. Dated tasks carry

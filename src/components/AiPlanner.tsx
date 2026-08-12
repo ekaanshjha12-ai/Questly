@@ -12,8 +12,8 @@ import {
 } from 'lucide-react'
 import type { PlanItemInput, PlanPlacement } from '../types'
 import { ApiError, askPlannerQuestions, generatePlan, type GeneratedPlan } from '../lib/api'
-import { shiftDays, weekdaySlot, monthDaySlot } from '../lib/planner'
-import { dailyKey, weeklyKey, monthlyKey } from '../lib/period'
+import { shiftDays } from '../lib/planner'
+import { dailyKey } from '../lib/period'
 
 interface Props {
   onApplyPlan: (items: PlanItemInput[]) => void
@@ -36,25 +36,19 @@ function dateLabel(dayOffset: number): string {
   })
 }
 
-function placeDaily(dayOffset: number, block: string): PlanPlacement {
-  const date = shiftDays(new Date(), dayOffset)
-  return { view: 'daily', periodKey: dailyKey(date), slot: block }
-}
-function placeWeekly(dayOffset: number): PlanPlacement {
-  const date = shiftDays(new Date(), dayOffset)
-  return { view: 'weekly', periodKey: weeklyKey(date), slot: weekdaySlot(date) }
-}
-function placeMonthly(dayOffset: number): PlanPlacement {
-  const date = shiftDays(new Date(), dayOffset)
-  return { view: 'monthly', periodKey: monthlyKey(date), slot: monthDaySlot(date) }
+/** Every horizon lands on a real day; only the daily items carry a time of day.
+ * The planner views all read the same date, so one placement is visible in all
+ * three rather than only in the view it was written for. */
+function place(dayOffset: number, block?: string): PlanPlacement {
+  return { date: dailyKey(shiftDays(new Date(), dayOffset)), ...(block ? { block } : {}) }
 }
 
 function planToItems(plan: GeneratedPlan): PlanItemInput[] {
   return [
     ...plan.todos.map((title) => ({ title })),
-    ...plan.daily.map((d) => ({ title: d.title, placement: placeDaily(d.dayOffset, d.block) })),
-    ...plan.weekly.map((w) => ({ title: w.title, placement: placeWeekly(w.dayOffset) })),
-    ...plan.monthly.map((m) => ({ title: m.title, placement: placeMonthly(m.dayOffset) })),
+    ...plan.daily.map((d) => ({ title: d.title, placement: place(d.dayOffset, d.block) })),
+    ...plan.weekly.map((w) => ({ title: w.title, placement: place(w.dayOffset) })),
+    ...plan.monthly.map((m) => ({ title: m.title, placement: place(m.dayOffset) })),
   ]
 }
 

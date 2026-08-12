@@ -1,4 +1,4 @@
-import type { PlannerView } from '../types'
+import type { LegacyScheduleEntry, PlannerView } from '../types'
 import { dailyKey, weeklyKey, monthlyKey } from './period'
 
 export interface DayBlock {
@@ -97,20 +97,44 @@ export function isSameDay(a: Date, b: Date): boolean {
   return dailyKey(a) === dailyKey(b)
 }
 
-/** Slot id within the period: a block for days, weekday index for weeks,
- * day-of-month for months. */
-export function slotIdFor(view: PlannerView, value: string | number): string {
-  void view
-  return String(value)
+/** The Monday starting a given ISO week. ISO week 1 is the one containing
+ * Jan 4th, which is what `weeklyKey` encodes. */
+export function isoWeekMonday(year: number, week: number): Date {
+  const jan4 = new Date(year, 0, 4)
+  const weekOneMonday = shiftDays(jan4, -((jan4.getDay() || 7) - 1))
+  return shiftDays(weekOneMonday, (week - 1) * 7)
 }
 
-/** Which weekly-view column a date falls under — Monday-based to match
- * `weekDays`/`WEEKDAY_LABELS`. */
-export function weekdaySlot(date: Date): string {
-  return String((date.getDay() || 7) - 1)
-}
+/**
+ * Converts a pre-date schedule entry into the day it actually meant.
+ *
+ * Entries used to be filed under a view plus a slot within it, so the same
+ * placement meant three different things depending on which tab you were on.
+ * All three encodings still point at exactly one day, so they migrate cleanly.
+ */
+export function dateFromLegacyEntry(entry: LegacyScheduleEntry): { date: string; block?: string } | null {
+  if (entry.view === 'daily') {
+    // periodKey was already the day; slot was the time block.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.periodKey)) return null
+    const known = DAY_BLOCKS.some((b) => b.id === entry.slot)
+    return { date: entry.periodKey, ...(known ? { block: entry.slot } : {}) }
+  }
 
-/** Which monthly-view cell a date falls under. */
-export function monthDaySlot(date: Date): string {
-  return String(date.getDate())
+  if (entry.view === 'weekly') {
+    // periodKey `2026-W33`, slot a Monday-based weekday index.
+    const match = /^(\d{4})-W(\d{1,2})$/.exec(entry.periodKey)
+    const weekday = Number(entry.slot)
+    if (!match || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) return null
+    return { date: dailyKey(shiftDays(isoWeekMonday(Number(match[1]), Number(match[2])), weekday)) }
+  }
+
+  // periodKey `2026-08`, slot the day of the month.
+  const match = /^(\d{4})-(\d{2})$/.exec(entry.periodKey)
+  const day = Number(entry.slot)
+  if (!match || !Number.isInteger(day) || day < 1 || day > 31) return null
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, day)
+  // A day past the end of that month rolls over, which would silently move the
+  // task rather than drop it.
+  if (date.getMonth() !== Number(match[2]) - 1) return null
+  return { date: dailyKey(date) }
 }

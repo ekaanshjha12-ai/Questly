@@ -6,7 +6,6 @@ import type {
   GoalCategory,
   FocusSession,
   NewGoalInput,
-  PlannerView,
   PlanItemInput,
   SessionKind,
   ScheduleEntry,
@@ -55,17 +54,12 @@ type Action =
   | { type: 'TOGGLE_TODO'; todoId: string }
   | { type: 'DELETE_TODO'; todoId: string }
   | { type: 'CLEAR_DONE_TODOS' }
-  | {
-      type: 'SCHEDULE_TASK'
-      refType: 'todo' | 'quest'
-      refId: string
-      view: PlannerView
-      periodKey: string
-      slot: string
-    }
-  | { type: 'MOVE_SCHEDULE_ENTRY'; entryId: string; periodKey: string; slot: string }
+  | { type: 'SCHEDULE_TASK'; refType: 'todo' | 'quest'; refId: string; date: string; block?: string }
+  /** `block: null` clears the time of day; omitting it keeps whatever the entry
+   * already had, so dragging between weekday columns does not lose the hour. */
+  | { type: 'MOVE_SCHEDULE_ENTRY'; entryId: string; date: string; block?: string | null }
   | { type: 'UNSCHEDULE'; entryId: string }
-  | { type: 'ADD_PLANNED_TODO'; title: string; view: PlannerView; periodKey: string; slot: string }
+  | { type: 'ADD_PLANNED_TODO'; title: string; date: string; block?: string }
   | { type: 'APPLY_PLAN'; items: PlanItemInput[] }
   | {
       type: 'SAVE_SESSION'
@@ -102,20 +96,13 @@ function makeTodo(title: string): Todo {
   }
 }
 
-function makeEntry(
-  refType: 'todo' | 'quest',
-  refId: string,
-  view: PlannerView,
-  periodKey: string,
-  slot: string,
-): ScheduleEntry {
+function makeEntry(refType: 'todo' | 'quest', refId: string, date: string, block?: string): ScheduleEntry {
   return {
     id: crypto.randomUUID(),
     refType,
     refId,
-    view,
-    periodKey,
-    slot,
+    date,
+    ...(block ? { block } : {}),
     createdAt: new Date().toISOString(),
   }
 }
@@ -285,25 +272,24 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'SCHEDULE_TASK': {
-      const exists = state.schedule.some(
-        (e) =>
-          e.refType === action.refType &&
-          e.refId === action.refId &&
-          e.view === action.view &&
-          e.periodKey === action.periodKey &&
-          e.slot === action.slot,
+      // A task sits on exactly one day. Placing it again moves it rather than
+      // adding a second copy — two placements of one to-do would share a single
+      // `done` flag, so ticking either would tick both.
+      const others = state.schedule.filter(
+        (e) => !(e.refType === action.refType && e.refId === action.refId),
       )
-      if (exists) return state
-      const entry = makeEntry(action.refType, action.refId, action.view, action.periodKey, action.slot)
-      return { ...state, schedule: [...state.schedule, entry] }
+      const entry = makeEntry(action.refType, action.refId, action.date, action.block)
+      return { ...state, schedule: [...others, entry] }
     }
 
     case 'MOVE_SCHEDULE_ENTRY':
       return {
         ...state,
-        schedule: state.schedule.map((e) =>
-          e.id === action.entryId ? { ...e, periodKey: action.periodKey, slot: action.slot } : e,
-        ),
+        schedule: state.schedule.map((e) => {
+          if (e.id !== action.entryId) return e
+          const block = action.block === undefined ? e.block : (action.block ?? undefined)
+          return { ...e, date: action.date, ...(block ? { block } : { block: undefined }) }
+        }),
       }
 
     case 'UNSCHEDULE':
@@ -312,7 +298,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'ADD_PLANNED_TODO': {
       if (!action.title.trim()) return state
       const todo = makeTodo(action.title)
-      const entry = makeEntry('todo', todo.id, action.view, action.periodKey, action.slot)
+      const entry = makeEntry('todo', todo.id, action.date, action.block)
       return {
         ...state,
         todos: [todo, ...state.todos],
@@ -333,7 +319,7 @@ function reducer(state: AppState, action: Action): AppState {
         const todo = makeTodo(title)
         todos.push(todo)
         if (item.placement) {
-          entries.push(makeEntry('todo', todo.id, item.placement.view, item.placement.periodKey, item.placement.slot))
+          entries.push(makeEntry('todo', todo.id, item.placement.date, item.placement.block))
         }
       }
       if (!todos.length) return state
@@ -726,22 +712,22 @@ export function useAppState(
   }, [])
 
   const scheduleTask = useCallback(
-    (refType: 'todo' | 'quest', refId: string, view: PlannerView, periodKey: string, slot: string) => {
-      dispatch({ type: 'SCHEDULE_TASK', refType, refId, view, periodKey, slot })
+    (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => {
+      dispatch({ type: 'SCHEDULE_TASK', refType, refId, date, block })
     },
     [],
   )
 
-  const moveScheduleEntry = useCallback((entryId: string, periodKey: string, slot: string) => {
-    dispatch({ type: 'MOVE_SCHEDULE_ENTRY', entryId, periodKey, slot })
+  const moveScheduleEntry = useCallback((entryId: string, date: string, block?: string | null) => {
+    dispatch({ type: 'MOVE_SCHEDULE_ENTRY', entryId, date, block })
   }, [])
 
   const unschedule = useCallback((entryId: string) => {
     dispatch({ type: 'UNSCHEDULE', entryId })
   }, [])
 
-  const addPlannedTodo = useCallback((title: string, view: PlannerView, periodKey: string, slot: string) => {
-    dispatch({ type: 'ADD_PLANNED_TODO', title, view, periodKey, slot })
+  const addPlannedTodo = useCallback((title: string, date: string, block?: string) => {
+    dispatch({ type: 'ADD_PLANNED_TODO', title, date, block })
   }, [])
 
   const applyPlan = useCallback((items: PlanItemInput[]) => {
