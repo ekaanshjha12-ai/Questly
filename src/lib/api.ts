@@ -1,4 +1,4 @@
-import type { AppState, QuestPool } from '../types'
+import type { AppState, QuestPool, SuccessOutlook } from '../types'
 
 export interface AuthUser {
   id: string
@@ -199,6 +199,24 @@ export function generatePlan(goal: string, detail: string | undefined, answers: 
   return request<{ plan: GeneratedPlan }>('/api/planner/plan', {
     method: 'POST',
     body: JSON.stringify({ goal, detail, answers }),
+  })
+}
+
+export function analyseOutlook(
+  stats: Record<string, number | null>,
+  goals: {
+    title: string
+    category: string
+    detail?: string
+    ageDays: number
+    questsCompleted: number
+    questsVerified: number
+    focusMinutes: number
+  }[],
+) {
+  return request<{ outlook: Omit<SuccessOutlook, 'createdAt'> }>('/api/progress/outlook', {
+    method: 'POST',
+    body: JSON.stringify({ stats, goals }),
   })
 }
 

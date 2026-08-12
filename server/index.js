@@ -10,6 +10,7 @@ import { generateQuestPool, isConfigured as questGenConfigured } from './questge
 import { isConfigured as cardsConfigured, suggestSubtopics, writeCards } from './flashcards.js'
 import { askQuestions, gradeExplanation, isConfigured as coachConfigured } from './explain.js'
 import { askPlannerQuestions, generatePlan, isConfigured as plannerConfigured } from './planner.js'
+import { analyseOutlook, isConfigured as outlookConfigured } from './outlook.js'
 import {
   SESSION_COOKIE,
   clearCookieOptions,
@@ -586,6 +587,83 @@ app.post('/api/planner/plan', requireAuth, async (req, res) => {
     }
     console.error('plan generation failed', err)
     res.status(502).json({ error: 'Could not write a plan for that.', detail: String(err?.message ?? err).slice(0, 300) })
+  }
+})
+
+const num = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0)
+
+/** Estimates whether the player is on track, from how they have actually used
+ * the app. The counted stats are computed client-side and passed in; they only
+ * feed a motivational readout, so there is nothing to gain by fiddling them. */
+app.post('/api/progress/outlook', requireAuth, async (req, res) => {
+  const { stats, goals } = req.body ?? {}
+  if (!stats || typeof stats !== 'object') {
+    res.status(400).json({ error: 'Progress stats are required.' })
+    return
+  }
+
+  const cleanGoals = (Array.isArray(goals) ? goals : [])
+    .map((g) => ({
+      title: String(g?.title ?? '').trim().slice(0, 200),
+      category: String(g?.category ?? '').trim().slice(0, 40),
+      detail: String(g?.detail ?? '').trim().slice(0, 400),
+      ageDays: num(g?.ageDays),
+      questsCompleted: num(g?.questsCompleted),
+      questsVerified: num(g?.questsVerified),
+      focusMinutes: num(g?.focusMinutes),
+    }))
+    .filter((g) => g.title)
+    .slice(0, 12)
+
+  if (!cleanGoals.length) {
+    res.status(400).json({ error: 'Set a goal before asking how it is going.' })
+    return
+  }
+
+  const cleanStats = {
+    accountAgeDays: Math.max(1, num(stats.accountAgeDays)),
+    activeDays: num(stats.activeDays),
+    activeDaysLast14: num(stats.activeDaysLast14),
+    completionsLast7: num(stats.completionsLast7),
+    completionsLast30: num(stats.completionsLast30),
+    currentStreak: num(stats.currentStreak),
+    longestStreak: num(stats.longestStreak),
+    questsCompleted: num(stats.questsCompleted),
+    questsVerified: num(stats.questsVerified),
+    todosCompleted: num(stats.todosCompleted),
+    todosOpen: num(stats.todosOpen),
+    focusSessions: num(stats.focusSessions),
+    totalFocusMs: num(stats.totalFocusMs),
+    daysSinceLastActivity:
+      stats.daysSinceLastActivity === null || stats.daysSinceLastActivity === undefined
+        ? null
+        : num(stats.daysSinceLastActivity),
+  }
+
+  // Guessing from three data points would produce a confident-looking number
+  // with nothing behind it, so refuse instead — the client says what is missing.
+  if (cleanStats.activeDays < 3 || cleanStats.questsCompleted + cleanStats.todosCompleted + cleanStats.focusSessions < 5) {
+    res.status(422).json({ error: 'Not enough activity yet to judge this fairly.', code: 'insufficient_evidence' })
+    return
+  }
+
+  if (!outlookConfigured()) {
+    res.status(503).json({ error: 'Progress analysis is not set up on this server.', code: 'not_configured' })
+    return
+  }
+
+  try {
+    res.json({ outlook: await analyseOutlook(cleanStats, cleanGoals) })
+  } catch (err) {
+    if (err?.code === 'not_configured') {
+      res.status(503).json({ error: 'Progress analysis is not set up on this server.', code: 'not_configured' })
+      return
+    }
+    console.error('outlook analysis failed', err)
+    res.status(502).json({
+      error: 'Could not analyse your progress.',
+      detail: String(err?.message ?? err).slice(0, 300),
+    })
   }
 })
 

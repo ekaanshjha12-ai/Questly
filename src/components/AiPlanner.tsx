@@ -21,6 +21,21 @@ interface Props {
 
 type Stage = 'goal' | 'questions' | 'review'
 
+/**
+ * Bottom corner on phones, side tab from md up.
+ *
+ * Vertically centred it sits squarely over the content column on a narrow
+ * screen and hides whatever is behind it — a stat tile reading "0" because its
+ * leading digit was covered is worse than having no button. The content column
+ * only clears the side rails once the viewport passes about 760px, and the
+ * bottom corner is the easiest place to reach one-handed anyway.
+ *
+ * Offset with `top` rather than `-translate-y-1/2`: framer writes its own
+ * inline transform for the entry animation, which overrides the utility class.
+ */
+export const SIDE_BUTTON =
+  'fixed bottom-24 left-0 z-40 flex h-14 w-11 items-center justify-center rounded-r-xl border border-l-0 shadow-lg transition-colors md:bottom-auto md:top-[calc(50%-1.75rem)] border-ink-600 bg-ink-850/90 text-slate-400 hover:text-gold-300'
+
 function errorText(err: unknown): string {
   if (err instanceof ApiError && err.status === 503) {
     return 'The AI planner needs an API key on the server.'
@@ -164,7 +179,7 @@ export default function AiPlanner({ onApplyPlan }: Props) {
         initial={{ x: -40, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="fixed left-0 top-1/2 z-40 flex h-14 w-11 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-ink-600 bg-ink-850/90 text-slate-400 shadow-lg transition-colors hover:text-gold-300"
+        className={SIDE_BUTTON}
       >
         <CalendarRange className="h-5 w-5" />
       </motion.button>

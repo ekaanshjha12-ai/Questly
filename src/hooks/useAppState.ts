@@ -12,6 +12,7 @@ import type {
   StreakState,
   Deck,
   ExplainReport,
+  SuccessOutlook,
   PlanItem,
   QuestPool,
   Todo,
@@ -48,6 +49,7 @@ type Action =
   | { type: 'ADD_CARD'; deckId: string }
   | { type: 'ADD_REPORT'; report: Omit<ExplainReport, 'id' | 'createdAt'> }
   | { type: 'DELETE_REPORT'; reportId: string }
+  | { type: 'SET_OUTLOOK'; outlook: Omit<SuccessOutlook, 'createdAt'> }
   | { type: 'BUY_MODEL'; modelId: string }
   | { type: 'EQUIP_MODEL'; modelId: string | null }
   | { type: 'ADD_TODO'; title: string }
@@ -484,6 +486,11 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DELETE_REPORT':
       return { ...state, reports: state.reports.filter((r) => r.id !== action.reportId) }
 
+    case 'SET_OUTLOOK':
+      // Only ever one, replaced wholesale — an outlook is a snapshot of right
+      // now, and a stale one alongside it would just be noise.
+      return { ...state, outlook: { ...action.outlook, createdAt: new Date().toISOString() } }
+
     case 'BUY_MODEL': {
       const model = findModel(action.modelId)
       if (!model || state.collection.unlocked.includes(model.id)) return state
@@ -786,6 +793,10 @@ export function useAppState(
     dispatch({ type: 'DELETE_REPORT', reportId })
   }, [])
 
+  const setOutlook = useCallback((outlook: Omit<SuccessOutlook, 'createdAt'>) => {
+    dispatch({ type: 'SET_OUTLOOK', outlook })
+  }, [])
+
   const buyModel = useCallback((modelId: string) => {
     dispatch({ type: 'BUY_MODEL', modelId })
   }, [])
@@ -850,6 +861,7 @@ export function useAppState(
     addCard,
     addReport,
     deleteReport,
+    setOutlook,
     buyModel,
     equipModel,
   }

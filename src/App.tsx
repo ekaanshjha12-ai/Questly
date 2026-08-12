@@ -8,7 +8,7 @@ import AuthScreen from './components/AuthScreen'
 import Onboarding from './components/Onboarding'
 import Dashboard from './components/Dashboard'
 import GoalsManager from './components/GoalsManager'
-import Achievements from './components/Achievements'
+import ProgressScreen from './components/ProgressScreen'
 import AvatarScreen from './components/AvatarScreen'
 import TodoList from './components/TodoList'
 import Planner from './components/Planner'
@@ -171,6 +171,7 @@ function AuthedApp({
     addCard,
     addReport,
     deleteReport,
+    setOutlook,
     buyModel,
     equipModel,
   } = useAppState(user.id, initialState)
@@ -301,7 +302,9 @@ function AuthedApp({
             onEquipModel={equipModel}
           />
         )}
-        {view === 'achievements' && <Achievements achievements={achievements} />}
+        {view === 'achievements' && (
+          <ProgressScreen state={state} achievements={achievements} onSetOutlook={setOutlook} />
+        )}
       </main>
 
       <VerifyModalHost

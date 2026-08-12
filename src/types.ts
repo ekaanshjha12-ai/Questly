@@ -195,6 +195,32 @@ export interface PlanItemInput {
   placement?: PlanPlacement
 }
 
+export interface OutlookQuote {
+  text: string
+  /** Absent when the line is unattributed — a wrong attribution is worse than
+   * none, so the writer leaves it off unless it is certain. */
+  author?: string
+}
+
+export interface GoalOutlook {
+  title: string
+  probability: number
+  note: string
+}
+
+/** The model's read on whether the player is on track. Cached on state rather
+ * than regenerated per render, since each one costs an API call. */
+export interface SuccessOutlook {
+  probability: number
+  confidence: 'low' | 'medium' | 'high'
+  verdict: string
+  drivers: string[]
+  risks: string[]
+  perGoal: GoalOutlook[]
+  quotes: OutlookQuote[]
+  createdAt: string
+}
+
 export interface Achievement {
   id: string
   title: string
@@ -214,6 +240,8 @@ export interface AppState {
   unlockedAchievements: Record<string, string>
   decks: Deck[]
   reports: ExplainReport[]
+  /** Null until the player asks for their first analysis. */
+  outlook: SuccessOutlook | null
   collection: Collection
   progression: Progression
 }

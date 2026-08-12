@@ -76,7 +76,10 @@ export default function NoiseButton({ noise }: { noise: NoiseControls }) {
         initial={{ x: 40, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className={`fixed right-0 top-1/2 z-40 flex h-14 w-11 -translate-y-1/2 items-center justify-center rounded-l-xl border border-r-0 shadow-lg transition-colors ${
+        // Mirrors the planner rail on the left: bottom corner on phones, side
+        // tab from md up, so neither one covers the content column on a narrow
+        // screen. See SIDE_BUTTON in AiPlanner for why `top` beats a transform.
+        className={`fixed bottom-24 right-0 z-40 flex h-14 w-11 items-center justify-center rounded-l-xl border border-r-0 shadow-lg transition-colors md:bottom-auto md:top-[calc(50%-1.75rem)] ${
           playing
             ? 'border-mystic-400/50 bg-mystic-500/20 text-mystic-300'
             : 'border-ink-600 bg-ink-850/90 text-slate-400 hover:text-slate-200'

@@ -17,7 +17,9 @@ const TABS: { id: View; label: string; short: string; icon: typeof LayoutDashboa
   { id: 'cards', label: 'Study', short: 'Study', icon: Layers },
   { id: 'goals', label: 'Goals', short: 'Goals', icon: ScrollText },
   { id: 'avatar', label: 'Avatar', short: 'Hero', icon: Shield },
-  { id: 'achievements', label: 'Achievements', short: 'Awards', icon: Trophy },
+  // Stats and achievements share a tab — both answer "how am I doing", and a
+  // ninth tab would not fit a 360px screen.
+  { id: 'achievements', label: 'Progress', short: 'Stats', icon: Trophy },
 ]
 
 export default function Nav({ view, onChange }: Props) {

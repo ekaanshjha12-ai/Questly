@@ -34,6 +34,7 @@ export function defaultState(): AppState {
     unlockedAchievements: {},
     decks: [],
     reports: [],
+    outlook: null,
     collection: {
       unlocked: [],
       active: null,
