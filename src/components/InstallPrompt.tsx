@@ -1,61 +1,161 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, X, Share } from 'lucide-react'
+import { Download, X, Share, Plus, MoreVertical } from 'lucide-react'
+import {
+  isStandalone,
+  nativePrompt,
+  platform,
+  promptInstall,
+  subscribe,
+  wasInstalled,
+} from '../lib/install'
 
 const DISMISS_KEY = 'questly:v1:install-dismissed'
 
-/** Chrome fires this so a site can offer its own install button. Not in the DOM
- * lib types, since it is not part of the standard. */
-interface InstallEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
+/** Manual steps per platform, for when no native prompt is on offer — Safari has
+ * no install API at all, and Chrome only offers one once its own engagement
+ * heuristics are satisfied. Without these the feature is undiscoverable. */
+function ManualSteps() {
+  const kind = platform()
 
-function isStandalone(): boolean {
+  if (kind === 'ios') {
+    return (
+      <p className="text-xs leading-relaxed text-slate-400">
+        Tap <Share className="inline h-3.5 w-3.5 -translate-y-px text-slate-300" /> in Safari&apos;s toolbar, scroll
+        down, then tap <span className="text-slate-300">Add to Home Screen</span>.
+      </p>
+    )
+  }
+
+  if (kind === 'unsupported') {
+    return (
+      <p className="text-xs leading-relaxed text-slate-400">
+        This browser can&apos;t install web apps. Open{' '}
+        <span className="text-slate-300">questly-production-f6ea.up.railway.app</span> in Chrome or Safari and try
+        again.
+      </p>
+    )
+  }
+
   return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    // iOS reports installed apps through a non-standard flag.
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    <p className="text-xs leading-relaxed text-slate-400">
+      Open the browser menu <MoreVertical className="inline h-3.5 w-3.5 text-slate-300" /> and tap{' '}
+      <span className="text-slate-300">Install app</span>
+      {kind === 'android-chrome' && (
+        <>
+          {' '}
+          or <span className="text-slate-300">Add to Home screen</span>
+        </>
+      )}
+      .
+    </p>
   )
 }
 
-function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+/** Small header affordance, always present until the app is installed. The
+ * automatic banner can be dismissed for good, and on some platforms it never
+ * appears at all, so there has to be a way to find this on purpose. */
+export function InstallButton() {
+  const [, force] = useState(0)
+  const [sheet, setSheet] = useState(false)
+
+  useEffect(() => subscribe(() => force((n) => n + 1)), [])
+
+  if (isStandalone() || wasInstalled()) return null
+
+  async function onClick() {
+    // Falls back to instructions whenever the browser gave us no prompt to run.
+    if (!(await promptInstall())) setSheet(true)
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void onClick()}
+        title="Install Questly"
+        aria-label="Install Questly"
+        className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-ink-800 hover:text-gold-300"
+      >
+        <Download className="h-4 w-4" />
+      </button>
+
+      <AnimatePresence>
+        {sheet && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-4 backdrop-blur-sm sm:items-center sm:pb-0"
+            onClick={() => setSheet(false)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label="How to install Questly"
+              className="w-full max-w-sm rounded-2xl border border-ink-600 bg-ink-900 p-5 shadow-2xl [margin-bottom:env(safe-area-inset-bottom)]"
+            >
+              <div className="mb-3 flex items-center gap-3">
+                <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-lg" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-100">Add Questly to your home screen</p>
+                  <p className="text-[11px] text-slate-500">Opens full screen and works offline.</p>
+                </div>
+              </div>
+
+              <ManualSteps />
+
+              <button
+                type="button"
+                onClick={() => setSheet(false)}
+                className="mt-4 w-full rounded-xl border border-ink-600 py-2 text-sm text-slate-300 transition-colors hover:bg-ink-800"
+              >
+                Got it
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
 }
 
 /**
- * Offers to install the app.
+ * The automatic offer.
  *
- * Two paths, because the platforms differ. Chrome hands the page a
- * `beforeinstallprompt` event, so Android gets a real one-tap button. Safari
- * has no such API at all, so iOS can only be shown where the Share menu item
- * is — without that instruction most people never discover it exists.
+ * Shown once the browser hands over an install event, or — on platforms that
+ * never will — after a short delay. Dismissing it is remembered, which is why
+ * `InstallButton` also exists as a permanent way back in.
  */
 export default function InstallPrompt() {
-  const [deferred, setDeferred] = useState<InstallEvent | null>(null)
-  const [showIosHint, setShowIosHint] = useState(false)
+  const [hasNative, setHasNative] = useState(() => Boolean(nativePrompt()))
+  const [showManual, setShowManual] = useState(false)
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem(DISMISS_KEY))
+    } catch {
+      return false
+    }
+  })
 
   useEffect(() => {
-    if (isStandalone()) return
-    if (localStorage.getItem(DISMISS_KEY)) return
+    if (isStandalone() || dismissed) return
 
-    const onPrompt = (event: Event) => {
-      // Stop Chrome's own mini-infobar so the offer appears where we want it.
-      event.preventDefault()
-      setDeferred(event as InstallEvent)
-    }
-    window.addEventListener('beforeinstallprompt', onPrompt)
+    const unsubscribe = subscribe(() => setHasNative(Boolean(nativePrompt())))
 
-    // Safari never fires that event, so iOS is offered the manual route after a
-    // short delay — long enough not to interrupt someone mid-signup.
+    // Safari never fires the event, so it is offered the manual route after a
+    // delay long enough not to interrupt someone mid-signup.
     let timer = 0
-    if (isIos()) timer = window.setTimeout(() => setShowIosHint(true), 4000)
+    if (platform() === 'ios') timer = window.setTimeout(() => setShowManual(true), 4000)
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onPrompt)
+      unsubscribe()
       if (timer) window.clearTimeout(timer)
     }
-  }, [])
+  }, [dismissed])
 
   function dismiss() {
     try {
@@ -63,18 +163,15 @@ export default function InstallPrompt() {
     } catch {
       // Private mode — it will simply ask again next time.
     }
-    setDeferred(null)
-    setShowIosHint(false)
+    setDismissed(true)
   }
 
   async function install() {
-    if (!deferred) return
-    await deferred.prompt()
-    await deferred.userChoice
+    await promptInstall()
     dismiss()
   }
 
-  const open = Boolean(deferred) || showIosHint
+  const open = !dismissed && !isStandalone() && !wasInstalled() && (hasNative || showManual)
 
   return (
     <AnimatePresence>
@@ -91,26 +188,24 @@ export default function InstallPrompt() {
 
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-100">Install Questly</p>
-              {deferred ? (
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Add it to your home screen — opens full screen and works offline.
-                </p>
+              {hasNative ? (
+                <>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Add it to your home screen — opens full screen and works offline.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void install()}
+                    className="mt-2 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Install
+                  </button>
+                </>
               ) : (
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Tap <Share className="inline h-3 w-3 -translate-y-px" /> below, then{' '}
-                  <span className="text-slate-300">Add to Home Screen</span>.
-                </p>
-              )}
-
-              {deferred && (
-                <button
-                  type="button"
-                  onClick={() => void install()}
-                  className="mt-2 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Install
-                </button>
+                <div className="mt-0.5">
+                  <ManualSteps />
+                </div>
               )}
             </div>
 

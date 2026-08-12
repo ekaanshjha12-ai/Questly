@@ -19,7 +19,7 @@ import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
 import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
-import InstallPrompt from './components/InstallPrompt'
+import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -233,6 +233,7 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <span className="hidden text-[11px] text-slate-500 sm:inline">{user.email}</span>
+            <InstallButton />
             <button
               type="button"
               onClick={handleSignOut}
