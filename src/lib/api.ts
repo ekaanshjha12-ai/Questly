@@ -138,6 +138,38 @@ export function writeCards(topic: string, subtopics: string[]) {
   })
 }
 
+export interface ProbeQuestion {
+  question: string
+  probing: string
+}
+
+export interface ReportBody {
+  score: number
+  verdict: string
+  strengths: string[]
+  gaps: string[]
+  misconceptions: string[]
+  nextSteps: string[]
+}
+
+export function askExplainQuestions(topic: string, explanation: string) {
+  return request<{ questions: ProbeQuestion[] }>('/api/explain/questions', {
+    method: 'POST',
+    body: JSON.stringify({ topic, explanation }),
+  })
+}
+
+export function requestExplainReport(
+  topic: string,
+  explanation: string,
+  answers: { question: string; answer: string }[],
+) {
+  return request<{ report: ReportBody }>('/api/explain/report', {
+    method: 'POST',
+    body: JSON.stringify({ topic, explanation, answers }),
+  })
+}
+
 export function saveState(state: AppState) {
   return request<{ version: number; updatedAt: string }>('/api/state', {
     method: 'PUT',

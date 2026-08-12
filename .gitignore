@@ -12,3 +12,6 @@ blender/*.png
 
 # Scratch mocks used when testing against a fake Anthropic endpoint.
 *mock*.mjs
+
+# TypeScript incremental build cache — regenerated on every build.
+*.tsbuildinfo

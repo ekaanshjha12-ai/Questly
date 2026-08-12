@@ -14,7 +14,7 @@ const TABS: { id: View; label: string; short: string; icon: typeof LayoutDashboa
   { id: 'todos', label: 'To-Do', short: 'To-Do', icon: ListChecks },
   { id: 'schedule', label: 'Schedule', short: 'Plan', icon: CalendarDays },
   { id: 'focus', label: 'Focus', short: 'Focus', icon: Timer },
-  { id: 'cards', label: 'Flashcards', short: 'Cards', icon: Layers },
+  { id: 'cards', label: 'Study', short: 'Study', icon: Layers },
   { id: 'goals', label: 'Goals', short: 'Goals', icon: ScrollText },
   { id: 'avatar', label: 'Avatar', short: 'Hero', icon: Shield },
   { id: 'achievements', label: 'Achievements', short: 'Awards', icon: Trophy },

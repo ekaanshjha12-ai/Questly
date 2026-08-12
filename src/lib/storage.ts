@@ -32,6 +32,7 @@ export function defaultState(): AppState {
     },
     unlockedAchievements: {},
     decks: [],
+    reports: [],
     collection: {
       unlocked: [],
       active: null,

@@ -13,7 +13,7 @@ import AvatarScreen from './components/AvatarScreen'
 import TodoList from './components/TodoList'
 import Planner from './components/Planner'
 import FocusScreen from './components/FocusScreen'
-import Flashcards from './components/Flashcards'
+import StudyScreen from './components/StudyScreen'
 import { VerifyModalHost } from './components/VerifyModal'
 import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
@@ -167,6 +167,8 @@ function AuthedApp({
     updateCard,
     deleteCard,
     addCard,
+    addReport,
+    deleteReport,
     buyModel,
     equipModel,
   } = useAppState(user.id, initialState)
@@ -276,13 +278,15 @@ function AuthedApp({
         )}
         {view === 'focus' && <FocusScreen state={state} clock={clock} onDeleteSession={deleteSession} />}
         {view === 'cards' && (
-          <Flashcards
+          <StudyScreen
             state={state}
             onAddDeck={addDeck}
             onDeleteDeck={deleteDeck}
             onUpdateCard={updateCard}
             onDeleteCard={deleteCard}
             onAddCard={addCard}
+            onAddReport={addReport}
+            onDeleteReport={deleteReport}
           />
         )}
         {view === 'goals' && <GoalsManager goals={state.goals} onAddGoal={addGoal} onArchiveGoal={archiveGoal} />}

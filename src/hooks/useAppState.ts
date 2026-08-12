@@ -11,6 +11,7 @@ import type {
   ScheduleEntry,
   StreakState,
   Deck,
+  ExplainReport,
   PlanItem,
   QuestPool,
   Todo,
@@ -45,6 +46,8 @@ type Action =
   | { type: 'UPDATE_CARD'; deckId: string; cardId: string; front: string; back: string }
   | { type: 'DELETE_CARD'; deckId: string; cardId: string }
   | { type: 'ADD_CARD'; deckId: string }
+  | { type: 'ADD_REPORT'; report: Omit<ExplainReport, 'id' | 'createdAt'> }
+  | { type: 'DELETE_REPORT'; reportId: string }
   | { type: 'BUY_MODEL'; modelId: string }
   | { type: 'EQUIP_MODEL'; modelId: string | null }
   | { type: 'ADD_TODO'; title: string }
@@ -460,6 +463,19 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       }
 
+    case 'ADD_REPORT': {
+      const report: ExplainReport = {
+        ...action.report,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      }
+      // Capped so a long history cannot bloat the synced state blob.
+      return { ...state, reports: [report, ...state.reports].slice(0, 50) }
+    }
+
+    case 'DELETE_REPORT':
+      return { ...state, reports: state.reports.filter((r) => r.id !== action.reportId) }
+
     case 'BUY_MODEL': {
       const model = findModel(action.modelId)
       if (!model || state.collection.unlocked.includes(model.id)) return state
@@ -750,6 +766,14 @@ export function useAppState(
     dispatch({ type: 'ADD_CARD', deckId })
   }, [])
 
+  const addReport = useCallback((report: Omit<ExplainReport, 'id' | 'createdAt'>) => {
+    dispatch({ type: 'ADD_REPORT', report })
+  }, [])
+
+  const deleteReport = useCallback((reportId: string) => {
+    dispatch({ type: 'DELETE_REPORT', reportId })
+  }, [])
+
   const buyModel = useCallback((modelId: string) => {
     dispatch({ type: 'BUY_MODEL', modelId })
   }, [])
@@ -811,6 +835,8 @@ export function useAppState(
     updateCard,
     deleteCard,
     addCard,
+    addReport,
+    deleteReport,
     buyModel,
     equipModel,
   }

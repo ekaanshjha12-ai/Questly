@@ -8,6 +8,7 @@ import { isConfigured, verifyPhoto, verifyVoice, MIN_CONFIDENCE } from './verify
 import { perceptualHash, hammingDistance, DUPLICATE_THRESHOLD } from './imagehash.js'
 import { generateQuestPool, isConfigured as questGenConfigured } from './questgen.js'
 import { isConfigured as cardsConfigured, suggestSubtopics, writeCards } from './flashcards.js'
+import { askQuestions, gradeExplanation, isConfigured as coachConfigured } from './explain.js'
 import {
   SESSION_COOKIE,
   clearCookieOptions,
@@ -462,6 +463,61 @@ app.post('/api/flashcards/cards', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('card generation failed', err)
     res.status(502).json({ error: 'Could not write cards for that.', detail: String(err?.message ?? err).slice(0, 300) })
+  }
+})
+
+/** Reads an explanation and returns questions aimed at its specific weak spots. */
+app.post('/api/explain/questions', requireAuth, async (req, res) => {
+  const { topic, explanation } = req.body ?? {}
+  if (typeof topic !== 'string' || !topic.trim()) {
+    res.status(400).json({ error: 'A topic is required.' })
+    return
+  }
+  if (typeof explanation !== 'string' || explanation.trim().length < 40) {
+    res.status(400).json({ error: 'Explain a bit more first — a couple of sentences at least.' })
+    return
+  }
+  if (!coachConfigured()) {
+    res.status(503).json({ error: 'The explain coach is not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    const questions = await askQuestions(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000))
+    res.json({ questions })
+  } catch (err) {
+    console.error('question generation failed', err)
+    res.status(502).json({ error: 'Could not think of questions.', detail: String(err?.message ?? err).slice(0, 300) })
+  }
+})
+
+/** Marks the explanation and answers together, returning the report. */
+app.post('/api/explain/report', requireAuth, async (req, res) => {
+  const { topic, explanation, answers } = req.body ?? {}
+  if (typeof topic !== 'string' || typeof explanation !== 'string' || !Array.isArray(answers)) {
+    res.status(400).json({ error: 'Topic, explanation and answers are required.' })
+    return
+  }
+  const cleaned = answers
+    .map((a) => ({
+      question: String(a?.question ?? '').trim().slice(0, 400),
+      answer: String(a?.answer ?? '').trim().slice(0, 3000),
+    }))
+    .filter((a) => a.question)
+    .slice(0, 6)
+  if (!cleaned.length) {
+    res.status(400).json({ error: 'No questions to mark.' })
+    return
+  }
+  if (!coachConfigured()) {
+    res.status(503).json({ error: 'The explain coach is not set up on this server.', code: 'not_configured' })
+    return
+  }
+  try {
+    const report = await gradeExplanation(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000), cleaned)
+    res.json({ report })
+  } catch (err) {
+    console.error('report generation failed', err)
+    res.status(502).json({ error: 'Could not mark that.', detail: String(err?.message ?? err).slice(0, 300) })
   }
 })
 

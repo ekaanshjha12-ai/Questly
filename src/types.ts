@@ -134,6 +134,19 @@ export interface Deck {
   createdAt: string
 }
 
+/** The marked result of one teach-back attempt. */
+export interface ExplainReport {
+  id: string
+  topic: string
+  score: number
+  verdict: string
+  strengths: string[]
+  gaps: string[]
+  misconceptions: string[]
+  nextSteps: string[]
+  createdAt: string
+}
+
 export type PlannerView = 'daily' | 'weekly' | 'monthly'
 
 /** A placement of an existing task into a planner slot. The task itself always
@@ -167,6 +180,7 @@ export interface AppState {
   streak: StreakState
   unlockedAchievements: Record<string, string>
   decks: Deck[]
+  reports: ExplainReport[]
   collection: Collection
   progression: Progression
 }
