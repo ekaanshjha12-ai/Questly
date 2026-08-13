@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { toContentBlocks } from './documents.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -112,13 +113,17 @@ export function isConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-async function ask({ system, prompt, schema, maxTokens }) {
+async function ask({ system, prompt, schema, maxTokens, documents = [] }) {
   const anthropic = client()
   if (!anthropic) {
     const err = new Error('The AI planner is not configured on this server.')
     err.code = 'not_configured'
     throw err
   }
+
+  // Attachments come first so the brief that follows is the last thing read,
+  // and reads as the instruction rather than as more reference material.
+  const content = [...toContentBlocks(documents), { type: 'text', text: prompt }]
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -128,7 +133,7 @@ async function ask({ system, prompt, schema, maxTokens }) {
       effort: 'low',
       format: { type: 'json_schema', schema },
     },
-    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    messages: [{ role: 'user', content }],
   })
 
   if (response.stop_reason === 'refusal') {
@@ -144,12 +149,21 @@ async function ask({ system, prompt, schema, maxTokens }) {
 
 const text = (value, cap) => String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, cap)
 
-export async function askPlannerQuestions(goal, detail) {
+export async function askPlannerQuestions(goal, detail, documents = []) {
   const parts = [`Goal: "${goal}"`]
   if (detail) parts.push(`Extra context: "${detail}"`)
+  if (documents.length) {
+    parts.push('They attached reference material — do not ask for anything it already answers.')
+  }
   parts.push('\nWhat should you ask before planning this?')
 
-  const parsed = await ask({ system: QUESTIONS_SYSTEM, prompt: parts.join('\n'), schema: QUESTIONS_SCHEMA, maxTokens: 1024 })
+  const parsed = await ask({
+    system: QUESTIONS_SYSTEM,
+    prompt: parts.join('\n'),
+    schema: QUESTIONS_SCHEMA,
+    maxTokens: 1024,
+    documents,
+  })
 
   const seen = new Set()
   const out = []
@@ -190,16 +204,27 @@ function cleanDated(list, cap, maxOffset) {
   return out
 }
 
-export async function generatePlan(goal, detail, answers) {
+export async function generatePlan(goal, detail, answers, documents = []) {
   const parts = [`Goal: "${goal}"`]
   if (detail) parts.push(`Extra context: "${detail}"`)
   if (answers?.length) {
     parts.push('\nQuestions and answers:')
     for (const a of answers) parts.push(`Q: ${a.question}\nA: ${a.answer || '(skipped)'}`)
   }
+  if (documents.length) {
+    parts.push(
+      '\nBuild the plan around the attached material: use its actual topics, deadlines and ordering rather than inventing generic steps.',
+    )
+  }
   parts.push(`\nToday is ${new Date().toDateString()}. Write the plan.`)
 
-  const parsed = await ask({ system: PLAN_SYSTEM, prompt: parts.join('\n'), schema: PLAN_SCHEMA, maxTokens: 4096 })
+  const parsed = await ask({
+    system: PLAN_SYSTEM,
+    prompt: parts.join('\n'),
+    schema: PLAN_SCHEMA,
+    maxTokens: 4096,
+    documents,
+  })
 
   const seenTodos = new Set()
   const todos = []

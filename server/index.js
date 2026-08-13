@@ -37,6 +37,7 @@ import { generateSecret, otpauthUrl } from './totp.js'
 import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { checkStateWrite } from './statecheck.js'
+import { validateDocuments } from './documents.js'
 import {
   audit,
   countByRole,
@@ -81,7 +82,7 @@ app.use(securityHeaders(IS_PRODUCTION))
 // the state payloads. The client downscales before sending.
 app.use(express.json({ limit: '12mb' }))
 app.use(cookieParser())
-app.use(sameOriginOnly)
+app.use(sameOriginOnly(IS_PRODUCTION))
 
 purgeExpiredSessions()
 
@@ -697,14 +698,33 @@ app.post('/api/planner/questions', ...aiGuard, async (req, res) => {
     return
   }
   if (blockedByModeration(req, res, [goal, detail], { allowLength: 600 })) return
+
+  // Ahead of the configured check on purpose: untrusted input is rejected on
+  // its own merits, not only when the service behind it happens to be up.
+  const attached = validateDocuments(req.body?.documents)
+  if (!attached.ok) {
+    audit({
+      userId: req.user?.id ?? null,
+      email: req.user?.email ?? null,
+      event: 'upload.rejected',
+      outcome: 'blocked',
+      ip: req.ip,
+      detail: attached.error,
+    })
+    res.status(400).json({ error: attached.error, code: 'bad_attachment' })
+    return
+  }
+
   if (!plannerConfigured()) {
     res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
     return
   }
+
   try {
     const questions = await askPlannerQuestions(
       goal.trim().slice(0, 200),
       typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
+      attached.documents,
     )
     if (blockedOutput(req, res, questions)) return
     res.json({ questions })
@@ -738,15 +758,32 @@ app.post('/api/planner/plan', ...aiGuard, async (req, res) => {
         .slice(0, 8)
     : []
   if (blockedByModeration(req, res, [goal, detail, ...cleaned.map((a) => a.answer)], { allowLength: 600 })) return
+
+  const attached = validateDocuments(req.body?.documents)
+  if (!attached.ok) {
+    audit({
+      userId: req.user?.id ?? null,
+      email: req.user?.email ?? null,
+      event: 'upload.rejected',
+      outcome: 'blocked',
+      ip: req.ip,
+      detail: attached.error,
+    })
+    res.status(400).json({ error: attached.error, code: 'bad_attachment' })
+    return
+  }
+
   if (!plannerConfigured()) {
     res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
     return
   }
+
   try {
     const plan = await generatePlan(
       goal.trim().slice(0, 200),
       typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
       cleaned,
+      attached.documents,
     )
     if (blockedOutput(req, res, plan)) return
     res.json({ plan })

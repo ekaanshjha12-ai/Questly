@@ -136,36 +136,49 @@ export function rateLimit({ name, max, windowMs, by = 'ip' }) {
  * somewhere else on a mutating request is refused outright. Requests with no
  * Origin at all are allowed through, since same-origin navigations and
  * non-browser clients legitimately omit it.
+ *
+ * Production compares the full host. Development compares hostname only,
+ * because Vite serves the app on one port and proxies /api to another with
+ * `changeOrigin`, so the browser's Origin and the Host this process sees
+ * legitimately differ by port. Relaxing that in production would let anything
+ * else listening on the same machine through, which is why it is not.
  */
-export function sameOriginOnly(req, res, next) {
-  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+export function sameOriginOnly(isProduction) {
+  return (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      next()
+      return
+    }
+
+    const origin = req.get('origin')
+    if (!origin) {
+      next()
+      return
+    }
+
+    const host = req.get('host') ?? ''
+    let originUrl
+    try {
+      originUrl = new URL(origin)
+    } catch {
+      res.status(403).json({ error: 'Bad origin.' })
+      return
+    }
+
+    const matches = isProduction
+      ? originUrl.host === host
+      : originUrl.hostname === host.split(':')[0]
+
+    if (!matches) {
+      audit({
+        event: 'csrf.blocked',
+        outcome: 'blocked',
+        ip: req.ip,
+        detail: `origin ${originUrl.host} != host ${host}`,
+      })
+      res.status(403).json({ error: 'Cross-origin requests are not allowed.' })
+      return
+    }
     next()
-    return
   }
-
-  const origin = req.get('origin')
-  if (!origin) {
-    next()
-    return
-  }
-
-  let originHost
-  try {
-    originHost = new URL(origin).host
-  } catch {
-    res.status(403).json({ error: 'Bad origin.' })
-    return
-  }
-
-  if (originHost !== req.get('host')) {
-    audit({
-      event: 'csrf.blocked',
-      outcome: 'blocked',
-      ip: req.ip,
-      detail: `origin ${originHost} != host ${req.get('host')}`,
-    })
-    res.status(403).json({ error: 'Cross-origin requests are not allowed.' })
-    return
-  }
-  next()
 }

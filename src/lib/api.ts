@@ -188,17 +188,30 @@ export interface GeneratedPlan {
   monthly: PlanDatedItem[]
 }
 
-export function askPlannerQuestions(goal: string, detail?: string) {
+/** A reference file, base64-encoded. Sent with the request and never stored —
+ * the server decodes it, passes it to the model, and drops it. */
+export interface PlanDocument {
+  name: string
+  mediaType: string
+  data: string
+}
+
+export function askPlannerQuestions(goal: string, detail?: string, documents: PlanDocument[] = []) {
   return request<{ questions: string[] }>('/api/planner/questions', {
     method: 'POST',
-    body: JSON.stringify({ goal, detail }),
+    body: JSON.stringify({ goal, detail, documents }),
   })
 }
 
-export function generatePlan(goal: string, detail: string | undefined, answers: { question: string; answer: string }[]) {
+export function generatePlan(
+  goal: string,
+  detail: string | undefined,
+  answers: { question: string; answer: string }[],
+  documents: PlanDocument[] = [],
+) {
   return request<{ plan: GeneratedPlan }>('/api/planner/plan', {
     method: 'POST',
-    body: JSON.stringify({ goal, detail, answers }),
+    body: JSON.stringify({ goal, detail, answers, documents }),
   })
 }
 
