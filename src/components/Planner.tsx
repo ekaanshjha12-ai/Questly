@@ -238,7 +238,9 @@ export default function Planner({
     return ids
   }, [state.schedule])
 
-  // Anything not yet placed in this period, ready to be dragged in.
+  // Anything not placed on any day yet, ready to be dragged in. A task already
+  // sitting somewhere is absent from every view's list rather than offering
+  // itself for a second placement — moving it is done by dragging the chip.
   const backlog = useMemo(() => {
     const currentQuestKeys = {
       daily: questPeriodKey('daily'),
