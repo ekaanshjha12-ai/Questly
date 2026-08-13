@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
-    "cleanup": "node scripts/cleanup.js"
+    "cleanup": "node scripts/cleanup.js",
+    "admin": "node scripts/admin.js"
   },
   "engines": {
     "node": ">=20"

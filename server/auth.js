@@ -1,6 +1,7 @@
-import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import {
+  audit,
   deleteSession,
   deleteSessionsForUser,
   updatePassword,
@@ -10,7 +11,11 @@ import {
   insertSession,
   insertUser,
   normalizeEmail,
+  setMfa,
+  setRecovery,
+  PRIVILEGED_ROLES,
 } from './db.js'
+import { generateBackupCodes, normalizeBackupCode, verifyTotp } from './totp.js'
 
 const scryptAsync = promisify(scrypt)
 
@@ -32,19 +37,42 @@ function safeEqualHex(a, b) {
   return timingSafeEqual(bufA, bufB)
 }
 
-export function validateCredentials(email, password) {
+/** A handful of the most-guessed passwords. Not a substitute for a breach
+ * corpus, but it stops the worst choices at no cost. */
+const OBVIOUS_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwertyui', 'qwerty123', 'iloveyou', 'admin123', 'letmein1', 'welcome1',
+  'abc12345', 'football', 'baseball', 'superman', 'trustno1', 'passw0rd',
+])
+
+export function validateCredentials(email, password, { minLength = 8 } = {}) {
   const normalized = normalizeEmail(email)
-  if (!normalized || !normalized.includes('@') || normalized.length > 254) {
+  // Deliberately conservative: one @, something either side, a dot in the host.
+  if (!normalized || normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
     return 'Enter a valid email address.'
   }
-  if (typeof password !== 'string' || password.length < 8) {
-    return 'Password must be at least 8 characters.'
+  if (typeof password !== 'string' || password.length < minLength) {
+    return `Password must be at least ${minLength} characters.`
   }
   if (password.length > 200) {
     return 'Password is too long.'
   }
+  if (OBVIOUS_PASSWORDS.has(password.toLowerCase())) {
+    return 'That password is too common. Choose something else.'
+  }
+  // Only meaningful for a local part long enough to be a real name. Applying it
+  // to short ones rejects almost everything — "a@b.com" would bar any password
+  // containing the letter a.
+  const localPart = normalized.split('@')[0]
+  if (localPart.length >= 4 && password.toLowerCase().includes(localPart.toLowerCase())) {
+    return 'Password must not contain your email name.'
+  }
   return null
 }
+
+/** Admin credentials protect everyone else's data, so they are held to a longer
+ * minimum than an ordinary account. */
+export const ADMIN_MIN_PASSWORD = 16
 
 /** Ambiguous characters are left out so a code copied off a screen by hand does
  * not fail on an I/1 or O/0 mix-up. */
@@ -66,17 +94,53 @@ export function normalizeCode(code) {
   return String(code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
-export async function createUser(email, password) {
+/**
+ * `role` is a separate argument, never read from the caller's payload, and the
+ * signup route never passes it. Self-service registration can therefore only
+ * ever produce a plain user, no matter what a request body contains.
+ */
+export async function createUser(email, password, role = 'user') {
   const salt = randomBytes(16).toString('hex')
   const passwordHash = await hashPassword(password, salt)
   const recoveryCode = makeRecoveryCode()
   const recoverySalt = randomBytes(16).toString('hex')
   const recoveryHash = await hashPassword(normalizeCode(recoveryCode), recoverySalt)
   const id = randomUUID()
-  insertUser({ id, email, passwordHash, salt, recoveryHash, recoverySalt })
+  insertUser({ id, email, passwordHash, salt, recoveryHash, recoverySalt }, role)
   // Returned once and never stored in the clear — this is the only time anyone
   // can read it.
-  return { user: { id, email: normalizeEmail(email) }, recoveryCode }
+  return { user: { id, email: normalizeEmail(email), role }, recoveryCode }
+}
+
+/**
+ * Creates a privileged account that cannot yet be logged into.
+ *
+ * No password is chosen here. The row is created with an empty credential and
+ * the holder sets one through a one-time link, so an operator's password is
+ * never typed into a terminal, stored in an environment variable, written to a
+ * deploy log, or passed through anyone else's hands.
+ */
+export function createPendingAdmin(email, role) {
+  const id = randomUUID()
+  insertUser(
+    { id, email, passwordHash: '', salt: '', recoveryHash: null, recoverySalt: null },
+    role,
+  )
+  return { id, email: normalizeEmail(email), role }
+}
+
+/** Finishes a pending admin: sets the password they chose and issues their
+ * recovery code. Separate from `createUser` so the row keeps its id and role. */
+export async function completeAdminSetup(userId, password) {
+  const salt = randomBytes(16).toString('hex')
+  const passwordHash = await hashPassword(password, salt)
+  updatePassword(userId, passwordHash, salt)
+
+  const recoveryCode = makeRecoveryCode()
+  const recoverySalt = randomBytes(16).toString('hex')
+  const recoveryHash = await hashPassword(normalizeCode(recoveryCode), recoverySalt)
+  setRecovery(userId, recoveryHash, recoverySalt)
+  return recoveryCode
 }
 
 /**
@@ -114,9 +178,65 @@ export async function verifyUser(email, password) {
     await hashPassword(password, 'decoy-salt')
     return null
   }
+  // An account with no password set (a freshly invited admin) can never be
+  // logged into until the setup link has been used.
+  if (!user.password_hash) {
+    await hashPassword(password, 'decoy-salt')
+    return null
+  }
   const candidate = await hashPassword(password, user.salt)
   if (!safeEqualHex(candidate, user.password_hash)) return null
-  return { id: user.id, email: user.email }
+  if (user.disabled) return { disabled: true }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role ?? 'user',
+    mfaEnabled: Boolean(user.mfa_enabled),
+  }
+}
+
+/** Admins and the superadmin must hold a second factor — a stolen password on
+ * one of those accounts would otherwise expose every user's data. */
+export function mfaRequiredFor(role) {
+  return PRIVILEGED_ROLES.has(role)
+}
+
+export async function enrolMfa(userId, secret) {
+  const codes = generateBackupCodes()
+  const hashed = codes.map((code) => sha256(normalizeBackupCode(code)))
+  setMfa(userId, { secret, enabled: true, backup: JSON.stringify(hashed) })
+  // Shown once, stored only as hashes.
+  return codes
+}
+
+function sha256(value) {
+  return createHash('sha256').update(String(value)).digest('hex')
+}
+
+/**
+ * Checks a second factor, accepting either a live TOTP code or one unused backup
+ * code. A backup code is burned on use so it cannot be replayed.
+ */
+export function checkSecondFactor(user, code) {
+  if (!user?.mfa_enabled || !user.mfa_secret) return false
+  if (verifyTotp(user.mfa_secret, code)) return true
+
+  const normalized = normalizeBackupCode(code)
+  if (normalized.length < 8) return false
+  let remaining
+  try {
+    remaining = JSON.parse(user.mfa_backup ?? '[]')
+  } catch {
+    return false
+  }
+  const hashed = sha256(normalized)
+  const index = remaining.indexOf(hashed)
+  if (index < 0) return false
+
+  remaining.splice(index, 1)
+  setMfa(user.id, { secret: user.mfa_secret, enabled: true, backup: JSON.stringify(remaining) })
+  audit({ userId: user.id, email: user.email, event: 'mfa.backup_used', outcome: 'success' })
+  return true
 }
 
 export function startSession(userId) {
@@ -164,7 +284,68 @@ export function requireAuth(req, res, next) {
     res.status(401).json({ error: 'Not signed in.' })
     return
   }
-  req.user = { id: user.id, email: user.email }
+  // A disabled account keeps its rows but loses access immediately, even if it
+  // is holding a session issued before it was disabled.
+  if (user.disabled) {
+    deleteSessionsForUser(user.id)
+    res.status(403).json({ error: 'This account has been disabled.', code: 'disabled' })
+    return
+  }
+  req.user = {
+    id: user.id,
+    email: user.email,
+    role: user.role ?? 'user',
+    mfaEnabled: Boolean(user.mfa_enabled),
+  }
   req.sessionToken = token
   next()
+}
+
+/**
+ * Gate for anything an ordinary account must never reach.
+ *
+ * Checked against the role stored on the row, read fresh on every request, so
+ * demoting or disabling an admin takes effect at once rather than whenever their
+ * session happens to expire.
+ */
+export function requireRole(...roles) {
+  const allowed = new Set(roles)
+  return (req, res, next) => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not signed in.' })
+      return
+    }
+    if (!allowed.has(req.user.role)) {
+      audit({
+        userId: req.user.id,
+        email: req.user.email,
+        event: 'authz.denied',
+        outcome: 'blocked',
+        ip: req.ip,
+        detail: `${req.method} ${req.originalUrl} as ${req.user.role}`,
+      })
+      // Deliberately 404, not 403: an ordinary account should not be able to map
+      // which admin routes exist.
+      res.status(404).json({ error: 'Not found.' })
+      return
+    }
+    // Privileged sessions are only trusted when the second factor was actually
+    // presented at sign-in.
+    if (mfaRequiredFor(req.user.role) && !req.user.mfaEnabled) {
+      res.status(403).json({ error: 'This account must finish setting up two-factor authentication.', code: 'mfa_required' })
+      return
+    }
+    next()
+  }
+}
+
+export const requireAdmin = requireRole('admin', 'superadmin')
+export const requireSuperadmin = requireRole('superadmin')
+
+export function hashSetupToken(token) {
+  return sha256(token)
+}
+
+export function makeSetupToken() {
+  return randomBytes(32).toString('hex')
 }

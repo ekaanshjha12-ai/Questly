@@ -12,26 +12,53 @@ import { askQuestions, gradeExplanation, isConfigured as coachConfigured } from 
 import { askPlannerQuestions, generatePlan, isConfigured as plannerConfigured } from './planner.js'
 import { analyseOutlook, isConfigured as outlookConfigured } from './outlook.js'
 import {
+  ADMIN_MIN_PASSWORD,
   SESSION_COOKIE,
+  checkSecondFactor,
   clearCookieOptions,
+  completeAdminSetup,
   cookieOptions,
+  createPendingAdmin,
   createUser,
+  enrolMfa,
+  hashSetupToken,
+  makeSetupToken,
+  mfaRequiredFor,
   resetWithCode,
   endSession,
+  requireAdmin,
   requireAuth,
+  requireSuperadmin,
   startSession,
   validateCredentials,
   verifyUser,
 } from './auth.js'
+import { generateSecret, otpauthUrl } from './totp.js'
+import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
+import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
+import { checkStateWrite } from './statecheck.js'
 import {
+  audit,
+  countByRole,
+  countPhotoProofs,
   countVerifications,
+  consumeSetupToken,
+  deleteUser,
+  findSetupToken,
   findUserByEmail,
+  findUserById,
   getState,
+  insertSetupToken,
+  listAudit,
   listPhotoHashes,
+  listUsers,
   purgeExpiredSessions,
   putState,
   recordPhotoHash,
   recordVerification,
+  setMaxXp,
+  setUserDisabled,
+  setUserRole,
 } from './db.js'
 
 const app = express()
@@ -48,34 +75,72 @@ const PORT = Number(process.env.API_PORT ?? (IS_PRODUCTION ? process.env.PORT : 
 // rate-limit all of them.
 if (IS_PRODUCTION) app.set('trust proxy', 1)
 
+app.use(securityHeaders(IS_PRODUCTION))
+
 // Photos arrive base64-encoded in the JSON body, so this needs headroom above
 // the state payloads. The client downscales before sending.
 app.use(express.json({ limit: '12mb' }))
 app.use(cookieParser())
+app.use(sameOriginOnly)
 
 purgeExpiredSessions()
 
-// Very small in-memory throttle on auth attempts per IP, enough to blunt
-// trivial brute-forcing in a local/dev deployment.
-const attempts = new Map()
-const WINDOW_MS = 60_000
-const MAX_ATTEMPTS = 10
+/**
+ * Limits, tightest first.
+ *
+ * The AI routes are the expensive ones — each is a paid call on the operator's
+ * key — so they are capped per account rather than per IP, which a single user
+ * behind a changing mobile address would otherwise slip through.
+ */
+const throttleAuth = rateLimit({ name: 'auth', max: 10, windowMs: 60_000, by: 'ip' })
+const throttleSignup = rateLimit({ name: 'signup', max: 5, windowMs: 60 * 60_000, by: 'ip' })
+const throttleAi = rateLimit({ name: 'ai', max: 20, windowMs: 60_000, by: 'user' })
+const throttleAiDaily = rateLimit({ name: 'ai-daily', max: 200, windowMs: 24 * 60 * 60_000, by: 'user' })
+const throttleState = rateLimit({ name: 'state', max: 120, windowMs: 60_000, by: 'user' })
+const throttleAdmin = rateLimit({ name: 'admin', max: 60, windowMs: 60_000, by: 'user' })
 
-function throttleAuth(req, res, next) {
-  const key = req.ip ?? 'unknown'
-  const now = Date.now()
-  const record = attempts.get(key)
-  if (!record || now - record.start > WINDOW_MS) {
-    attempts.set(key, { start: now, count: 1 })
-    next()
-    return
+/** Everything that spends money on the model sits behind both windows. */
+const aiGuard = [requireAuth, throttleAi, throttleAiDaily]
+
+/**
+ * Screens user text before it reaches the model and logs anything blocked.
+ * Returns true when the request has already been answered.
+ */
+function blockedByModeration(req, res, fields, { allowLength = 6000 } = {}) {
+  for (const value of fields) {
+    if (typeof value !== 'string' || !value) continue
+    const verdict = screenInput(value, { allowLength })
+    if (!verdict.ok) {
+      audit({
+        userId: req.user?.id ?? null,
+        email: req.user?.email ?? null,
+        event: `moderation.${verdict.category}`,
+        outcome: 'blocked',
+        ip: req.ip,
+        detail: `${req.originalUrl} ${verdict.detail}`,
+      })
+      const status = verdict.category === 'too_long' ? 413 : 400
+      res.status(status).json({ error: REFUSAL_MESSAGE, code: `blocked_${verdict.category}` })
+      return true
+    }
   }
-  record.count += 1
-  if (record.count > MAX_ATTEMPTS) {
-    res.status(429).json({ error: 'Too many attempts. Try again in a minute.' })
-    return
-  }
-  next()
+  return false
+}
+
+/** Screens generated content before it is returned and stored. */
+function blockedOutput(req, res, payload) {
+  const verdict = screenOutputDeep(payload)
+  if (verdict.ok) return false
+  audit({
+    userId: req.user?.id ?? null,
+    email: req.user?.email ?? null,
+    event: 'moderation.output',
+    outcome: 'blocked',
+    ip: req.ip,
+    detail: `${req.originalUrl} ${verdict.detail}`,
+  })
+  res.status(502).json({ error: 'The generated content was blocked by the content filter. Try again.' })
+  return true
 }
 
 /** When INVITE_CODE is set, signup requires it. Left unset locally so dev and
@@ -90,13 +155,14 @@ app.get('/api/auth/config', (_req, res) => {
   res.json({ inviteRequired: Boolean(INVITE_CODE) })
 })
 
-app.post('/api/auth/signup', throttleAuth, async (req, res) => {
+app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
   try {
     const { email, password, inviteCode } = req.body ?? {}
 
     if (INVITE_CODE) {
       const provided = typeof inviteCode === 'string' ? inviteCode.trim() : ''
       if (provided !== INVITE_CODE) {
+        audit({ email, event: 'auth.signup', outcome: 'bad_invite', ip: req.ip })
         res.status(403).json({ error: 'That invite code is not right.', code: 'bad_invite' })
         return
       }
@@ -111,9 +177,13 @@ app.post('/api/auth/signup', throttleAuth, async (req, res) => {
       res.status(409).json({ error: 'An account with that email already exists.' })
       return
     }
+
+    // No role is passed. Registration cannot mint anything but a plain user,
+    // whatever else the request body happens to contain.
     const { user, recoveryCode } = await createUser(email, password)
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
+    audit({ userId: user.id, email: user.email, event: 'auth.signup', outcome: 'success', ip: req.ip })
     // The only time this code is ever readable. It is stored hashed.
     res.status(201).json({ user, recoveryCode })
   } catch (err) {
@@ -131,13 +201,47 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
     }
     const user = await verifyUser(email, password)
     if (!user) {
+      audit({ email, event: 'auth.login', outcome: 'bad_credentials', ip: req.ip })
       // Deliberately vague: don't reveal whether the email exists.
       res.status(401).json({ error: 'Incorrect email or password.' })
       return
     }
+    if (user.disabled) {
+      audit({ email, event: 'auth.login', outcome: 'disabled', ip: req.ip })
+      res.status(403).json({ error: 'This account has been disabled.', code: 'disabled' })
+      return
+    }
+
+    // A privileged account without a second factor cannot sign in at all —
+    // otherwise a stolen admin password alone would reach every user's data.
+    if (mfaRequiredFor(user.role) && !user.mfaEnabled) {
+      audit({ userId: user.id, email, event: 'auth.login', outcome: 'mfa_not_enrolled', ip: req.ip })
+      res.status(403).json({
+        error: 'This account must finish two-factor setup before signing in. Use your setup link.',
+        code: 'mfa_setup_required',
+      })
+      return
+    }
+
+    if (user.mfaEnabled) {
+      const { mfaCode } = req.body ?? {}
+      if (typeof mfaCode !== 'string' || !mfaCode.trim()) {
+        // Not an error: the client shows the code field on seeing this.
+        res.status(401).json({ error: 'Enter your authentication code.', code: 'mfa_required' })
+        return
+      }
+      const row = findUserById(user.id)
+      if (!checkSecondFactor(row, mfaCode)) {
+        audit({ userId: user.id, email, event: 'auth.mfa', outcome: 'failed', ip: req.ip })
+        res.status(401).json({ error: 'That code is not right.', code: 'mfa_invalid' })
+        return
+      }
+    }
+
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
-    res.json({ user })
+    audit({ userId: user.id, email: user.email, event: 'auth.login', outcome: 'success', ip: req.ip })
+    res.json({ user: { id: user.id, email: user.email, role: user.role } })
   } catch (err) {
     console.error('login failed', err)
     res.status(500).json({ error: 'Could not sign in.' })
@@ -192,15 +296,64 @@ app.get('/api/state', requireAuth, (req, res) => {
   }
 })
 
-app.put('/api/state', requireAuth, (req, res) => {
+/**
+ * Saves progress, after checking the client is not claiming more than it could
+ * have earned.
+ *
+ * The whole document is authored in the browser, so this endpoint treats it as a
+ * claim rather than a fact. `checkStateWrite` re-derives level from XP, bounds
+ * the rate XP can arrive at, requires coins to have been minted and unlocks to
+ * have been paid for and rank-earned, and caps proofs at the number of photo
+ * verifications the server itself recorded.
+ */
+app.put('/api/state', requireAuth, throttleState, (req, res) => {
   const { state } = req.body ?? {}
-  if (state === undefined || state === null || typeof state !== 'object') {
+  if (state === undefined || state === null || typeof state !== 'object' || Array.isArray(state)) {
     res.status(400).json({ error: 'A state object is required.' })
     return
   }
+
   try {
-    const serialized = JSON.stringify(state)
-    const { version, updatedAt } = putState(req.user.id, serialized)
+    const row = getState(req.user.id)
+    let previous = null
+    if (row) {
+      try {
+        previous = JSON.parse(row.data)
+      } catch {
+        // Corrupt stored state: treat as a first write rather than refusing to
+        // let the user save ever again.
+      }
+    }
+
+    const stored = findUserById(req.user.id)
+    const elapsedMs = row?.updated_at ? Date.now() - new Date(row.updated_at).getTime() : Number.MAX_SAFE_INTEGER
+    const verdict = checkStateWrite({
+      previous,
+      next: state,
+      maxXpSeen: stored?.max_xp ?? 0,
+      elapsedMs,
+      verifiedProofs: countPhotoProofs(req.user.id),
+    })
+
+    if (!verdict.ok) {
+      audit({
+        userId: req.user.id,
+        email: req.user.email,
+        event: `anticheat.${verdict.reason}`,
+        outcome: 'blocked',
+        ip: req.ip,
+        detail: verdict.detail,
+      })
+      res.status(409).json({
+        error: 'That save was rejected because the progress in it could not have been earned.',
+        code: `rejected_${verdict.reason}`,
+      })
+      return
+    }
+
+    if (verdict.maxXp > (stored?.max_xp ?? 0)) setMaxXp(req.user.id, verdict.maxXp)
+
+    const { version, updatedAt } = putState(req.user.id, JSON.stringify(state))
     res.json({ version, updatedAt })
   } catch (err) {
     console.error('state save failed', err)
@@ -388,12 +541,14 @@ app.post('/api/verify', requireAuth, async (req, res) => {
  * Writes a bespoke quest set for one goal. Called once when a goal is created,
  * so the cost is one request per goal for its entire life.
  */
-app.post('/api/goals/quests', requireAuth, async (req, res) => {
+app.post('/api/goals/quests', ...aiGuard, async (req, res) => {
   const { title, detail, category } = req.body ?? {}
   if (typeof title !== 'string' || !title.trim()) {
     res.status(400).json({ error: 'A goal title is required.' })
     return
   }
+
+  if (blockedByModeration(req, res, [title, detail], { allowLength: 600 })) return
 
   if (!questGenConfigured()) {
     res.status(503).json({ error: 'Quest generation is not set up on this server.', code: 'not_configured' })
@@ -406,6 +561,7 @@ app.post('/api/goals/quests', requireAuth, async (req, res) => {
       detail: typeof detail === 'string' ? detail.trim().slice(0, 500) : '',
       category: typeof category === 'string' ? category : '',
     })
+    if (blockedOutput(req, res, pool)) return
     res.json({ pool })
   } catch (err) {
     if (err?.code === 'not_configured') {
@@ -424,18 +580,21 @@ app.post('/api/goals/quests', requireAuth, async (req, res) => {
 })
 
 /** Step one of deck building: break a topic into areas the user can choose from. */
-app.post('/api/flashcards/subtopics', requireAuth, async (req, res) => {
+app.post('/api/flashcards/subtopics', ...aiGuard, async (req, res) => {
   const { topic } = req.body ?? {}
   if (typeof topic !== 'string' || topic.trim().length < 2) {
     res.status(400).json({ error: 'Enter a topic to study.' })
     return
   }
+  if (blockedByModeration(req, res, [topic], { allowLength: 300 })) return
   if (!cardsConfigured()) {
     res.status(503).json({ error: 'Flashcards are not set up on this server.', code: 'not_configured' })
     return
   }
   try {
-    res.json({ subtopics: await suggestSubtopics(topic.trim().slice(0, 200)) })
+    const subtopics = await suggestSubtopics(topic.trim().slice(0, 200))
+    if (blockedOutput(req, res, subtopics)) return
+    res.json({ subtopics })
   } catch (err) {
     console.error('subtopic generation failed', err)
     res.status(502).json({ error: 'Could not break that topic down.', detail: String(err?.message ?? err).slice(0, 300) })
@@ -443,7 +602,7 @@ app.post('/api/flashcards/subtopics', requireAuth, async (req, res) => {
 })
 
 /** Step two: write cards for only the subtopics the user kept. */
-app.post('/api/flashcards/cards', requireAuth, async (req, res) => {
+app.post('/api/flashcards/cards', ...aiGuard, async (req, res) => {
   const { topic, subtopics } = req.body ?? {}
   if (typeof topic !== 'string' || !topic.trim()) {
     res.status(400).json({ error: 'A topic is required.' })
@@ -456,12 +615,15 @@ app.post('/api/flashcards/cards', requireAuth, async (req, res) => {
     res.status(400).json({ error: 'Pick at least one subtopic.' })
     return
   }
+  if (blockedByModeration(req, res, [topic, ...chosen], { allowLength: 300 })) return
   if (!cardsConfigured()) {
     res.status(503).json({ error: 'Flashcards are not set up on this server.', code: 'not_configured' })
     return
   }
   try {
-    res.json({ cards: await writeCards(topic.trim().slice(0, 200), chosen) })
+    const cards = await writeCards(topic.trim().slice(0, 200), chosen)
+    if (blockedOutput(req, res, cards)) return
+    res.json({ cards })
   } catch (err) {
     console.error('card generation failed', err)
     res.status(502).json({ error: 'Could not write cards for that.', detail: String(err?.message ?? err).slice(0, 300) })
@@ -469,7 +631,7 @@ app.post('/api/flashcards/cards', requireAuth, async (req, res) => {
 })
 
 /** Reads an explanation and returns questions aimed at its specific weak spots. */
-app.post('/api/explain/questions', requireAuth, async (req, res) => {
+app.post('/api/explain/questions', ...aiGuard, async (req, res) => {
   const { topic, explanation } = req.body ?? {}
   if (typeof topic !== 'string' || !topic.trim()) {
     res.status(400).json({ error: 'A topic is required.' })
@@ -479,12 +641,14 @@ app.post('/api/explain/questions', requireAuth, async (req, res) => {
     res.status(400).json({ error: 'Explain a bit more first — a couple of sentences at least.' })
     return
   }
+  if (blockedByModeration(req, res, [topic, explanation])) return
   if (!coachConfigured()) {
     res.status(503).json({ error: 'The explain coach is not set up on this server.', code: 'not_configured' })
     return
   }
   try {
     const questions = await askQuestions(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000))
+    if (blockedOutput(req, res, questions)) return
     res.json({ questions })
   } catch (err) {
     console.error('question generation failed', err)
@@ -493,7 +657,7 @@ app.post('/api/explain/questions', requireAuth, async (req, res) => {
 })
 
 /** Marks the explanation and answers together, returning the report. */
-app.post('/api/explain/report', requireAuth, async (req, res) => {
+app.post('/api/explain/report', ...aiGuard, async (req, res) => {
   const { topic, explanation, answers } = req.body ?? {}
   if (typeof topic !== 'string' || typeof explanation !== 'string' || !Array.isArray(answers)) {
     res.status(400).json({ error: 'Topic, explanation and answers are required.' })
@@ -510,12 +674,14 @@ app.post('/api/explain/report', requireAuth, async (req, res) => {
     res.status(400).json({ error: 'No questions to mark.' })
     return
   }
+  if (blockedByModeration(req, res, [topic, explanation, ...cleaned.map((a) => a.answer)])) return
   if (!coachConfigured()) {
     res.status(503).json({ error: 'The explain coach is not set up on this server.', code: 'not_configured' })
     return
   }
   try {
     const report = await gradeExplanation(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000), cleaned)
+    if (blockedOutput(req, res, report)) return
     res.json({ report })
   } catch (err) {
     console.error('report generation failed', err)
@@ -524,12 +690,13 @@ app.post('/api/explain/report', requireAuth, async (req, res) => {
 })
 
 /** Step one of the AI planner: a few clarifying questions about the goal. */
-app.post('/api/planner/questions', requireAuth, async (req, res) => {
+app.post('/api/planner/questions', ...aiGuard, async (req, res) => {
   const { goal, detail } = req.body ?? {}
   if (typeof goal !== 'string' || !goal.trim()) {
     res.status(400).json({ error: 'A goal is required.' })
     return
   }
+  if (blockedByModeration(req, res, [goal, detail], { allowLength: 600 })) return
   if (!plannerConfigured()) {
     res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
     return
@@ -539,6 +706,7 @@ app.post('/api/planner/questions', requireAuth, async (req, res) => {
       goal.trim().slice(0, 200),
       typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
     )
+    if (blockedOutput(req, res, questions)) return
     res.json({ questions })
   } catch (err) {
     if (err?.code === 'not_configured') {
@@ -554,7 +722,7 @@ app.post('/api/planner/questions', requireAuth, async (req, res) => {
 })
 
 /** Step two: the actual daily/weekly/monthly plan plus a prep to-do list. */
-app.post('/api/planner/plan', requireAuth, async (req, res) => {
+app.post('/api/planner/plan', ...aiGuard, async (req, res) => {
   const { goal, detail, answers } = req.body ?? {}
   if (typeof goal !== 'string' || !goal.trim()) {
     res.status(400).json({ error: 'A goal is required.' })
@@ -569,6 +737,7 @@ app.post('/api/planner/plan', requireAuth, async (req, res) => {
         .filter((a) => a.question)
         .slice(0, 8)
     : []
+  if (blockedByModeration(req, res, [goal, detail, ...cleaned.map((a) => a.answer)], { allowLength: 600 })) return
   if (!plannerConfigured()) {
     res.status(503).json({ error: 'The AI planner is not set up on this server.', code: 'not_configured' })
     return
@@ -579,6 +748,7 @@ app.post('/api/planner/plan', requireAuth, async (req, res) => {
       typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
       cleaned,
     )
+    if (blockedOutput(req, res, plan)) return
     res.json({ plan })
   } catch (err) {
     if (err?.code === 'not_configured') {
@@ -595,7 +765,7 @@ const num = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Math.round(
 /** Estimates whether the player is on track, from how they have actually used
  * the app. The counted stats are computed client-side and passed in; they only
  * feed a motivational readout, so there is nothing to gain by fiddling them. */
-app.post('/api/progress/outlook', requireAuth, async (req, res) => {
+app.post('/api/progress/outlook', ...aiGuard, async (req, res) => {
   const { stats, goals } = req.body ?? {}
   if (!stats || typeof stats !== 'object') {
     res.status(400).json({ error: 'Progress stats are required.' })
@@ -652,8 +822,12 @@ app.post('/api/progress/outlook', requireAuth, async (req, res) => {
     return
   }
 
+  if (blockedByModeration(req, res, cleanGoals.flatMap((g) => [g.title, g.detail]), { allowLength: 600 })) return
+
   try {
-    res.json({ outlook: await analyseOutlook(cleanStats, cleanGoals) })
+    const outlook = await analyseOutlook(cleanStats, cleanGoals)
+    if (blockedOutput(req, res, outlook)) return
+    res.json({ outlook })
   } catch (err) {
     if (err?.code === 'not_configured') {
       res.status(503).json({ error: 'Progress analysis is not set up on this server.', code: 'not_configured' })
@@ -665,6 +839,226 @@ app.post('/api/progress/outlook', requireAuth, async (req, res) => {
       detail: String(err?.message ?? err).slice(0, 300),
     })
   }
+})
+
+// ---------------------------------------------------------------------------
+// Admin account setup
+//
+// A privileged account is created without a password by the CLI, which prints a
+// one-time link. The holder opens it and chooses their own password and second
+// factor here. No operator password is ever typed into a terminal, stored in an
+// environment variable, or written to a deploy log.
+// ---------------------------------------------------------------------------
+
+const setupLimiter = rateLimit({ name: 'setup', max: 10, windowMs: 15 * 60_000, by: 'ip' })
+
+app.get('/api/admin/setup/:token', setupLimiter, (req, res) => {
+  const row = findSetupToken(hashSetupToken(String(req.params.token ?? '')))
+  if (!row) {
+    res.status(404).json({ error: 'That setup link is invalid or has expired.' })
+    return
+  }
+  const user = findUserById(row.user_id)
+  if (!user) {
+    res.status(404).json({ error: 'That setup link is invalid or has expired.' })
+    return
+  }
+  res.json({ email: user.email, role: user.role, minPassword: ADMIN_MIN_PASSWORD })
+})
+
+app.post('/api/admin/setup/:token', setupLimiter, async (req, res) => {
+  try {
+    const tokenHash = hashSetupToken(String(req.params.token ?? ''))
+    const row = findSetupToken(tokenHash)
+    if (!row) {
+      res.status(404).json({ error: 'That setup link is invalid or has expired.' })
+      return
+    }
+    const user = findUserById(row.user_id)
+    if (!user) {
+      res.status(404).json({ error: 'That setup link is invalid or has expired.' })
+      return
+    }
+
+    const { password, mfaCode, secret } = req.body ?? {}
+    const problem = validateCredentials(user.email, password, { minLength: ADMIN_MIN_PASSWORD })
+    if (problem) {
+      res.status(400).json({ error: problem })
+      return
+    }
+
+    // The second factor is proven before the account becomes usable, so a
+    // privileged account can never exist in a state where a password alone
+    // would open it.
+    if (typeof secret !== 'string' || !secret) {
+      res.status(400).json({ error: 'Two-factor setup is required.' })
+      return
+    }
+    if (!checkSecondFactor({ ...user, mfa_secret: secret, mfa_enabled: 1, mfa_backup: '[]' }, mfaCode)) {
+      res.status(400).json({ error: 'That authentication code is not right. Check your authenticator app.' })
+      return
+    }
+
+    const recoveryCode = await completeAdminSetup(user.id, password)
+    const backupCodes = await enrolMfa(user.id, secret)
+    consumeSetupToken(tokenHash)
+    audit({ userId: user.id, email: user.email, event: 'admin.setup', outcome: 'success', ip: req.ip })
+
+    // Shown once. Both are stored only as hashes.
+    res.json({ ok: true, recoveryCode, backupCodes })
+  } catch (err) {
+    console.error('admin setup failed', err)
+    res.status(500).json({ error: 'Could not complete setup.' })
+  }
+})
+
+/** A fresh TOTP secret for the enrolment screen. Not yet attached to anything —
+ * it only becomes the account's secret once a live code proves it was stored. */
+app.get('/api/admin/setup/:token/secret', setupLimiter, (req, res) => {
+  const row = findSetupToken(hashSetupToken(String(req.params.token ?? '')))
+  if (!row) {
+    res.status(404).json({ error: 'That setup link is invalid or has expired.' })
+    return
+  }
+  const user = findUserById(row.user_id)
+  const secret = generateSecret()
+  res.json({ secret, otpauth: otpauthUrl({ secret, email: user.email }) })
+})
+
+// ---------------------------------------------------------------------------
+// Admin console. Every route here is 404 to a non-admin, so an ordinary account
+// cannot even map what exists.
+// ---------------------------------------------------------------------------
+
+app.get('/api/admin/users', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  res.json({ users: listUsers() })
+})
+
+app.get('/api/admin/audit', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const event = typeof req.query.event === 'string' ? req.query.event : null
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100))
+  res.json({ entries: listAudit({ limit, event }) })
+})
+
+app.post('/api/admin/users/:id/disabled', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  // An admin cannot lock out the superadmin, and nobody can lock out themselves.
+  if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+    res.status(403).json({ error: 'Only the superadmin can do that.' })
+    return
+  }
+  if (target.id === req.user.id) {
+    res.status(400).json({ error: 'You cannot disable your own account.' })
+    return
+  }
+
+  const disabled = Boolean(req.body?.disabled)
+  setUserDisabled(target.id, disabled)
+  audit({
+    userId: req.user.id,
+    email: req.user.email,
+    event: 'admin.set_disabled',
+    outcome: 'success',
+    ip: req.ip,
+    detail: `${target.email} -> ${disabled ? 'disabled' : 'enabled'}`,
+  })
+  res.json({ ok: true })
+})
+
+/** Only the superadmin can change roles, and the last superadmin cannot be
+ * demoted — an instance with no route back into the console is unrecoverable. */
+app.post('/api/admin/users/:id/role', requireAuth, requireSuperadmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  const role = String(req.body?.role ?? '')
+  if (!['user', 'admin', 'superadmin'].includes(role)) {
+    res.status(400).json({ error: 'Unknown role.' })
+    return
+  }
+  if (target.role === 'superadmin' && role !== 'superadmin' && countByRole('superadmin') <= 1) {
+    res.status(400).json({ error: 'This is the only superadmin. Promote another one first.' })
+    return
+  }
+  // Promotion demands a second factor already in place, so raising a password-only
+  // account to admin cannot bypass the MFA requirement.
+  if (mfaRequiredFor(role) && !target.mfa_enabled) {
+    res.status(400).json({ error: 'That account must enrol two-factor authentication before being promoted.' })
+    return
+  }
+
+  setUserRole(target.id, role)
+  audit({
+    userId: req.user.id,
+    email: req.user.email,
+    event: 'admin.set_role',
+    outcome: 'success',
+    ip: req.ip,
+    detail: `${target.email} -> ${role}`,
+  })
+  res.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
+// Account self-service: everything a user needs to see and remove their own data
+// ---------------------------------------------------------------------------
+
+/** Everything held about the signed-in account, for them to keep. */
+app.get('/api/account/export', requireAuth, rateLimit({ name: 'export', max: 5, windowMs: 60 * 60_000, by: 'user' }), (req, res) => {
+  const row = getState(req.user.id)
+  let state = null
+  if (row) {
+    try {
+      state = JSON.parse(row.data)
+    } catch {
+      state = null
+    }
+  }
+  const stored = findUserById(req.user.id)
+  audit({ userId: req.user.id, email: req.user.email, event: 'account.export', outcome: 'success', ip: req.ip })
+  res.setHeader('Content-Disposition', 'attachment; filename="questly-export.json"')
+  res.json({
+    exportedAt: new Date().toISOString(),
+    account: { email: stored.email, createdAt: stored.created_at, role: stored.role },
+    state,
+  })
+})
+
+/**
+ * Deletes the account and everything belonging to it.
+ *
+ * Requires the current password: a session cookie alone should not be enough to
+ * destroy someone's history if a device is left unlocked. The delete cascades to
+ * state, sessions, verification counts and stored photo hashes.
+ */
+app.post('/api/account/delete', requireAuth, throttleAuth, async (req, res) => {
+  const { password } = req.body ?? {}
+  if (typeof password !== 'string') {
+    res.status(400).json({ error: 'Your password is required to delete the account.' })
+    return
+  }
+  const confirmed = await verifyUser(req.user.email, password)
+  if (!confirmed || confirmed.id !== req.user.id) {
+    audit({ userId: req.user.id, email: req.user.email, event: 'account.delete', outcome: 'bad_password', ip: req.ip })
+    res.status(401).json({ error: 'That password is not right.' })
+    return
+  }
+  // The last superadmin cannot delete themselves and leave nobody in charge.
+  if (req.user.role === 'superadmin' && countByRole('superadmin') <= 1) {
+    res.status(400).json({ error: 'This is the only superadmin account. Promote another one first.' })
+    return
+  }
+
+  audit({ userId: req.user.id, email: req.user.email, event: 'account.delete', outcome: 'success', ip: req.ip })
+  deleteUser(req.user.id)
+  res.clearCookie(SESSION_COOKIE, clearCookieOptions())
+  res.status(204).end()
 })
 
 // Unmatched API routes must answer in JSON — the client parses every response
