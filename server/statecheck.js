@@ -74,22 +74,52 @@ const GRACE_XP = 500
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
 
 /**
+ * The high-water XP an existing state implies.
+ *
+ * Coins mint at a third of XP earned, but XP can fall again when a quest is
+ * un-ticked, and older versions of the app minted on different terms. So a
+ * long-lived account can legitimately hold more coins than its *current* XP
+ * would justify. Seeding the high-water mark from what it already holds takes
+ * that history as given and enforces the invariant from here on, instead of
+ * rejecting every future save from an account that did nothing wrong.
+ */
+export function requiredMaxXp(state) {
+  const xp = num(state?.player?.xp)
+  const coins = num(state?.player?.coins)
+  const unlocked = Array.isArray(state?.collection?.unlocked) ? state.collection.unlocked : []
+  let spent = 0
+  for (const id of unlocked) spent += MODELS[id]?.price ?? 0
+  return Math.max(xp, (coins + spent) * 3)
+}
+
+/**
  * @returns {{ ok: true, maxXp: number } | { ok: false, reason: string, detail: string }}
  */
-export function checkStateWrite({ previous, next, maxXpSeen, elapsedMs, verifiedProofs }) {
+export function checkStateWrite({
+  previous,
+  next,
+  maxXpSeen,
+  elapsedMs,
+  verifiedProofs,
+  levelBaseline = 1,
+  proofBaseline = 0,
+}) {
   if (!next || typeof next !== 'object') {
     return { ok: false, reason: 'malformed', detail: 'State must be an object.' }
   }
 
   const player = next.player
-  const progression = next.progression
   const collection = next.collection
   if (!player || typeof player !== 'object') {
     return { ok: false, reason: 'malformed', detail: 'Missing player.' }
   }
-  if (!progression || typeof progression !== 'object') {
-    return { ok: false, reason: 'malformed', detail: 'Missing progression.' }
-  }
+
+  // A state saved before the proof gate existed has no progression block at all.
+  // Missing is read as the smallest possible claim rather than refused: it costs
+  // nothing to be generous here, since every other invariant still applies, and
+  // rejecting would lock those accounts out of saving permanently.
+  const progression =
+    next.progression && typeof next.progression === 'object' ? next.progression : { level: 1, proofs: 0 }
 
   const xp = num(player.xp)
   const coins = num(player.coins)
@@ -130,14 +160,19 @@ export function checkStateWrite({ previous, next, maxXpSeen, elapsedMs, verified
 
   // --- Proofs must have been recorded by the verify endpoint ---------------
   // `verifiedProofs` is the server's own count of accepted photo verifications.
-  // Levels beyond the first each cost PROOFS_PER_LEVEL, so the total spent plus
-  // the balance still banked can never exceed what was actually verified.
-  const spentOnLevels = Math.max(0, level - 1) * PROOFS_PER_LEVEL
-  if (spentOnLevels + proofs > verifiedProofs + PROOFS_PER_LEVEL) {
+  // Levels above the baseline each cost PROOFS_PER_LEVEL, so the total spent
+  // plus the balance still banked can never exceed what was actually verified.
+  //
+  // The baseline exists because accounts that levelled up before proofs were
+  // recorded have none to show. Counting from level 1 would reject every save
+  // they ever make again.
+  const spentOnLevels = Math.max(0, level - Math.max(1, levelBaseline)) * PROOFS_PER_LEVEL
+  const provable = Math.max(0, verifiedProofs - proofBaseline)
+  if (spentOnLevels + proofs > provable + PROOFS_PER_LEVEL) {
     return {
       ok: false,
       reason: 'proofs_unearned',
-      detail: `Claims ${spentOnLevels + proofs} proofs; server recorded ${verifiedProofs}.`,
+      detail: `Claims ${spentOnLevels + proofs} proofs above level ${levelBaseline}; server recorded ${provable}.`,
     }
   }
 

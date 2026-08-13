@@ -334,6 +334,8 @@ app.put('/api/state', requireAuth, throttleState, (req, res) => {
       maxXpSeen: stored?.max_xp ?? 0,
       elapsedMs,
       verifiedProofs: countPhotoProofs(req.user.id),
+      levelBaseline: stored?.level_baseline ?? 1,
+      proofBaseline: stored?.proof_baseline ?? 0,
     })
 
     if (!verdict.ok) {

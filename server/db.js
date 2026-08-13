@@ -1,5 +1,6 @@
 // node-sqlite3-wasm ships CommonJS, so it has no named ESM exports.
 import sqlite3Wasm from 'node-sqlite3-wasm'
+import { requiredMaxXp } from './statecheck.js'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +36,7 @@ db.run(`
 // `role` is deliberately server-owned: nothing in the API can set it, so no
 // request body can promote its own account. `max_xp` is the high-water mark used
 // to bound what a client is allowed to claim it has earned.
+const addedColumns = new Set()
 for (const column of [
   'recovery_hash TEXT',
   'recovery_salt TEXT',
@@ -45,13 +47,21 @@ for (const column of [
   'max_xp INTEGER NOT NULL DEFAULT 0',
   'disabled INTEGER NOT NULL DEFAULT 0',
   'password_set_at TEXT',
+  // Where proof-accounting starts for this account. Levels below the baseline
+  // were reached before proofs were being recorded and are taken as given.
+  'level_baseline INTEGER NOT NULL DEFAULT 1',
+  'proof_baseline INTEGER NOT NULL DEFAULT 0',
 ]) {
   try {
     db.run(`ALTER TABLE users ADD COLUMN ${column}`)
+    addedColumns.add(column.split(' ')[0])
   } catch {
     // Already present — SQLite has no ADD COLUMN IF NOT EXISTS.
   }
 }
+
+// The baseline migration needs `states` and `photo_proofs`, so it runs once
+// every table below has been created. See the bottom of this section.
 
 /**
  * One-time links for claiming an admin account.
@@ -129,6 +139,48 @@ db.run(`
 
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
+
+/**
+ * Grandfathers levels that existed before proofs were counted.
+ *
+ * The level gate is priced in photo verifications, and the server now refuses a
+ * save claiming more levels than it has recorded proofs for. Accounts that
+ * levelled up before that table was being written have none to show, so without
+ * this every save they make would be rejected and they would silently stop
+ * syncing. Their current level becomes the floor; everything above it is checked
+ * normally.
+ *
+ * Runs only in the branch where the column was just created, so it happens
+ * exactly once per database — and after every table it reads exists.
+ */
+if (addedColumns.has('level_baseline')) {
+  try {
+    const rows = db.all('SELECT user_id AS id, data FROM states')
+    for (const row of rows) {
+      let level = 1
+      let maxXp = 0
+      try {
+        const state = JSON.parse(row.data)
+        level = Math.max(1, Number(state?.progression?.level) || 1)
+        // Seeds the coin ledger too, not just the level floor — an established
+        // account can hold more than its current XP would mint.
+        maxXp = requiredMaxXp(state)
+      } catch {
+        // Unreadable state: leave the floor at 1 rather than guessing high.
+      }
+      const proofs = db.get('SELECT COUNT(*) AS n FROM photo_proofs WHERE user_id = ?', [row.id])?.n ?? 0
+      db.run('UPDATE users SET level_baseline = ?, proof_baseline = ?, max_xp = MAX(max_xp, ?) WHERE id = ?', [
+        level,
+        proofs,
+        Math.round(maxXp),
+        row.id,
+      ])
+    }
+    if (rows.length) console.log(`Grandfathered proof baselines for ${rows.length} existing account(s).`)
+  } catch (err) {
+    console.error('baseline migration failed', err)
+  }
+}
 
 /** Emails are stored lowercased so lookups and the UNIQUE constraint are
  * case-insensitive without needing COLLATE NOCASE everywhere. */
