@@ -137,8 +137,45 @@ db.run(`
   )
 `)
 
+/**
+ * One row per call to the model.
+ *
+ * Cost is stored as it was priced at the time rather than recomputed on read —
+ * rates change, and a report of what last month cost should not silently move
+ * when they do.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS ai_usage (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    at            TEXT NOT NULL,
+    day           TEXT NOT NULL,
+    user_id       TEXT,
+    endpoint      TEXT NOT NULL,
+    model         TEXT,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL DEFAULT 0,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL DEFAULT 1,
+    error         TEXT
+  )
+`)
+
+db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_day ON ai_usage(day)')
+db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_user ON ai_usage(user_id)')
+
+// `kind` was not recorded before, so photo and voice proofs could not be told
+// apart after the fact.
+try {
+  db.run("ALTER TABLE photo_proofs ADD COLUMN kind TEXT NOT NULL DEFAULT 'photo'")
+} catch {
+  // Already present.
+}
+
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
+db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
+db.run('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)')
 
 /**
  * Grandfathers levels that existed before proofs were counted.
@@ -322,6 +359,42 @@ export function audit({ userId = null, email = null, event, outcome, ip = null, 
   }
 }
 
+/** Never throws: metering must not be able to fail the request it is measuring. */
+export function recordAiUsage({
+  userId = null,
+  endpoint,
+  model = null,
+  inputTokens = 0,
+  outputTokens = 0,
+  costUsd = 0,
+  durationMs = 0,
+  ok = true,
+  error = null,
+}) {
+  try {
+    const now = new Date()
+    db.run(
+      `INSERT INTO ai_usage (at, day, user_id, endpoint, model, input_tokens, output_tokens, cost_usd, duration_ms, ok, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        now.toISOString(),
+        now.toISOString().slice(0, 10),
+        userId,
+        String(endpoint).slice(0, 60),
+        model ? String(model).slice(0, 60) : null,
+        Math.max(0, Math.round(inputTokens)),
+        Math.max(0, Math.round(outputTokens)),
+        Number.isFinite(costUsd) ? costUsd : 0,
+        Math.max(0, Math.round(durationMs)),
+        ok ? 1 : 0,
+        error ? String(error).slice(0, 300) : null,
+      ],
+    )
+  } catch {
+    // Best effort only.
+  }
+}
+
 export function listAudit({ limit = 100, event = null } = {}) {
   if (event) {
     return db.all('SELECT * FROM audit_log WHERE event = ? ORDER BY id DESC LIMIT ?', [event, limit])
@@ -397,11 +470,12 @@ export function countPhotoProofs(userId) {
   return db.get('SELECT COUNT(*) AS n FROM photo_proofs WHERE user_id = ?', [userId])?.n ?? 0
 }
 
-export function recordPhotoHash(userId, hash) {
-  db.run('INSERT INTO photo_proofs (user_id, hash, created_at) VALUES (?, ?, ?)', [
+export function recordPhotoHash(userId, hash, kind = 'photo') {
+  db.run('INSERT INTO photo_proofs (user_id, hash, created_at, kind) VALUES (?, ?, ?, ?)', [
     userId,
     hash,
     new Date().toISOString(),
+    kind,
   ])
 }
 

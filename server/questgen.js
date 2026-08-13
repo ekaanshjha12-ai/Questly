@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { noteUsage } from './meter.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -101,6 +102,9 @@ export async function generateQuestPool({ title, detail, category }) {
     },
     messages: [{ role: 'user', content: [{ type: 'text', text: parts.join('\n') }] }],
   })
+
+  // Recorded for the AI dashboard; a no-op when not inside a meter.
+  noteUsage(response.usage)
 
   if (response.stop_reason === 'refusal') {
     const err = new Error('The model declined to write quests for this goal.')

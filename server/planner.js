@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { noteUsage } from './meter.js'
 import { toContentBlocks } from './documents.js'
 
 const MODEL = 'claude-opus-5'
@@ -135,6 +136,9 @@ async function ask({ system, prompt, schema, maxTokens, documents = [] }) {
     },
     messages: [{ role: 'user', content }],
   })
+
+  // Recorded for the AI dashboard; a no-op when not inside a meter.
+  noteUsage(response.usage)
 
   if (response.stop_reason === 'refusal') {
     const err = new Error('The model declined this goal.')

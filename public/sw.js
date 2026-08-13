@@ -47,6 +47,9 @@ function isAsset(url) {
   return (
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/models/') ||
+    // The Draco decoder. Without it cached, the models would download offline
+    // and then be undecodable, which looks exactly like the models failing.
+    url.pathname.startsWith('/draco/') ||
     url.pathname.startsWith('/audio/') ||
     url.pathname.startsWith('/icons/')
   )

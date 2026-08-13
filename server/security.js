@@ -22,7 +22,12 @@ import { audit } from './db.js'
 function contentSecurityPolicy(isProduction) {
   const directives = [
     "default-src 'self'",
-    "script-src 'self'",
+    // 'wasm-unsafe-eval' is required to compile WebAssembly at all, and the
+    // avatars are Draco-compressed so their decoder is WASM. Despite the name
+    // it does not permit eval() or any JavaScript from a string — it is scoped
+    // to WebAssembly compilation, which is why it is preferred over the blanket
+    // 'unsafe-eval' that would also unlock eval and new Function.
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",

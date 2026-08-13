@@ -38,6 +38,8 @@ import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { checkStateWrite } from './statecheck.js'
 import { validateDocuments } from './documents.js'
+import { meter } from './meter.js'
+import { computeAdminStats, invalidateAdminStats } from './adminstats.js'
 import {
   audit,
   countByRole,
@@ -477,7 +479,7 @@ app.post('/api/verify', requireAuth, async (req, res) => {
         // already passed the checks that do not need one — it decodes, it is not
         // a photo this account has used before, and it was taken recently. That
         // is a real bar, so accept rather than blocking progress entirely.
-        recordPhotoHash(req.user.id, hash)
+        recordPhotoHash(req.user.id, hash, 'photo')
         res.json({
           verified: true,
           confidence: 1,
@@ -490,7 +492,9 @@ app.post('/api/verify', requireAuth, async (req, res) => {
       // Charged before the call, not after: a failed request may still bill, and
       // a retry loop on errors must not be free.
       recordVerification(req.user.id, day)
-      verdict = await verifyPhoto({ taskTitle: taskTitle.trim(), mediaType, imageBase64 })
+      verdict = await meter({ userId: req.user.id, endpoint: 'verify.photo' }, () =>
+        verifyPhoto({ taskTitle: taskTitle.trim(), mediaType, imageBase64 }),
+      )
 
       if (verdict.verified && !verdict.firstPerson) {
         verdict = {
@@ -512,14 +516,16 @@ app.post('/api/verify', requireAuth, async (req, res) => {
 
       // Only bank the hash once it counts, so a rejected photo can be retaken
       // and resubmitted without being flagged as a duplicate of itself.
-      if (verdict.verified) recordPhotoHash(req.user.id, hash)
+      if (verdict.verified) recordPhotoHash(req.user.id, hash, 'photo')
     } else if (kind === 'voice') {
       if (typeof transcript !== 'string' || transcript.trim().length < 2) {
         res.status(400).json({ error: 'Nothing was heard — try again.' })
         return
       }
       recordVerification(req.user.id, day)
-      verdict = await verifyVoice({ taskTitle: taskTitle.trim(), transcript: transcript.trim().slice(0, 2000) })
+      verdict = await meter({ userId: req.user.id, endpoint: 'verify.voice' }, () =>
+        verifyVoice({ taskTitle: taskTitle.trim(), transcript: transcript.trim().slice(0, 2000) }),
+      )
     } else {
       res.status(400).json({ error: 'kind must be "photo" or "voice".' })
       return
@@ -559,11 +565,11 @@ app.post('/api/goals/quests', ...aiGuard, async (req, res) => {
   }
 
   try {
-    const pool = await generateQuestPool({
+    const pool = await meter({ userId: req.user.id, endpoint: 'goals.quests' }, () => generateQuestPool({
       title: title.trim().slice(0, 200),
       detail: typeof detail === 'string' ? detail.trim().slice(0, 500) : '',
       category: typeof category === 'string' ? category : '',
-    })
+    }))
     if (blockedOutput(req, res, pool)) return
     res.json({ pool })
   } catch (err) {
@@ -595,7 +601,7 @@ app.post('/api/flashcards/subtopics', ...aiGuard, async (req, res) => {
     return
   }
   try {
-    const subtopics = await suggestSubtopics(topic.trim().slice(0, 200))
+    const subtopics = await meter({ userId: req.user.id, endpoint: 'flashcards.subtopics' }, () => suggestSubtopics(topic.trim().slice(0, 200)))
     if (blockedOutput(req, res, subtopics)) return
     res.json({ subtopics })
   } catch (err) {
@@ -624,7 +630,7 @@ app.post('/api/flashcards/cards', ...aiGuard, async (req, res) => {
     return
   }
   try {
-    const cards = await writeCards(topic.trim().slice(0, 200), chosen)
+    const cards = await meter({ userId: req.user.id, endpoint: 'flashcards.cards' }, () => writeCards(topic.trim().slice(0, 200), chosen))
     if (blockedOutput(req, res, cards)) return
     res.json({ cards })
   } catch (err) {
@@ -650,7 +656,7 @@ app.post('/api/explain/questions', ...aiGuard, async (req, res) => {
     return
   }
   try {
-    const questions = await askQuestions(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000))
+    const questions = await meter({ userId: req.user.id, endpoint: 'explain.questions' }, () => askQuestions(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000)))
     if (blockedOutput(req, res, questions)) return
     res.json({ questions })
   } catch (err) {
@@ -683,7 +689,7 @@ app.post('/api/explain/report', ...aiGuard, async (req, res) => {
     return
   }
   try {
-    const report = await gradeExplanation(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000), cleaned)
+    const report = await meter({ userId: req.user.id, endpoint: 'explain.report' }, () => gradeExplanation(topic.trim().slice(0, 200), explanation.trim().slice(0, 6000), cleaned))
     if (blockedOutput(req, res, report)) return
     res.json({ report })
   } catch (err) {
@@ -723,10 +729,12 @@ app.post('/api/planner/questions', ...aiGuard, async (req, res) => {
   }
 
   try {
-    const questions = await askPlannerQuestions(
-      goal.trim().slice(0, 200),
-      typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
-      attached.documents,
+    const questions = await meter({ userId: req.user.id, endpoint: 'planner.questions' }, () =>
+      askPlannerQuestions(
+        goal.trim().slice(0, 200),
+        typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
+        attached.documents,
+      ),
     )
     if (blockedOutput(req, res, questions)) return
     res.json({ questions })
@@ -781,11 +789,13 @@ app.post('/api/planner/plan', ...aiGuard, async (req, res) => {
   }
 
   try {
-    const plan = await generatePlan(
-      goal.trim().slice(0, 200),
-      typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
-      cleaned,
-      attached.documents,
+    const plan = await meter({ userId: req.user.id, endpoint: 'planner.plan' }, () =>
+      generatePlan(
+        goal.trim().slice(0, 200),
+        typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
+        cleaned,
+        attached.documents,
+      ),
     )
     if (blockedOutput(req, res, plan)) return
     res.json({ plan })
@@ -864,7 +874,7 @@ app.post('/api/progress/outlook', ...aiGuard, async (req, res) => {
   if (blockedByModeration(req, res, cleanGoals.flatMap((g) => [g.title, g.detail]), { allowLength: 600 })) return
 
   try {
-    const outlook = await analyseOutlook(cleanStats, cleanGoals)
+    const outlook = await meter({ userId: req.user.id, endpoint: 'progress.outlook' }, () => analyseOutlook(cleanStats, cleanGoals))
     if (blockedOutput(req, res, outlook)) return
     res.json({ outlook })
   } catch (err) {
@@ -971,6 +981,17 @@ app.get('/api/admin/setup/:token/secret', setupLimiter, (req, res) => {
 
 app.get('/api/admin/users', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
   res.json({ users: listUsers() })
+})
+
+/** Everything the console renders, in one call. Cached briefly server-side
+ * because it parses every account's state document. */
+app.get('/api/admin/stats', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  try {
+    res.json(computeAdminStats({ force: req.query.force === '1' }))
+  } catch (err) {
+    console.error('admin stats failed', err)
+    res.status(500).json({ error: 'Could not build the dashboard.' })
+  }
 })
 
 app.get('/api/admin/audit', requireAuth, requireAdmin, throttleAdmin, (req, res) => {

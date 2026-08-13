@@ -26,8 +26,20 @@ const GROUND_Y = -BODY_HEIGHT / 2
  * the origin. That keeps the camera, shadow and ground ring valid for any model
  * without per-model tuning.
  */
+/**
+ * Where the Draco decoder is served from.
+ *
+ * Every model is Draco-compressed, and drei defaults to fetching the decoder
+ * from a Google CDN. That was always wrong for this app — an installed PWA that
+ * needs a third-party host to draw its own avatars is not really offline — and
+ * it became fatal once the Content-Security-Policy restricted scripts to this
+ * origin. Serving it ourselves fixes both, and the service worker can cache it
+ * like any other asset.
+ */
+const DRACO_PATH = '/draco/'
+
 function CharacterModel({ url }: { url: string }) {
-  const { scene } = useGLTF(url)
+  const { scene } = useGLTF(url, DRACO_PATH)
 
   const { cloned, scale, offset } = useMemo(() => {
     const root = scene.clone(true)
@@ -152,5 +164,7 @@ export default function Avatar3D({
 }
 
 export function preloadModel(url: string) {
-  useGLTF.preload(url)
+  // Same decoder path as the loader. Preloading without it would prime the
+  // cache through the CDN route and fail exactly like the original bug.
+  useGLTF.preload(url, DRACO_PATH)
 }

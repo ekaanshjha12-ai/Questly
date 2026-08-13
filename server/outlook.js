@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { noteUsage } from './meter.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -187,6 +188,9 @@ export async function analyseOutlook(stats, goals) {
       },
     ],
   })
+
+  // Recorded for the AI dashboard; a no-op when not inside a meter.
+  noteUsage(response.usage)
 
   if (response.stop_reason === 'refusal') {
     const err = new Error('The model declined to analyse this.')
