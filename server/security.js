@@ -28,12 +28,23 @@ function contentSecurityPolicy(isProduction) {
     // to WebAssembly compilation, which is why it is preferred over the blanket
     // 'unsafe-eval' that would also unlock eval and new Function.
     "script-src 'self' 'wasm-unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
+    // The typeface comes from Google Fonts, which needs its stylesheet host
+    // here and its file host under font-src. Self-hosting them would drop both
+    // exceptions and make the installed app genuinely offline — worth doing,
+    // and the same argument that moved the Draco decoder in-house.
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",
-    "font-src 'self' data:",
-    // The app talks only to its own origin. In dev, Vite's HMR socket needs ws:.
-    isProduction ? "connect-src 'self'" : "connect-src 'self' ws: wss:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    // blob: is load-bearing: GLTFLoader pulls each texture out of the model
+    // file into a blob URL and then *fetches* it, which is governed by
+    // connect-src rather than img-src. Without it the meshes decode but render
+    // untextured, which looks like a broken avatar rather than a blocked
+    // request. A blob URL can only be minted by this page, so allowing it does
+    // not widen where data can be sent.
+    isProduction
+      ? "connect-src 'self' blob:"
+      : "connect-src 'self' blob: ws: wss:",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",
