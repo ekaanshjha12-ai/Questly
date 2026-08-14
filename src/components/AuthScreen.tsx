@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Swords, Loader2, KeyRound, Copy, Check } from 'lucide-react'
-import { authConfig, login, resetPassword, signup, type AuthUser } from '../lib/api'
+import { authConfig, login, resetPassword, signup, type AuthUser, ApiError } from '../lib/api'
 
 interface Props {
   onAuthed: (user: AuthUser) => void
@@ -21,6 +21,10 @@ export default function AuthScreen({ onAuthed }: Props) {
   const [copied, setCopied] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Revealed only once the server says this account has a second factor, so an
+  // ordinary user never sees a field that does not apply to them.
+  const [mfaWanted, setMfaWanted] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
   const [busy, setBusy] = useState(false)
 
   // Only ask for a code if this deployment actually gates signup.
@@ -60,9 +64,20 @@ export default function AuthScreen({ onAuthed }: Props) {
         setIssuedCode({ code: recoveryCode, user })
         return
       }
-      const { user } = await login(email, password)
+      const { user } = await login(email, password, mfaCode || undefined)
       onAuthed(user)
     } catch (err) {
+      // An account with a second factor answers the first attempt with this
+      // rather than a failure — the password was right, the form is simply
+      // not finished yet. Showing it as an error would read as a rejection.
+      if (err instanceof ApiError && (err as ApiError & { code?: string }).status === 401 && !mfaWanted) {
+        const message = err.message.toLowerCase()
+        if (message.includes('authentication code')) {
+          setMfaWanted(true)
+          setError(null)
+          return
+        }
+      }
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
       setBusy(false)
@@ -174,6 +189,26 @@ export default function AuthScreen({ onAuthed }: Props) {
               spellCheck={false}
               className="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 font-mono text-sm tracking-wider text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60 focus:ring-1 focus:ring-gold-500/40"
             />
+          )}
+
+          {mode === 'login' && mfaWanted && (
+            <div>
+              <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-slate-500">
+                Authentication code
+              </label>
+              <input
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                autoFocus
+                className="w-full rounded-xl border border-ink-600 bg-ink-950 px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-slate-100 outline-none focus:border-gold-500/60"
+              />
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                From your authenticator app, or one of your backup codes.
+              </p>
+            </div>
           )}
 
           {mode === 'signup' && inviteRequired && (

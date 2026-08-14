@@ -66,10 +66,13 @@ export function resetPassword(email: string, code: string, password: string) {
   })
 }
 
-export function login(email: string, password: string) {
+/** `mfaCode` is only sent on the second attempt: the server answers the first
+ * with `mfa_required` when the account has a second factor, and the form then
+ * asks for it. */
+export function login(email: string, password: string, mfaCode?: string) {
   return request<{ user: AuthUser }>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, mfaCode }),
   })
 }
 
@@ -260,4 +263,29 @@ export function fetchTour(name: string, goals: { title: string; category: string
     method: 'POST',
     body: JSON.stringify({ name, goals }),
   })
+}
+
+// --- admin setup -----------------------------------------------------------
+
+export interface SetupInfo {
+  email: string
+  role: string
+  minPassword: number
+}
+
+export function fetchSetupInfo(token: string) {
+  return request<SetupInfo>(`/api/admin/setup/${encodeURIComponent(token)}`)
+}
+
+export function fetchSetupSecret(token: string) {
+  return request<{ secret: string; otpauth: string }>(
+    `/api/admin/setup/${encodeURIComponent(token)}/secret`,
+  )
+}
+
+export function completeSetup(token: string, password: string, secret: string, mfaCode: string) {
+  return request<{ ok: true; recoveryCode: string; backupCodes: string[] }>(
+    `/api/admin/setup/${encodeURIComponent(token)}`,
+    { method: 'POST', body: JSON.stringify({ password, secret, mfaCode }) },
+  )
 }

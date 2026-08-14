@@ -22,6 +22,7 @@ import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
+import AdminSetup from './components/AdminSetup'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -73,7 +74,23 @@ function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-slate-400">{children}</div>
 }
 
+/**
+ * Path-based screens that sit outside the signed-in app.
+ *
+ * Read once at module scope rather than through a router: there are two of
+ * them, neither navigates client-side, and a routing library for that is a
+ * dependency bought for nothing. The server already serves index.html for any
+ * non-API path, so these URLs resolve.
+ */
+function standalonePath(): 'admin-setup' | 'admin' | null {
+  const path = window.location.pathname.replace(/\/+$/, '')
+  if (path === '/admin-setup') return 'admin-setup'
+  if (path === '/admin') return 'admin'
+  return null
+}
+
 export default function App() {
+  const [route] = useState(standalonePath)
   const [boot, setBoot] = useState<Boot>({ phase: 'loading' })
 
   const loadForUser = useCallback(async (user: AuthUser) => {
@@ -89,6 +106,9 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    // The claim page is reached before any account can sign in, so it must not
+    // wait on — or be redirected by — the session check.
+    if (route === 'admin-setup') return
     let cancelled = false
     ;(async () => {
       try {
@@ -125,7 +145,9 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [loadForUser])
+  }, [loadForUser, route])
+
+  if (route === 'admin-setup') return <AdminSetup />
 
   if (boot.phase === 'loading') {
     return (
