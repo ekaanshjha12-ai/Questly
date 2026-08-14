@@ -49,6 +49,8 @@ for (const column of [
   'password_set_at TEXT',
   // A suspension is a disable with an end date, so it lifts itself.
   'suspended_until TEXT',
+  // Opt-out from the leaderboard. Visible by default, hideable at any time.
+  'hide_from_leaderboard INTEGER NOT NULL DEFAULT 0',
   // Where proof-accounting starts for this account. Levels below the baseline
   // were reached before proofs were being recorded and are taken as given.
   'level_baseline INTEGER NOT NULL DEFAULT 1',
@@ -277,6 +279,45 @@ export function setRecovery(userId, recoveryHash, recoverySalt) {
     recoverySalt,
     userId,
   ])
+}
+
+/**
+ * The leaderboard, built from stored state.
+ *
+ * Returns a name and an XP figure and nothing else. It is the only place in the
+ * app where one account can see another, so it hands back the two fields the
+ * ranking needs rather than anything the caller might filter client-side —
+ * email, level, streak and goals never leave the server here.
+ */
+export function leaderboard(limit = 50) {
+  const rows = db.all(`
+    SELECT u.id, u.hide_from_leaderboard AS hidden, s.data
+    FROM users u JOIN states s ON s.user_id = u.id
+    WHERE u.disabled = 0
+  `)
+
+  const ranked = []
+  for (const row of rows) {
+    if (row.hidden) continue
+    let name = ''
+    let xp = 0
+    try {
+      const state = JSON.parse(row.data)
+      name = String(state?.player?.name ?? '').trim().slice(0, 40)
+      xp = Math.max(0, Math.round(Number(state?.player?.xp) || 0))
+    } catch {
+      continue
+    }
+    if (!name) name = 'Adventurer'
+    ranked.push({ id: row.id, name, xp })
+  }
+
+  ranked.sort((a, b) => b.xp - a.xp)
+  return ranked.map((r, i) => ({ ...r, position: i + 1 })).slice(0, Math.max(limit, 1))
+}
+
+export function setLeaderboardVisibility(userId, hidden) {
+  db.run('UPDATE users SET hide_from_leaderboard = ? WHERE id = ?', [hidden ? 1 : 0, userId])
 }
 
 export function setSuspendedUntil(userId, until) {

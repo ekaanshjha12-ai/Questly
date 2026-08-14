@@ -22,6 +22,7 @@ import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
+import Celebration from './components/Celebration'
 import AdminSetup from './components/AdminSetup'
 import AdminConsole from './components/AdminConsole'
 import { formatClock } from './lib/time'
@@ -226,6 +227,8 @@ function AuthedApp({
   const [view, setView] = useState<View>('dashboard')
   // Offered once per account, after onboarding has produced the goals it talks about.
   const [tourOpen, setTourOpen] = useState(false)
+  // Bumped on every forward step, which is what restarts the burst.
+  const [burst, setBurst] = useState<{ key: number; big: boolean }>({ key: 0, big: false })
   const [verifyingQuestId, setVerifyingQuestId] = useState<string | null>(null)
   const verifyingQuest = state.quests.find((q) => q.id === verifyingQuestId) ?? null
 
@@ -236,6 +239,15 @@ function AuthedApp({
   // Lives here rather than in a screen so ambient sound keeps playing while the
   // user moves between tabs.
   const noise = useNoise()
+
+  // Fires on real forward movement only — a level or a rank, not every tick of
+  // XP. Confetti for routine progress stops meaning anything by the third time.
+  useEffect(() => {
+    const rank = events.find((e) => e.type === 'rank')
+    const levelup = events.find((e) => e.type === 'levelup')
+    if (!rank && !levelup) return
+    setBurst((b) => ({ key: b.key + 1, big: Boolean(rank) }))
+  }, [events])
 
   // Opens once the goals exist, so the walkthrough can talk about them by name.
   // Watching `onboarded` rather than firing inside the onboarding callback means
@@ -378,6 +390,8 @@ function AuthedApp({
       <NoiseButton noise={noise} />
       <AiPlanner onApplyPlan={applyPlan} />
       <InstallPrompt />
+
+      {burst.key > 0 && <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />}
 
       <ToastStack events={events} onDismiss={dismissEvent} />
       <LevelUpModal events={events} onDismiss={dismissEvent} />

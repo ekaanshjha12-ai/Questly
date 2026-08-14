@@ -4,6 +4,7 @@ import type { QuestPeriod } from '../types'
 import { periodKey, PERIOD_LABEL } from '../lib/period'
 import QuestCard from './QuestCard'
 import PlayerHeader from './PlayerHeader'
+import Greeting from './Greeting'
 import { Sparkles } from 'lucide-react'
 import { appearanceFor } from '../lib/appearance'
 import type { LevelInfo } from '../lib/leveling'
@@ -50,6 +51,7 @@ export default function Dashboard({ state, levelInfo, onToggleQuest, onVerifyQue
   if (activeGoals.length === 0) {
     return (
       <div className="space-y-6">
+        <Greeting state={state} />
         <PlayerHeader
           player={state.player}
           levelInfo={levelInfo}
@@ -69,6 +71,7 @@ export default function Dashboard({ state, levelInfo, onToggleQuest, onVerifyQue
 
   return (
     <div className="space-y-6">
+      <Greeting state={state} />
       <PlayerHeader
         player={state.player}
         levelInfo={levelInfo}

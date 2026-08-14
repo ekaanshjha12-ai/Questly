@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Coins, Check, Lock, Map, Shirt, Camera } from 'lucide-react'
+import { Coins, Check, Lock, Map, Shirt, Camera, Trophy } from 'lucide-react'
 import type { AppState } from '../types'
 import { CHARACTER_MODELS, findRank, isModelUnlocked, rankForLevel, nextRank } from '../data/ranks'
 import { characterById } from '../data/gear'
@@ -8,6 +8,7 @@ import { appearanceFor } from '../lib/appearance'
 import { xpToReachLevel, type LevelInfo } from '../lib/leveling'
 import Avatar3D from './Avatar3D'
 import RankRoadmap from './RankRoadmap'
+import Leaderboard from './Leaderboard'
 
 interface Props {
   state: AppState
@@ -16,7 +17,7 @@ interface Props {
   onEquipModel: (modelId: string | null) => void
 }
 
-type Tab = 'roadmap' | 'shop'
+type Tab = 'roadmap' | 'shop' | 'board'
 
 export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipModel }: Props) {
   const [tab, setTab] = useState<Tab>('roadmap')
@@ -83,6 +84,7 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
           [
             { id: 'roadmap' as const, label: 'Road to God', icon: Map },
             { id: 'shop' as const, label: 'Characters', icon: Shirt },
+            { id: 'board' as const, label: 'Ranking', icon: Trophy },
           ]
         ).map(({ id, label, icon: Icon }) => (
           <button
@@ -101,7 +103,11 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
         ))}
       </div>
 
-      {tab === 'roadmap' ? (
+      {tab === 'board' ? (
+        <section className="rounded-2xl border border-ink-600 bg-ink-850/40 p-4 sm:p-5">
+          <Leaderboard />
+        </section>
+      ) : tab === 'roadmap' ? (
         <section className="rounded-2xl border border-ink-600 bg-ink-850/40 p-4 sm:p-5">
           <RankRoadmap level={level} xp={state.player.xp} />
         </section>

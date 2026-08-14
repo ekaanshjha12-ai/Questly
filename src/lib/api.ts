@@ -416,3 +416,23 @@ export function fetchAudit(limit = 100) {
     `/api/admin/audit?limit=${limit}`,
   )
 }
+
+// --- leaderboard -----------------------------------------------------------
+
+export interface BoardRow {
+  position: number
+  name: string
+  xp: number
+  you?: boolean
+}
+
+export function fetchLeaderboard() {
+  return request<{ top: BoardRow[]; me: BoardRow | null; total: number; hidden: boolean }>('/api/leaderboard')
+}
+
+export function setLeaderboardVisibility(hidden: boolean) {
+  return request<{ ok: true; hidden: boolean }>('/api/leaderboard/visibility', {
+    method: 'POST',
+    body: JSON.stringify({ hidden }),
+  })
+}

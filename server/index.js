@@ -55,8 +55,10 @@ import {
   insertSetupToken,
   listAudit,
   listPhotoHashes,
+  leaderboard,
   listUsers,
   purgeExpiredSessions,
+  setLeaderboardVisibility,
   putState,
   recordPhotoHash,
   recordVerification,
@@ -1050,6 +1052,35 @@ app.delete('/api/admin/users/:id', requireAuth, requireSuperadmin, throttleAdmin
   deleteUser(target.id)
   invalidateAdminStats()
   res.status(204).end()
+})
+
+/**
+ * The leaderboard.
+ *
+ * Name and XP only. This is the one place an account can see another, so the
+ * shape is deliberately thin: no email, no level, no streak, no goals. Anyone
+ * who would rather not appear is simply absent from the list.
+ *
+ * The viewer's own row is returned separately as well, so someone in 400th
+ * place still sees where they stand instead of an anonymous wall of strangers.
+ */
+app.get('/api/leaderboard', requireAuth, rateLimit({ name: 'board', max: 30, windowMs: 60_000, by: 'user' }), (req, res) => {
+  const full = leaderboard(500)
+  const mineIndex = full.findIndex((r) => r.id === req.user.id)
+  const me = mineIndex >= 0 ? full[mineIndex] : null
+  const stored = findUserById(req.user.id)
+
+  res.json({
+    top: full.slice(0, 50).map((r) => ({ position: r.position, name: r.name, xp: r.xp, you: r.id === req.user.id })),
+    me: me ? { position: me.position, name: me.name, xp: me.xp } : null,
+    total: full.length,
+    hidden: Boolean(stored?.hide_from_leaderboard),
+  })
+})
+
+app.post('/api/leaderboard/visibility', requireAuth, throttleState, (req, res) => {
+  setLeaderboardVisibility(req.user.id, Boolean(req.body?.hidden))
+  res.json({ ok: true, hidden: Boolean(req.body?.hidden) })
 })
 
 // ---------------------------------------------------------------------------
