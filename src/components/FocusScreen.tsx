@@ -112,7 +112,7 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
             onClick={() => setMode('timer')}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === 'timer'
-                ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-ink-950'
+                ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -123,7 +123,7 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
             onClick={() => setMode('stopwatch')}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               mode === 'stopwatch'
-                ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-ink-950'
+                ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -213,7 +213,7 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
               <button
                 type="button"
                 onClick={start}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-5 py-2.5 font-semibold text-ink-950 hover:opacity-90"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-5 py-2.5 font-semibold text-onAccent hover:opacity-90"
               >
                 <Play className="h-4 w-4" /> {hasStarted ? 'Resume' : 'Start'}
               </button>

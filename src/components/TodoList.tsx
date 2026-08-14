@@ -110,7 +110,7 @@ export default function TodoList({ todos, onAdd, onToggle, onDelete, onClearDone
           <button
             type="submit"
             disabled={!draft.trim()}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-ink-950 transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-onAccent transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
           >
             <Plus className="h-4 w-4" /> Add
           </button>

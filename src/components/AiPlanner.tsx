@@ -378,7 +378,7 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                     <button
                       type="submit"
                       disabled={!goal.trim() || busy}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                       {busy ? 'Thinking…' : 'Next'}
@@ -419,7 +419,7 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                       <button
                         type="submit"
                         disabled={busy}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {busy ? (
                           <>
@@ -493,7 +493,7 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                         <button
                           type="button"
                           onClick={apply}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent"
                         >
                           <CalendarCheck className="h-4 w-4" />
                           Add {totalTasks} tasks to my planner

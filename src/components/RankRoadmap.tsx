@@ -80,7 +80,7 @@ function RankNode({
             className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
             style={{ background: rank.color }}
           >
-            <Check className="h-3 w-3 text-ink-950" strokeWidth={3} />
+            <Check className="h-3 w-3 text-onAccent" strokeWidth={3} />
           </span>
         )}
       </button>

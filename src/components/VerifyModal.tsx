@@ -214,7 +214,7 @@ export default function VerifyModal({ quest, onClose, onVerified }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 hover:opacity-90"
+                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent hover:opacity-90"
               >
                 Done
               </button>

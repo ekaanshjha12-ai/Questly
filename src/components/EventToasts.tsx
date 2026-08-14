@@ -30,7 +30,7 @@ function EventToast({ event, onDismiss }: { event: AppEvent; onDismiss: (id: str
         initial={{ opacity: 0, y: 0, scale: 0.9 }}
         animate={{ opacity: 1, y: -8, scale: 1 }}
         exit={{ opacity: 0 }}
-        className="flex items-center gap-1.5 rounded-full bg-gold-500 px-3 py-1.5 text-sm font-bold text-ink-950 shadow-glow"
+        className="flex items-center gap-1.5 rounded-full bg-gold-500 px-3 py-1.5 text-sm font-bold text-onAccent shadow-glow"
       >
         <Zap className="h-4 w-4" /> +{event.amount} XP
       </motion.div>
@@ -141,7 +141,7 @@ export function LevelUpModal({ events, onDismiss }: Props) {
             <p className="mt-4 text-xs text-slate-500">A new character is available in the Avatar tab.</p>
             <button
               onClick={() => onDismiss(rankEvent.id)}
-              className="mt-6 w-full rounded-xl py-2.5 font-semibold text-ink-950 hover:opacity-90"
+              className="mt-6 w-full rounded-xl py-2.5 font-semibold text-onAccent hover:opacity-90"
               style={{ background: rank.color }}
             >
               Claim it
@@ -175,7 +175,7 @@ export function LevelUpModal({ events, onDismiss }: Props) {
             <p className="mt-2 text-sm text-slate-400">You are a {rankForLevel(levelup.level).name}</p>
             <button
               onClick={() => onDismiss(levelup.id)}
-              className="mt-6 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 font-semibold text-ink-950 hover:opacity-90"
+              className="mt-6 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 font-semibold text-onAccent hover:opacity-90"
             >
               Onward!
             </button>

@@ -326,7 +326,7 @@ export default function Planner({
               onClick={() => setView(tab.id)}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 view === tab.id
-                  ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-ink-950'
+                  ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -504,7 +504,7 @@ export default function Planner({
                 <button
                   type="submit"
                   disabled={!draft.trim()}
-                  className="rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-2 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-2 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Add
                 </button>

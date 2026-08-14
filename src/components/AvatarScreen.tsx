@@ -184,7 +184,7 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
                         type="button"
                         onClick={() => onBuyModel(model.id)}
                         disabled={!rankReached || !affordable}
-                        className="rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-ink-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:from-ink-700 disabled:to-ink-700 disabled:text-slate-500"
+                        className="rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-onAccent transition hover:opacity-90 disabled:cursor-not-allowed disabled:from-ink-700 disabled:to-ink-700 disabled:text-slate-500"
                       >
                         {!rankReached ? `Reach ${modelRank.name}` : affordable ? 'Buy' : 'Not enough coins'}
                       </button>

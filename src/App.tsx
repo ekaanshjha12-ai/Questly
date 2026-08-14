@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw } from 'lucide-react'
+import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw, Moon, Sun, MonitorSmartphone } from 'lucide-react'
+import { useTheme } from './hooks/useTheme'
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
 import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
@@ -43,6 +44,27 @@ function SyncBadge({ status }: { status: SyncStatus }) {
       <Icon className={`h-3 w-3 ${spin ? 'animate-spin' : ''}`} />
       <span className="hidden sm:inline">{text}</span>
     </span>
+  )
+}
+
+/** Cycles dark → light → follow-the-system. The icon shows what is in effect,
+ * and the label says which of the three is selected. */
+function ThemeToggle() {
+  const { choice, resolved, cycle } = useTheme()
+  const Icon = choice === 'system' ? MonitorSmartphone : resolved === 'light' ? Sun : Moon
+  const label =
+    choice === 'system' ? `Theme: matching your system (${resolved})` : `Theme: ${choice}`
+
+  return (
+    <button
+      type="button"
+      onClick={cycle}
+      title={label}
+      aria-label={`${label}. Tap to change.`}
+      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-ink-800 hover:text-gold-300"
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   )
 }
 
@@ -216,7 +238,7 @@ function AuthedApp({
       <header className="border-b border-ink-700/60">
         <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-500 to-ember-500">
-            <Swords className="h-4.5 w-4.5 text-ink-950" />
+            <Swords className="h-4.5 w-4.5 text-onAccent" />
           </div>
           <span className="font-display text-base font-bold tracking-wide text-gold-300">Questly</span>
 
@@ -234,6 +256,7 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <span className="hidden text-[11px] text-slate-500 sm:inline">{user.email}</span>
+            <ThemeToggle />
             <InstallButton />
             <button
               type="button"

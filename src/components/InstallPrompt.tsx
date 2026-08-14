@@ -196,7 +196,7 @@ export default function InstallPrompt() {
                   <button
                     type="button"
                     onClick={() => void install()}
-                    className="mt-2 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
+                    className="mt-2 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-onAccent"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Install

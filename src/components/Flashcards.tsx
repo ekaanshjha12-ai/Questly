@@ -190,7 +190,7 @@ function DeckStudy({
                     type="button"
                     onClick={saveEdit}
                     disabled={!draftFront.trim()}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2 text-xs font-semibold text-ink-950 disabled:opacity-40"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2 text-xs font-semibold text-onAccent disabled:opacity-40"
                   >
                     <Check className="h-3.5 w-3.5" />
                     Save
@@ -367,7 +367,7 @@ export default function Flashcards({
           <button
             type="submit"
             disabled={!topic.trim() || busy}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             <span className="hidden sm:inline">Break down</span>
@@ -435,7 +435,7 @@ export default function Flashcards({
                   type="button"
                   onClick={() => void create()}
                   disabled={!chosen.size || stage === 'writing'}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {stage === 'writing' ? (
                     <>

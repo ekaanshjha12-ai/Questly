@@ -171,7 +171,7 @@ function ReportView({ report, onDone }: { report: ExplainReport; onDone: () => v
       <button
         type="button"
         onClick={onDone}
-        className="w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 hover:opacity-90"
+        className="w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent hover:opacity-90"
       >
         Explain something else
       </button>
@@ -288,7 +288,7 @@ export default function ExplainCoach({ state, onAddReport, onDeleteReport }: Pro
             <button
               type="submit"
               disabled={!topic.trim()}
-              className="shrink-0 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-ink-950 disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-onAccent disabled:opacity-40"
             >
               Start
             </button>
@@ -312,7 +312,7 @@ export default function ExplainCoach({ state, onAddReport, onDeleteReport }: Pro
                 type="button"
                 onClick={() => void getQuestions()}
                 disabled={explanation.trim().length < 40 || busy}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {busy ? 'Thinking of questions…' : "I'm done — question me"}
@@ -357,7 +357,7 @@ export default function ExplainCoach({ state, onAddReport, onDeleteReport }: Pro
               type="button"
               onClick={() => void getReport()}
               disabled={busy || answers.every((a) => !a.trim())}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {busy ? 'Marking…' : 'Get my report'}

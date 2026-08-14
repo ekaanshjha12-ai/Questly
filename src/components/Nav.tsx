@@ -42,7 +42,7 @@ export default function Nav({ view, onChange }: Props) {
             // force the whole page wider than the viewport and clip every
             // screen, not just this bar.
             className={`flex min-h-[3rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium leading-none transition-colors sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-2 sm:text-xs ${
-              active ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-ink-950' : 'text-slate-400 hover:text-slate-200'
+              active ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Icon className="h-4 w-4 shrink-0" />

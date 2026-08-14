@@ -18,6 +18,30 @@
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <title>Questly — Turn goals into quests</title>
+    <script>
+      // Runs before first paint so the page never flashes the wrong theme.
+      // Duplicated from useTheme deliberately: the hook cannot run this early,
+      // and a flash of the opposite theme on every load is worse than the
+      // repetition. Wrapped because storage throws in some private modes.
+      (function () {
+        try {
+          var choice = localStorage.getItem('questly:v1:theme') || 'system'
+          var resolved =
+            choice === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : choice
+          document.documentElement.setAttribute('data-theme', resolved)
+          if (resolved === 'light') {
+            var meta = document.querySelector('meta[name="theme-color"]')
+            if (meta) meta.setAttribute('content', '#eef0f6')
+          }
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

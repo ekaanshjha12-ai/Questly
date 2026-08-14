@@ -226,7 +226,7 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
               type="button"
               onClick={() => void analyse()}
               disabled={busy || !evidence.enough || goals.length === 0}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-ink-950 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {busy ? 'Reading your history…' : 'Analyse my progress'}

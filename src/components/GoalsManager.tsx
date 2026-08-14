@@ -37,7 +37,7 @@ export default function GoalsManager({ goals, onAddGoal, onArchiveGoal }: Props)
         <h2 className="font-display text-lg font-semibold text-slate-100">Your Goals</h2>
         <button
           onClick={() => setShowForm((s) => !s)}
-          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3.5 py-2 text-sm font-semibold text-ink-950 hover:opacity-90"
+          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3.5 py-2 text-sm font-semibold text-onAccent hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> New Goal
         </button>
@@ -69,7 +69,7 @@ export default function GoalsManager({ goals, onAddGoal, onArchiveGoal }: Props)
             <button
               onClick={submit}
               disabled={!title.trim()}
-              className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 font-semibold text-ink-950 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
+              className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 font-semibold text-onAccent disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
             >
               Create Quest Line
             </button>

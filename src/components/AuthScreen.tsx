@@ -107,7 +107,7 @@ export default function AuthScreen({ onAuthed }: Props) {
           <button
             type="button"
             onClick={() => onAuthed(issuedCode.user)}
-            className="mt-3 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 hover:opacity-90"
+            className="mt-3 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
           >
             I've saved it — continue
           </button>
@@ -126,7 +126,7 @@ export default function AuthScreen({ onAuthed }: Props) {
       >
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-gold-500 to-ember-500 shadow-glow">
-            <Swords className="h-6 w-6 text-ink-950" />
+            <Swords className="h-6 w-6 text-onAccent" />
           </div>
           <div>
             <h1 className="font-display text-xl font-bold tracking-wide text-gold-300">Questly</h1>
@@ -203,7 +203,7 @@ export default function AuthScreen({ onAuthed }: Props) {
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 transition-opacity disabled:cursor-not-allowed disabled:opacity-60 hover:opacity-90"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent transition-opacity disabled:cursor-not-allowed disabled:opacity-60 hover:opacity-90"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Set new password' : 'Sign in'}

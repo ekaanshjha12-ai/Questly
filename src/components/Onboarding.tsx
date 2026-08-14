@@ -100,7 +100,7 @@ export default function Onboarding({ onComplete }: Props) {
       >
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-gold-500 to-ember-500 shadow-glow">
-            <Swords className="h-6 w-6 text-ink-950" />
+            <Swords className="h-6 w-6 text-onAccent" />
           </div>
           <div>
             <h1 className="font-display text-xl font-bold tracking-wide text-gold-300">Questly</h1>
@@ -128,7 +128,7 @@ export default function Onboarding({ onComplete }: Props) {
             <button
               onClick={() => setStep(1)}
               disabled={!name.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
+              className="w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
             >
               Continue
             </button>
@@ -171,7 +171,7 @@ export default function Onboarding({ onComplete }: Props) {
               </button>
               <button
                 onClick={() => setStep(2)}
-                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 hover:opacity-90"
+                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
               >
                 Continue
               </button>
@@ -274,7 +274,7 @@ export default function Onboarding({ onComplete }: Props) {
               <button
                 onClick={() => setStep(3)}
                 disabled={chosen.length === 0}
-                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
+                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
               >
                 Continue
               </button>
@@ -319,7 +319,7 @@ export default function Onboarding({ onComplete }: Props) {
               </button>
               <button
                 onClick={handleSubmit}
-                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-ink-950 hover:opacity-90"
+                className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
               >
                 Begin the Adventure
               </button>

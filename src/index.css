@@ -4,6 +4,127 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Theming works by redefining the colour scales themselves rather than by
+ * rewriting components. Every `bg-ink-850` and `text-slate-400` already in the
+ * app resolves through these variables, so a theme is a change of values here
+ * and nowhere else.
+ *
+ * The scales keep their meaning across both themes rather than simply
+ * inverting:
+ *   ink-950  the page itself        ink-900/850  a raised surface
+ *   ink-800..500  dividers and borders, increasing in strength
+ *   slate-50..200 strongest text    slate-400..600  progressively quieter
+ *
+ * So a card is always *nearer the viewer* than the page — lighter in the dark
+ * theme, whiter in the light one — and slate always runs loud to quiet. That is
+ * why the numbers do not flip: the token names describe a role, not a lightness.
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink-950: 10 10 18;
+  --ink-900: 15 15 26;
+  --ink-850: 20 20 31;
+  --ink-800: 25 25 38;
+  --ink-700: 35 35 54;
+  --ink-600: 47 47 71;
+  --ink-500: 61 61 92;
+
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+
+  --gold-300: 255 226 122;
+  --gold-400: 255 210 77;
+  --gold-500: 245 184 0;
+  --gold-600: 217 153 0;
+
+  --ember-400: 255 138 92;
+  --ember-500: 255 107 61;
+  --ember-600: 226 80 31;
+
+  --mystic-400: 139 127 255;
+  --mystic-500: 108 92 231;
+  --mystic-600: 83 65 214;
+
+  --emerald-400: 52 211 153;
+  --blue-400: 96 165 250;
+
+  /* Ink for text and icons sitting on a gold or ember fill. Those fills stay
+     warm and bright in both themes, so this stays dark in both. */
+  --on-accent: 10 10 18;
+
+  --glow-gold: rgba(245, 184, 0, 0.35);
+  --glow-mystic: rgba(108, 92, 231, 0.4);
+
+  --wash-mystic: rgba(108, 92, 231, 0.14);
+  --wash-gold: rgba(245, 184, 0, 0.1);
+  --wash-ember: rgba(255, 107, 61, 0.08);
+
+  --scrollbar-thumb: 47 47 71;
+}
+
+/**
+ * The light theme is chosen, not derived. Lightness is re-stepped by hand and
+ * the accents are darkened, because a hue tuned to glow against near-black is
+ * washed out and illegible on white — gold at #ffe27a is close to invisible as
+ * text on a light card.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ink-950: 238 240 246;
+  --ink-900: 255 255 255;
+  --ink-850: 255 255 255;
+  --ink-800: 246 247 251;
+  --ink-700: 226 229 239;
+  --ink-600: 208 212 226;
+  --ink-500: 176 182 202;
+
+  --slate-50: 10 10 18;
+  --slate-100: 20 20 31;
+  --slate-200: 38 38 58;
+  --slate-300: 61 61 85;
+  --slate-400: 88 88 115;
+  --slate-500: 111 111 140;
+  --slate-600: 138 138 163;
+
+  /* 300 and 400 are used as text, so they carry the contrast burden; 500 and
+     600 are fills and stay saturated. */
+  --gold-300: 138 99 0;
+  --gold-400: 163 117 0;
+  --gold-500: 240 180 0;
+  --gold-600: 192 142 0;
+
+  --ember-400: 194 69 26;
+  --ember-500: 242 98 47;
+  --ember-600: 168 58 18;
+
+  --mystic-400: 76 59 196;
+  --mystic-500: 108 92 231;
+  --mystic-600: 63 48 168;
+
+  --emerald-400: 4 120 87;
+  --blue-400: 29 78 216;
+
+  --on-accent: 26 18 5;
+
+  --glow-gold: rgba(245, 184, 0, 0.28);
+  --glow-mystic: rgba(108, 92, 231, 0.25);
+
+  --wash-mystic: rgba(108, 92, 231, 0.08);
+  --wash-gold: rgba(245, 184, 0, 0.1);
+  --wash-ember: rgba(255, 107, 61, 0.07);
+
+  --scrollbar-thumb: 195 200 216;
+}
+
 html,
 body,
 #root {
@@ -13,9 +134,9 @@ body,
 body {
   @apply bg-ink-950 text-slate-100 font-body antialiased;
   background-image:
-    radial-gradient(circle at 15% 10%, rgba(108, 92, 231, 0.14), transparent 45%),
-    radial-gradient(circle at 85% 0%, rgba(245, 184, 0, 0.1), transparent 40%),
-    radial-gradient(circle at 50% 100%, rgba(255, 107, 61, 0.08), transparent 50%);
+    radial-gradient(circle at 15% 10%, var(--wash-mystic), transparent 45%),
+    radial-gradient(circle at 85% 0%, var(--wash-gold), transparent 40%),
+    radial-gradient(circle at 50% 100%, var(--wash-ember), transparent 50%);
   background-attachment: fixed;
 }
 
@@ -26,16 +147,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2f2f47;
+  background: rgb(var(--scrollbar-thumb));
   border-radius: 999px;
 }
 
 .shimmer-bar {
-  background: linear-gradient(
-    90deg,
-    theme('colors.gold.500') 0%,
-    theme('colors.gold.300') 50%,
-    theme('colors.gold.500') 100%
-  );
+  background: linear-gradient(90deg, rgb(var(--gold-500)) 0%, rgb(var(--gold-300)) 50%, rgb(var(--gold-500)) 100%);
   background-size: 200% 100%;
 }
