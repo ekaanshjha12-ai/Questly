@@ -47,6 +47,8 @@ for (const column of [
   'max_xp INTEGER NOT NULL DEFAULT 0',
   'disabled INTEGER NOT NULL DEFAULT 0',
   'password_set_at TEXT',
+  // A suspension is a disable with an end date, so it lifts itself.
+  'suspended_until TEXT',
   // Where proof-accounting starts for this account. Levels below the baseline
   // were reached before proofs were being recorded and are taken as given.
   'level_baseline INTEGER NOT NULL DEFAULT 1',
@@ -275,6 +277,18 @@ export function setRecovery(userId, recoveryHash, recoverySalt) {
     recoverySalt,
     userId,
   ])
+}
+
+export function setSuspendedUntil(userId, until) {
+  db.run('UPDATE users SET suspended_until = ? WHERE id = ?', [until, userId])
+  if (until) deleteSessionsForUser(userId)
+}
+
+/** True while a suspension is still running. Expired ones simply stop applying,
+ * so nothing has to sweep the table. */
+export function isSuspended(user) {
+  if (!user?.suspended_until) return false
+  return new Date(user.suspended_until).getTime() > Date.now()
 }
 
 export function setUserRole(userId, role) {

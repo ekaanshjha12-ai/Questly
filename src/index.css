@@ -24,21 +24,21 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ink-950: 10 10 18;
-  --ink-900: 15 15 26;
-  --ink-850: 20 20 31;
-  --ink-800: 25 25 38;
-  --ink-700: 35 35 54;
-  --ink-600: 47 47 71;
-  --ink-500: 61 61 92;
+  --ink-950: 14 10 8;
+  --ink-900: 22 16 13;
+  --ink-850: 28 21 17;
+  --ink-800: 36 27 22;
+  --ink-700: 48 36 29;
+  --ink-600: 64 48 38;
+  --ink-500: 86 64 50;
 
-  --slate-50: 248 250 252;
-  --slate-100: 241 245 249;
-  --slate-200: 226 232 240;
-  --slate-300: 203 213 225;
-  --slate-400: 148 163 184;
-  --slate-500: 100 116 139;
-  --slate-600: 71 85 105;
+  --slate-50: 253 250 247;
+  --slate-100: 246 240 234;
+  --slate-200: 232 222 212;
+  --slate-300: 205 191 178;
+  --slate-400: 163 146 132;
+  --slate-500: 124 108 95;
+  --slate-600: 92 78 67;
 
   --gold-300: 255 226 122;
   --gold-400: 255 210 77;
@@ -60,14 +60,18 @@
      warm and bright in both themes, so this stays dark in both. */
   --on-accent: 10 10 18;
 
-  --glow-gold: rgba(245, 184, 0, 0.35);
-  --glow-mystic: rgba(108, 92, 231, 0.4);
+  --glow-gold: rgba(255, 150, 50, 0.42);
+  --glow-mystic: rgba(255, 110, 40, 0.32);
 
-  --wash-mystic: rgba(108, 92, 231, 0.14);
-  --wash-gold: rgba(245, 184, 0, 0.1);
-  --wash-ember: rgba(255, 107, 61, 0.08);
+  --wash-mystic: rgba(255, 138, 60, 0.10);
+  --wash-gold: rgba(255, 150, 50, 0.16);
+  --wash-ember: rgba(255, 96, 32, 0.12);
 
-  --scrollbar-thumb: 47 47 71;
+  --scrollbar-thumb: 64 48 38;
+
+  /* The lit-panel treatment. Warm and clearly visible against near-black. */
+  --panel-sheen: rgba(255, 158, 74, 0.07);
+  --panel-edge: rgba(255, 176, 104, 0.28);
 }
 
 /**
@@ -79,50 +83,55 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ink-950: 238 240 246;
+  --ink-950: 255 247 241;
   --ink-900: 255 255 255;
   --ink-850: 255 255 255;
-  --ink-800: 246 247 251;
-  --ink-700: 226 229 239;
-  --ink-600: 208 212 226;
-  --ink-500: 176 182 202;
+  --ink-800: 255 250 245;
+  --ink-700: 250 231 216;
+  --ink-600: 246 214 190;
+  --ink-500: 237 184 146;
 
-  --slate-50: 10 10 18;
-  --slate-100: 20 20 31;
-  --slate-200: 38 38 58;
-  --slate-300: 61 61 85;
-  --slate-400: 88 88 115;
-  --slate-500: 111 111 140;
-  --slate-600: 138 138 163;
+  --slate-50: 38 24 16;
+  --slate-100: 54 35 24;
+  --slate-200: 74 50 35;
+  --slate-300: 104 74 55;
+  --slate-400: 138 104 80;
+  --slate-500: 163 128 102;
+  --slate-600: 190 158 132;
 
   /* 300 and 400 are used as text, so they carry the contrast burden; 500 and
      600 are fills and stay saturated. */
-  --gold-300: 138 99 0;
-  --gold-400: 163 117 0;
-  --gold-500: 240 180 0;
-  --gold-600: 192 142 0;
+  --gold-300: 166 92 12;
+  --gold-400: 194 108 14;
+  --gold-500: 249 149 45;
+  --gold-600: 214 118 22;
 
-  --ember-400: 194 69 26;
-  --ember-500: 242 98 47;
-  --ember-600: 168 58 18;
+  --ember-400: 201 79 30;
+  --ember-500: 247 121 63;
+  --ember-600: 176 63 20;
 
-  --mystic-400: 76 59 196;
-  --mystic-500: 108 92 231;
-  --mystic-600: 63 48 168;
+  --mystic-400: 146 92 46;
+  --mystic-500: 196 130 78;
+  --mystic-600: 120 74 36;
 
   --emerald-400: 4 120 87;
   --blue-400: 29 78 216;
 
   --on-accent: 26 18 5;
 
-  --glow-gold: rgba(245, 184, 0, 0.28);
-  --glow-mystic: rgba(108, 92, 231, 0.25);
+  --glow-gold: rgba(249, 149, 45, 0.30);
+  --glow-mystic: rgba(247, 121, 63, 0.22);
 
-  --wash-mystic: rgba(108, 92, 231, 0.08);
-  --wash-gold: rgba(245, 184, 0, 0.1);
-  --wash-ember: rgba(255, 107, 61, 0.07);
+  --wash-mystic: rgba(255, 160, 90, 0.16);
+  --wash-gold: rgba(255, 175, 105, 0.20);
+  --wash-ember: rgba(255, 140, 80, 0.14);
 
-  --scrollbar-thumb: 195 200 216;
+  --scrollbar-thumb: 244 200 168;
+
+  /* Barely there on white — a glow on a light surface reads as a smudge, so
+     this is a hint of warmth rather than a light source. */
+  --panel-sheen: rgba(255, 160, 90, 0.05);
+  --panel-edge: rgba(255, 255, 255, 0.9);
 }
 
 html,
@@ -133,11 +142,44 @@ body,
 
 body {
   @apply bg-ink-950 text-slate-100 font-body antialiased;
+  /* Pools of warm light rather than an even tint — a single flat wash reads as
+     a coloured background, whereas offset pools read as something lit. */
   background-image:
-    radial-gradient(circle at 15% 10%, var(--wash-mystic), transparent 45%),
-    radial-gradient(circle at 85% 0%, var(--wash-gold), transparent 40%),
-    radial-gradient(circle at 50% 100%, var(--wash-ember), transparent 50%);
+    radial-gradient(ellipse 70% 45% at 50% -5%, var(--wash-gold), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 12% 22%, var(--wash-ember), transparent 70%),
+    radial-gradient(ellipse 65% 50% at 88% 78%, var(--wash-mystic), transparent 72%);
   background-attachment: fixed;
+}
+
+/**
+ * The lit-panel treatment.
+ *
+ * Two things happen on every card: a hairline of light along the top edge,
+ * where a surface facing an overhead source would catch it, and a soft pool
+ * bleeding down from that edge. Together they make a flat rectangle read as a
+ * physical panel under a warm light rather than a lighter square.
+ *
+ * Applied by attribute selector rather than by editing components: every card
+ * in this app is already `rounded-2xl` with an `ink` background, so the styling
+ * follows the existing markup instead of requiring a class on all of them.
+ */
+[class*='rounded-2xl'][class*='bg-ink-8'],
+[class*='rounded-2xl'][class*='bg-ink-9'],
+[class*='rounded-xl'][class*='bg-ink-85'] {
+  position: relative;
+  background-image: radial-gradient(ellipse 80% 60% at 50% 0%, var(--panel-sheen), transparent 75%);
+}
+
+[class*='rounded-2xl'][class*='bg-ink-8']::before,
+[class*='rounded-2xl'][class*='bg-ink-9']::before {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  top: 0;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--panel-edge), transparent);
+  pointer-events: none;
 }
 
 ::-webkit-scrollbar {

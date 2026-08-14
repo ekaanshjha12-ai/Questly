@@ -1,77 +1,20 @@
-import { Suspense, useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { ContactShadows, useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
+import { motion, useReducedMotion } from 'framer-motion'
 
-export const MASCOT_URL = '/models/lavender-guide.glb'
-const DRACO_PATH = '/draco/'
-
-const BODY_HEIGHT = 0.95
+export const MASCOT_SRC = '/models/guide-mascot.png'
 
 /**
- * The guide's idle animation.
+ * The guide's face.
  *
- * The mesh has no skeleton, so this is driven procedurally rather than by a
- * clip. Three overlapping motions at unrelated periods — a breath, a sway and a
- * slow turn — never line up into an obvious loop, which is what makes a rigid
- * model read as alive. `speaking` deepens the breath and adds a small nod, so
- * the figure looks like it is addressing you rather than idling beside the text.
- */
-function GuideModel({ speaking }: { speaking: boolean }) {
-  const { scene } = useGLTF(MASCOT_URL, DRACO_PATH)
-  const group = useRef<THREE.Group>(null)
-
-  const { cloned, scale, offset } = useMemo(() => {
-    const root = scene.clone(true)
-    root.traverse((child) => {
-      const mesh = child as THREE.Mesh
-      if (!mesh.isMesh) return
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-    })
-    // Models arrive at arbitrary scale and origin, so measure and normalise.
-    const box = new THREE.Box3().setFromObject(root)
-    const size = new THREE.Vector3()
-    const centre = new THREE.Vector3()
-    box.getSize(size)
-    box.getCenter(centre)
-    const s = BODY_HEIGHT / Math.max(size.y, 0.0001)
-    return {
-      cloned: root,
-      scale: s,
-      offset: new THREE.Vector3(-centre.x * s, -box.min.y * s - BODY_HEIGHT / 2, -centre.z * s),
-    }
-  }, [scene])
-
-  useFrame(({ clock }) => {
-    const g = group.current
-    if (!g) return
-    const t = clock.getElapsedTime()
-    const depth = speaking ? 1.7 : 1
-
-    // Breath: a small rise and fall.
-    g.position.y = offset.y + Math.sin(t * 1.4) * 0.018 * depth
-    // Sway: weight shifting, at a period unrelated to the breath.
-    g.rotation.z = Math.sin(t * 0.9) * 0.022
-    // Turn: a slow look around the room, so it never sits perfectly still.
-    g.rotation.y = Math.sin(t * 0.35) * 0.28
-    // Nod: only while talking, and fast enough to read as emphasis.
-    g.rotation.x = speaking ? Math.sin(t * 3.1) * 0.035 : 0
-  })
-
-  return (
-    <group ref={group} position={[offset.x, offset.y, offset.z]} scale={scale}>
-      <primitive object={cloned} />
-    </group>
-  )
-}
-
-/**
- * The AI guide's face.
+ * A drawn character rather than a 3D model. It was tempting to keep the GLB
+ * pipeline, but a hand-drawn illustration loses its line and shading the moment
+ * it becomes geometry, and a flat image costs no WebGL context, no decoder and
+ * no draw loop — on a phone opening the walkthrough, that is the difference
+ * between instant and a beat of nothing.
  *
- * Deliberately not the player's avatar component: this one never takes a rank
- * accent, never shows a level badge and is not interactive — it is a character
- * that talks to you, not a thing you own and dress.
+ * The liveliness comes from three motions on unrelated periods — a breath, a
+ * tilt and a drift — so they never resolve into a visible loop the way a single
+ * repeating bob does. Speaking deepens the breath and quickens the tilt, which
+ * reads as addressing you rather than idling.
  */
 export default function Mascot3D({
   size = 132,
@@ -80,24 +23,49 @@ export default function Mascot3D({
   size?: number
   speaking?: boolean
 }) {
+  // Someone who asks the system for less motion gets a still image, not a
+  // slower wobble.
+  const still = useReducedMotion()
+  const depth = speaking ? 1.6 : 1
+
   return (
-    <div style={{ width: size, height: size }} className="shrink-0">
-      <Canvas
-        camera={{ position: [0, 0.06, 2.1], fov: 34 }}
-        dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true }}
-      >
-        <ambientLight intensity={0.85} />
-        <directionalLight position={[2, 3, 2]} intensity={1.5} castShadow />
-        {/* Cool rim from behind so the figure separates from a dark panel. */}
-        <directionalLight position={[-2, 1.5, -2]} intensity={0.6} color="#b9a7ff" />
-        <Suspense fallback={null}>
-          <GuideModel speaking={speaking} />
-          <ContactShadows position={[0, -BODY_HEIGHT / 2, 0]} opacity={0.32} scale={2.4} blur={2.6} far={1.2} />
-        </Suspense>
-      </Canvas>
+    <div
+      style={{ width: size, height: size }}
+      className="relative shrink-0 select-none"
+      aria-hidden
+    >
+      {/* Contact shadow, not a spotlight. Wide, low and heavily blurred so it
+          reads as the character resting on the panel — at full strength it
+          becomes an orange blob sitting behind them. */}
+      <div
+        className="absolute inset-x-[22%] bottom-[9%] h-[8%] rounded-[50%] opacity-40 blur-lg"
+        style={{ background: 'var(--glow-gold)' }}
+      />
+      <motion.img
+        src={MASCOT_SRC}
+        alt=""
+        draggable={false}
+        className="relative h-full w-full object-contain"
+        animate={
+          still
+            ? undefined
+            : {
+                y: [0, -3 * depth, 0, -1.5 * depth, 0],
+                rotate: [0, 1.1, 0, -1.1, 0],
+                scaleY: [1, 1 + 0.012 * depth, 1, 1 + 0.006 * depth, 1],
+              }
+        }
+        transition={
+          still
+            ? undefined
+            : {
+                duration: speaking ? 3.1 : 4.7,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                times: [0, 0.28, 0.5, 0.76, 1],
+              }
+        }
+      />
     </div>
   )
 }
-
-useGLTF.preload(MASCOT_URL, DRACO_PATH)

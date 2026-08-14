@@ -23,6 +23,7 @@ import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
 import AdminSetup from './components/AdminSetup'
+import AdminConsole from './components/AdminConsole'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -148,6 +149,8 @@ export default function App() {
   }, [loadForUser, route])
 
   if (route === 'admin-setup') return <AdminSetup />
+  // The console gates itself: the API answers 404 to anyone who is not an admin.
+  if (route === 'admin') return <AdminConsole />
 
   if (boot.phase === 'loading') {
     return (

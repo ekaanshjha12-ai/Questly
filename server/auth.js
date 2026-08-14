@@ -13,6 +13,7 @@ import {
   normalizeEmail,
   setMfa,
   setRecovery,
+  isSuspended,
   PRIVILEGED_ROLES,
 } from './db.js'
 import { generateBackupCodes, normalizeBackupCode, verifyTotp } from './totp.js'
@@ -187,6 +188,8 @@ export async function verifyUser(email, password) {
   const candidate = await hashPassword(password, user.salt)
   if (!safeEqualHex(candidate, user.password_hash)) return null
   if (user.disabled) return { disabled: true }
+  // A suspension is a disable that ends on its own; both stop a sign-in.
+  if (isSuspended(user)) return { suspendedUntil: user.suspended_until }
   return {
     id: user.id,
     email: user.email,
@@ -289,6 +292,16 @@ export function requireAuth(req, res, next) {
   if (user.disabled) {
     deleteSessionsForUser(user.id)
     res.status(403).json({ error: 'This account has been disabled.', code: 'disabled' })
+    return
+  }
+  // Checked per request, not just at sign-in, so suspending someone who is
+  // already signed in takes effect immediately.
+  if (isSuspended(user)) {
+    deleteSessionsForUser(user.id)
+    res.status(403).json({
+      error: 'This account is suspended until ' + new Date(user.suspended_until).toLocaleDateString() + '.',
+      code: 'suspended',
+    })
     return
   }
   req.user = {

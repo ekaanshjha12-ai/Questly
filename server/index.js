@@ -36,7 +36,7 @@ import {
 import { generateSecret, otpauthUrl } from './totp.js'
 import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
-import { checkStateWrite } from './statecheck.js'
+import { checkStateWrite, requiredMaxXp, levelFromXp } from './statecheck.js'
 import { validateDocuments } from './documents.js'
 import { meter } from './meter.js'
 import { computeAdminStats, invalidateAdminStats } from './adminstats.js'
@@ -61,6 +61,7 @@ import {
   recordPhotoHash,
   recordVerification,
   setMaxXp,
+  setSuspendedUntil,
   setUserDisabled,
   setUserRole,
 } from './db.js'
@@ -213,6 +214,14 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
     if (user.disabled) {
       audit({ email, event: 'auth.login', outcome: 'disabled', ip: req.ip })
       res.status(403).json({ error: 'This account has been disabled.', code: 'disabled' })
+      return
+    }
+    if (user.suspendedUntil) {
+      audit({ email, event: 'auth.login', outcome: 'suspended', ip: req.ip })
+      res.status(403).json({
+        error: `This account is suspended until ${new Date(user.suspendedUntil).toLocaleDateString()}.`,
+        code: 'suspended',
+      })
       return
     }
 
@@ -889,6 +898,158 @@ app.post('/api/progress/outlook', ...aiGuard, async (req, res) => {
       detail: String(err?.message ?? err).slice(0, 300),
     })
   }
+})
+
+/**
+ * Suspends an account until a date, or lifts a suspension with `until: null`.
+ *
+ * Separate from disabling because it ends on its own — nothing has to remember
+ * to switch it back, and an expired suspension simply stops applying.
+ */
+app.post('/api/admin/users/:id/suspend', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  if (target.id === req.user.id) {
+    res.status(400).json({ error: 'You cannot suspend your own account.' })
+    return
+  }
+  if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+    res.status(403).json({ error: 'Only the superadmin can do that.' })
+    return
+  }
+
+  const days = Number(req.body?.days)
+  const until = req.body?.until === null || !Number.isFinite(days) || days <= 0
+    ? null
+    : new Date(Date.now() + Math.min(365, days) * 86400000).toISOString()
+
+  setSuspendedUntil(target.id, until)
+  invalidateAdminStats()
+  audit({
+    userId: req.user.id, email: req.user.email, event: 'admin.suspend', outcome: 'success', ip: req.ip,
+    detail: `${target.email} -> ${until ?? 'lifted'}`,
+  })
+  res.json({ ok: true, until })
+})
+
+/**
+ * Adjusts a player's XP.
+ *
+ * The interesting part is not the arithmetic. Progress is bounded by the
+ * anti-cheat check, which compares each save against a high-water XP mark, a
+ * level floor and the count of recorded photo proofs. Writing XP into the state
+ * document alone would leave those bounds behind, and the player's very next
+ * save would be rejected as unearned — a grant that quietly bricks the account
+ * it was meant to reward. So the bounds move with the grant.
+ */
+app.post('/api/admin/users/:id/xp', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  const delta = Math.round(Number(req.body?.delta))
+  if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1_000_000) {
+    res.status(400).json({ error: 'Give an XP amount between -1,000,000 and 1,000,000.' })
+    return
+  }
+
+  const row = getState(target.id)
+  if (!row) {
+    res.status(400).json({ error: 'That account has no saved progress yet.' })
+    return
+  }
+
+  let state
+  try {
+    state = JSON.parse(row.data)
+  } catch {
+    res.status(500).json({ error: 'The saved progress on that account is unreadable.' })
+    return
+  }
+
+  const before = Number(state.player?.xp) || 0
+  const after = Math.max(0, before + delta)
+  state.player = { ...state.player, xp: after }
+
+  // Coins mint alongside XP at the same rate the app uses, so a grant does not
+  // leave the two out of step.
+  const coinDelta = Math.round(delta / 3)
+  state.player.coins = Math.max(0, (Number(state.player.coins) || 0) + coinDelta)
+
+  // Keep the claimed level within what the new XP supports. Granting XP may open
+  // levels, but claiming them still costs photo proof, so the level itself is
+  // left for the client to advance through the normal gate.
+  const xpLevel = levelFromXp(after)
+  if ((Number(state.progression?.level) || 1) > xpLevel) {
+    state.progression = { ...state.progression, level: xpLevel }
+  }
+
+  putState(target.id, JSON.stringify(state))
+  // Raise the ceiling so the next save from this account validates.
+  setMaxXp(target.id, Math.max(target.max_xp ?? 0, requiredMaxXp(state)))
+  invalidateAdminStats()
+
+  audit({
+    userId: req.user.id, email: req.user.email, event: 'admin.grant_xp', outcome: 'success', ip: req.ip,
+    detail: `${target.email} ${delta > 0 ? '+' : ''}${delta} XP (${before} -> ${after})`,
+  })
+  res.json({ ok: true, xp: after, coins: state.player.coins })
+})
+
+/**
+ * Issues a one-time link for a user to set a new password themselves.
+ *
+ * An admin never sets someone else's password — knowing it would let them sign
+ * in as that person, and every action after that would be indistinguishable
+ * from the real user's.
+ */
+app.post('/api/admin/users/:id/reset-link', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+    res.status(403).json({ error: 'Only the superadmin can do that.' })
+    return
+  }
+
+  const token = makeSetupToken()
+  insertSetupToken({
+    tokenHash: hashSetupToken(token),
+    userId: target.id,
+    expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+  })
+  audit({
+    userId: req.user.id, email: req.user.email, event: 'admin.reset_link', outcome: 'success', ip: req.ip,
+    detail: target.email,
+  })
+  // Returned once, to be handed over out of band. Anyone holding it can claim
+  // the account until it is used or expires.
+  res.json({ ok: true, path: `/admin-setup#${token}`, expiresInMinutes: 30 })
+})
+
+app.delete('/api/admin/users/:id', requireAuth, requireSuperadmin, throttleAdmin, (req, res) => {
+  const target = findUserById(req.params.id)
+  if (!target) {
+    res.status(404).json({ error: 'No such account.' })
+    return
+  }
+  if (target.id === req.user.id) {
+    res.status(400).json({ error: 'Use the account screen to delete your own account.' })
+    return
+  }
+  audit({
+    userId: req.user.id, email: req.user.email, event: 'admin.delete_user', outcome: 'success', ip: req.ip,
+    detail: target.email,
+  })
+  deleteUser(target.id)
+  invalidateAdminStats()
+  res.status(204).end()
 })
 
 // ---------------------------------------------------------------------------

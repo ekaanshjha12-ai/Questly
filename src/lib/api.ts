@@ -289,3 +289,130 @@ export function completeSetup(token: string, password: string, secret: string, m
     { method: 'POST', body: JSON.stringify({ password, secret, mfaCode }) },
   )
 }
+
+// --- admin console ---------------------------------------------------------
+
+export interface AdminUserRow {
+  id: string
+  email: string
+  role: string
+  disabled: boolean
+  mfaEnabled: boolean
+  joinedAt: string
+  lastLogin: string | null
+  lastSeen: string | null
+  name: string | null
+  xp: number
+  coins: number
+  level: number
+  rank: string
+  streak: number
+  successProbability: number | null
+  goals: string[]
+  questsCompleted: number
+  questsVerified: number
+  focusHours: number
+  subscription: null
+}
+
+export interface AdminStats {
+  generatedAt: string
+  live: Record<string, number | null>
+  gamification: {
+    totalXp: number
+    highestLevel: number
+    averageStreak: number
+    mostUsedHero: { name: string; count: number }[]
+    top100: { position: number; email: string; name: string | null; xp: number; level: number; rank: string; streak: number }[]
+  }
+  study: {
+    averageStudyHours: number
+    totalStudyHours: number
+    averageSessions: number
+    totalSessions: number
+    totalDecks: number
+    totalCards: number
+    popularSubjects: { name: string; count: number }[]
+  }
+  goals: {
+    activeGoals: number
+    questsCompleted: number
+    questsTotal: number
+    questCompletionRate: number
+    averageSuccessProbability: number | null
+    analysedAccounts: number
+    commonGoals: { name: string; count: number }[]
+    categories: { name: string; count: number }[]
+  }
+  ai: {
+    totalRequests: number
+    failedRequests: number
+    averageResponseMs: number
+    averageResponseMsToday: number
+    failedToday: number
+    costToday: number
+    costThisMonth: number
+    requestsThisMonth: number
+    byEndpoint: { endpoint: string; count: number; cost: number }[]
+  }
+  analytics: {
+    signups: { day: string; n: number }[]
+    activeUsers: { day: string; n: number }[]
+    aiUsage: { day: string; n: number; cost: number }[]
+    verifications: { day: string; n: number }[]
+    verificationRate: number | null
+    retention7d: number | null
+    subscriptionConversion: null
+    churnRate: null
+  }
+  users: AdminUserRow[]
+}
+
+export function fetchAdminStats(force = false) {
+  return request<AdminStats>(`/api/admin/stats${force ? '?force=1' : ''}`)
+}
+
+export function adminSetDisabled(id: string, disabled: boolean) {
+  return request<{ ok: true }>(`/api/admin/users/${id}/disabled`, {
+    method: 'POST',
+    body: JSON.stringify({ disabled }),
+  })
+}
+
+export function adminSuspend(id: string, days: number | null) {
+  return request<{ ok: true; until: string | null }>(`/api/admin/users/${id}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify(days === null ? { until: null } : { days }),
+  })
+}
+
+export function adminGrantXp(id: string, delta: number) {
+  return request<{ ok: true; xp: number; coins: number }>(`/api/admin/users/${id}/xp`, {
+    method: 'POST',
+    body: JSON.stringify({ delta }),
+  })
+}
+
+export function adminResetLink(id: string) {
+  return request<{ ok: true; path: string; expiresInMinutes: number }>(
+    `/api/admin/users/${id}/reset-link`,
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+}
+
+export function adminSetRole(id: string, role: string) {
+  return request<{ ok: true }>(`/api/admin/users/${id}/role`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  })
+}
+
+export function adminDeleteUser(id: string) {
+  return request<void>(`/api/admin/users/${id}`, { method: 'DELETE' })
+}
+
+export function fetchAudit(limit = 100) {
+  return request<{ entries: { id: number; at: string; email: string | null; event: string; outcome: string; ip: string | null; detail: string | null }[] }>(
+    `/api/admin/audit?limit=${limit}`,
+  )
+}
