@@ -21,6 +21,7 @@ import { useNoise } from './hooks/useNoise'
 import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
+import GuideTour, { hasSeenTour } from './components/GuideTour'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -198,6 +199,8 @@ function AuthedApp({
     equipModel,
   } = useAppState(user.id, initialState)
   const [view, setView] = useState<View>('dashboard')
+  // Offered once per account, after onboarding has produced the goals it talks about.
+  const [tourOpen, setTourOpen] = useState(false)
   const [verifyingQuestId, setVerifyingQuestId] = useState<string | null>(null)
   const verifyingQuest = state.quests.find((q) => q.id === verifyingQuestId) ?? null
 
@@ -208,6 +211,13 @@ function AuthedApp({
   // Lives here rather than in a screen so ambient sound keeps playing while the
   // user moves between tabs.
   const noise = useNoise()
+
+  // Opens once the goals exist, so the walkthrough can talk about them by name.
+  // Watching `onboarded` rather than firing inside the onboarding callback means
+  // someone who set goals on another device is still introduced to the app.
+  useEffect(() => {
+    if (state.onboarded && !hasSeenTour(user.id)) setTourOpen(true)
+  }, [state.onboarded, user.id])
 
   async function handleSignOut() {
     try {
@@ -337,6 +347,8 @@ function AuthedApp({
           if (verifyingQuestId) verifyQuest(verifyingQuestId, kind, note)
         }}
       />
+
+      {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
 
       <NoiseButton noise={noise} />
       <AiPlanner onApplyPlan={applyPlan} />

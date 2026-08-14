@@ -239,3 +239,25 @@ export function saveState(state: AppState) {
     body: JSON.stringify({ state }),
   })
 }
+
+export interface TourStep {
+  id: string
+  title: string
+  body: string
+}
+
+export interface Tour {
+  opening: string
+  steps: TourStep[]
+  closing: string
+  generated: boolean
+}
+
+/** Always resolves to a usable tour — the server falls back to a plainer one
+ * rather than failing, since this is the first thing a new account sees. */
+export function fetchTour(name: string, goals: { title: string; category: string; detail?: string }[]) {
+  return request<{ tour: Tour }>('/api/tour', {
+    method: 'POST',
+    body: JSON.stringify({ name, goals }),
+  })
+}

@@ -40,6 +40,7 @@ import { checkStateWrite } from './statecheck.js'
 import { validateDocuments } from './documents.js'
 import { meter } from './meter.js'
 import { computeAdminStats, invalidateAdminStats } from './adminstats.js'
+import { fallbackTour, writeTour, isConfigured as tourConfigured } from './tour.js'
 import {
   audit,
   countByRole,
@@ -1119,6 +1120,42 @@ app.post('/api/account/delete', requireAuth, throttleAuth, async (req, res) => {
   deleteUser(req.user.id)
   res.clearCookie(SESSION_COOKIE, clearCookieOptions())
   res.status(204).end()
+})
+
+/**
+ * The guide's walkthrough, written for the goals just set.
+ *
+ * Always answers with a usable tour. This is the first thing a new account
+ * sees, so a missing key degrades the writing rather than the experience —
+ * `fallbackTour` is plainer, not empty.
+ */
+app.post('/api/tour', requireAuth, throttleAi, async (req, res) => {
+  const name = String(req.body?.name ?? '').trim().slice(0, 60)
+  const goals = (Array.isArray(req.body?.goals) ? req.body.goals : [])
+    .map((g) => ({
+      title: String(g?.title ?? '').trim().slice(0, 200),
+      category: String(g?.category ?? 'general').trim().slice(0, 40),
+      detail: String(g?.detail ?? '').trim().slice(0, 400),
+    }))
+    .filter((g) => g.title)
+    .slice(0, 8)
+
+  if (blockedByModeration(req, res, [name, ...goals.flatMap((g) => [g.title, g.detail])], { allowLength: 600 })) return
+
+  if (!tourConfigured()) {
+    res.json({ tour: fallbackTour(name, goals) })
+    return
+  }
+
+  try {
+    const tour = await meter({ userId: req.user.id, endpoint: 'tour' }, () => writeTour({ name, goals }))
+    if (blockedOutput(req, res, tour)) return
+    res.json({ tour })
+  } catch (err) {
+    console.error('tour generation failed', err)
+    // Still a tour, just the plain one.
+    res.json({ tour: fallbackTour(name, goals) })
+  }
 })
 
 // Unmatched API routes must answer in JSON — the client parses every response

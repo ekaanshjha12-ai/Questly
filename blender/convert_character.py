@@ -17,6 +17,9 @@ SLUG = argv[0]
 OUT_DIR = argv[1]
 TARGET_TRIS = int(argv[2])
 MAX_TEX = int(argv[3])
+# AUTO keeps PNG wherever an image carries alpha, which on a solid character is
+# several megabytes spent on a channel nothing reads. Pass JPEG for those.
+IMAGE_FORMAT = argv[4] if len(argv) > 4 else "AUTO"
 
 GLB_PATH = os.path.join(OUT_DIR, f"{SLUG}.glb")
 PNG_PATH = os.path.join(OUT_DIR, f"{SLUG}.png")
@@ -167,7 +170,7 @@ def main():
         use_selection=False,
         export_draco_mesh_compression_enable=True,
         export_draco_mesh_compression_level=6,
-        export_image_format="AUTO",
+        export_image_format=IMAGE_FORMAT,
         export_jpeg_quality=80,
     )
     print(f"GLB={GLB_PATH} BYTES={os.path.getsize(GLB_PATH)}")
