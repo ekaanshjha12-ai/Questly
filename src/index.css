@@ -40,14 +40,14 @@
   --slate-500: 124 108 95;
   --slate-600: 92 78 67;
 
-  --gold-300: 255 226 122;
-  --gold-400: 255 210 77;
-  --gold-500: 245 184 0;
-  --gold-600: 217 153 0;
+  --gold-300: 238 205 156;
+  --gold-400: 231 184 118;
+  --gold-500: 216 158 80;
+  --gold-600: 186 132 62;
 
-  --ember-400: 255 138 92;
-  --ember-500: 255 107 61;
-  --ember-600: 226 80 31;
+  --ember-400: 226 150 116;
+  --ember-500: 212 124 86;
+  --ember-600: 182 100 64;
 
   --mystic-400: 139 127 255;
   --mystic-500: 108 92 231;
@@ -60,18 +60,18 @@
      warm and bright in both themes, so this stays dark in both. */
   --on-accent: 10 10 18;
 
-  --glow-gold: rgba(255, 150, 50, 0.42);
-  --glow-mystic: rgba(255, 110, 40, 0.32);
+  --glow-gold: rgba(224, 160, 92, 0.26);
+  --glow-mystic: rgba(212, 124, 86, 0.20);
 
-  --wash-mystic: rgba(255, 138, 60, 0.10);
-  --wash-gold: rgba(255, 150, 50, 0.16);
-  --wash-ember: rgba(255, 96, 32, 0.12);
+  --wash-mystic: rgba(216, 146, 92, 0.07);
+  --wash-gold: rgba(224, 158, 88, 0.11);
+  --wash-ember: rgba(212, 112, 70, 0.09);
 
   --scrollbar-thumb: 64 48 38;
 
   /* The lit-panel treatment. Warm and clearly visible against near-black. */
-  --panel-sheen: rgba(255, 158, 74, 0.07);
-  --panel-edge: rgba(255, 176, 104, 0.28);
+  --panel-sheen: rgba(226, 168, 106, 0.05);
+  --panel-edge: rgba(230, 186, 138, 0.20);
 }
 
 /**
@@ -83,13 +83,13 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ink-950: 255 247 241;
-  --ink-900: 255 255 255;
-  --ink-850: 255 255 255;
-  --ink-800: 255 250 245;
-  --ink-700: 250 231 216;
-  --ink-600: 246 214 190;
-  --ink-500: 237 184 146;
+  --ink-950: 253 233 218;
+  --ink-900: 255 245 237;
+  --ink-850: 255 245 237;
+  --ink-800: 255 240 229;
+  --ink-700: 250 224 204;
+  --ink-600: 245 210 185;
+  --ink-500: 232 182 148;
 
   --slate-50: 38 24 16;
   --slate-100: 54 35 24;
@@ -101,37 +101,37 @@
 
   /* 300 and 400 are used as text, so they carry the contrast burden; 500 and
      600 are fills and stay saturated. */
-  --gold-300: 166 92 12;
-  --gold-400: 194 108 14;
-  --gold-500: 249 149 45;
-  --gold-600: 214 118 22;
+  --gold-300: 140 92 38;
+  --gold-400: 163 110 52;
+  --gold-500: 214 156 92;
+  --gold-600: 182 126 68;
 
-  --ember-400: 201 79 30;
-  --ember-500: 247 121 63;
-  --ember-600: 176 63 20;
+  --ember-400: 170 92 56;
+  --ember-500: 214 132 96;
+  --ember-600: 150 78 46;
 
-  --mystic-400: 146 92 46;
-  --mystic-500: 196 130 78;
-  --mystic-600: 120 74 36;
+  --mystic-400: 132 92 58;
+  --mystic-500: 186 142 102;
+  --mystic-600: 110 74 44;
 
   --emerald-400: 4 120 87;
   --blue-400: 29 78 216;
 
   --on-accent: 26 18 5;
 
-  --glow-gold: rgba(249, 149, 45, 0.30);
-  --glow-mystic: rgba(247, 121, 63, 0.22);
+  --glow-gold: rgba(214, 156, 92, 0.20);
+  --glow-mystic: rgba(214, 132, 96, 0.16);
 
-  --wash-mystic: rgba(255, 160, 90, 0.16);
-  --wash-gold: rgba(255, 175, 105, 0.20);
-  --wash-ember: rgba(255, 140, 80, 0.14);
+  --wash-mystic: rgba(224, 172, 128, 0.10);
+  --wash-gold: rgba(226, 176, 132, 0.13);
+  --wash-ember: rgba(214, 146, 110, 0.10);
 
-  --scrollbar-thumb: 244 200 168;
+  --scrollbar-thumb: 240 206 180;
 
   /* Barely there on white — a glow on a light surface reads as a smudge, so
      this is a hint of warmth rather than a light source. */
   --panel-sheen: rgba(255, 160, 90, 0.05);
-  --panel-edge: rgba(255, 255, 255, 0.9);
+  --panel-edge: rgba(255, 252, 248, 0.75);
 }
 
 html,
