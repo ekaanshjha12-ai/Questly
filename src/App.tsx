@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw, Moon, Sun, MonitorSmartphone } from 'lucide-react'
-import { useTheme } from './hooks/useTheme'
+import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw } from 'lucide-react'
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
 import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
@@ -25,6 +24,7 @@ import GuideTour, { hasSeenTour } from './components/GuideTour'
 import Celebration from './components/Celebration'
 import AdminSetup from './components/AdminSetup'
 import AdminConsole from './components/AdminConsole'
+import ThemeButton from './components/ThemeButton'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -48,27 +48,6 @@ function SyncBadge({ status }: { status: SyncStatus }) {
       <Icon className={`h-3 w-3 ${spin ? 'animate-spin' : ''}`} />
       <span className="hidden sm:inline">{text}</span>
     </span>
-  )
-}
-
-/** Cycles dark → light → follow-the-system. The icon shows what is in effect,
- * and the label says which of the three is selected. */
-function ThemeToggle() {
-  const { choice, resolved, cycle } = useTheme()
-  const Icon = choice === 'system' ? MonitorSmartphone : resolved === 'light' ? Sun : Moon
-  const label =
-    choice === 'system' ? `Theme: matching your system (${resolved})` : `Theme: ${choice}`
-
-  return (
-    <button
-      type="button"
-      onClick={cycle}
-      title={label}
-      aria-label={`${label}. Tap to change.`}
-      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-ink-800 hover:text-gold-300"
-    >
-      <Icon className="h-4 w-4" />
-    </button>
   )
 }
 
@@ -303,7 +282,6 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <span className="hidden text-[11px] text-slate-500 sm:inline">{user.email}</span>
-            <ThemeToggle />
             <InstallButton />
             <button
               type="button"
@@ -387,6 +365,7 @@ function AuthedApp({
 
       {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
 
+      <ThemeButton />
       <NoiseButton noise={noise} />
       <AiPlanner onApplyPlan={applyPlan} />
       <InstallPrompt />

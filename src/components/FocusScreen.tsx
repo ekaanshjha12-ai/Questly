@@ -136,7 +136,17 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
         <div className="flex flex-col items-center">
           <div className="relative" style={{ width: 220, height: 220 }}>
             <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
-              <circle cx="110" cy="110" r={RADIUS} fill="none" stroke="#232336" strokeWidth="12" />
+              {/* Track and gradient read from the theme tokens rather than fixed hex, so
+                  the ring re-colours with everything else. Hardcoded here, it stayed
+                  dark-theme against a peach page. */}
+              <circle
+                cx="110"
+                cy="110"
+                r={RADIUS}
+                fill="none"
+                stroke="rgb(var(--ink-700))"
+                strokeWidth="12"
+              />
               {mode === 'timer' && (
                 <circle
                   cx="110"
@@ -153,8 +163,8 @@ export default function FocusScreen({ state, clock, onDeleteSession }: Props) {
               )}
               <defs>
                 <linearGradient id="focusGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#f5b800" />
-                  <stop offset="100%" stopColor="#ff6b3d" />
+                  <stop offset="0%" stopColor="rgb(var(--gold-500))" />
+                  <stop offset="100%" stopColor="rgb(var(--ember-500))" />
                 </linearGradient>
               </defs>
             </svg>

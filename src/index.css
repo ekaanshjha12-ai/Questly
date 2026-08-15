@@ -163,15 +163,20 @@ body {
  * in this app is already `rounded-2xl` with an `ink` background, so the styling
  * follows the existing markup instead of requiring a class on all of them.
  */
-[class*='rounded-2xl'][class*='bg-ink-8'],
-[class*='rounded-2xl'][class*='bg-ink-9'],
-[class*='rounded-xl'][class*='bg-ink-85'] {
+/* The :not() guards are load-bearing. `position: relative` here would otherwise
+   beat Tailwind's own `fixed`/`absolute` on specificity — two attribute
+   selectors outrank one class — and silently drop any floating panel that
+   happens to be a rounded card with an ink background back into the document
+   flow. */
+[class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute']),
+[class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute']),
+[class*='rounded-xl'][class*='bg-ink-85']:not([class*='fixed']):not([class*='absolute']) {
   position: relative;
   background-image: radial-gradient(ellipse 80% 60% at 50% 0%, var(--panel-sheen), transparent 75%);
 }
 
-[class*='rounded-2xl'][class*='bg-ink-8']::before,
-[class*='rounded-2xl'][class*='bg-ink-9']::before {
+[class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute'])::before,
+[class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute'])::before {
   content: '';
   position: absolute;
   inset-inline: 12%;
