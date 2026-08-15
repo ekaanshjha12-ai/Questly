@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, Check, Copy, Loader2, ShieldCheck } from 'lucide-react'
-import { ApiError, completeSetup, fetchSetupInfo, fetchSetupSecret, type SetupInfo } from '../lib/api'
+import { ApiError, completeSetup, fetchSetupInfo, type SetupInfo } from '../lib/api'
 
 /**
  * Claims a privileged account from a one-time link.
@@ -62,23 +62,19 @@ export default function AdminSetup() {
   const [token, setToken] = useState(readTokenFromUrl)
   const [typed, setTyped] = useState('')
   const [info, setInfo] = useState<SetupInfo | null>(null)
-  const [secret, setSecret] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [done, setDone] = useState<{ recoveryCode: string; backupCodes: string[] } | null>(null)
+  const [done, setDone] = useState<{ recoveryCode: string } | null>(null)
 
   useEffect(() => {
     // No token yet — the code form below is shown instead.
     if (!token) return
     void (async () => {
       try {
-        const [i, s] = await Promise.all([fetchSetupInfo(token), fetchSetupSecret(token)])
-        setInfo(i)
-        setSecret(s.secret)
+        setInfo(await fetchSetupInfo(token))
       } catch (err) {
         setLoadError(
           err instanceof ApiError && err.status === 404
@@ -98,8 +94,8 @@ export default function AdminSetup() {
     }
     setBusy(true)
     try {
-      const result = await completeSetup(token, password, secret, code)
-      setDone({ recoveryCode: result.recoveryCode, backupCodes: result.backupCodes })
+      const result = await completeSetup(token, password)
+      setDone({ recoveryCode: result.recoveryCode })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not complete setup.')
     } finally {
@@ -166,8 +162,8 @@ export default function AdminSetup() {
           <ShieldCheck className="h-7 w-7 text-emerald-400" />
           <h1 className="mt-3 font-display text-xl font-bold text-slate-50">Account ready</h1>
           <p className="mt-1.5 text-sm text-slate-400">
-            Save both of these now. This is the only time either is shown — they are stored hashed, so nobody,
-            including the server, can read them back.
+            Save this now. It is the only time it is shown — it is stored hashed, so nobody, including the
+            server, can read it back. Without it a forgotten password means a lost account.
           </p>
 
           <div className="mt-5 space-y-4">
@@ -175,18 +171,6 @@ export default function AdminSetup() {
               <CopyableCode value={done.recoveryCode} />
             </Field>
 
-            <Field label="Backup codes — sign in if you lose your phone. Each works once.">
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {done.backupCodes.map((c) => (
-                  <span
-                    key={c}
-                    className="rounded-lg border border-ink-600 bg-ink-950 px-2.5 py-1.5 text-center font-mono text-xs text-slate-200"
-                  >
-                    {c}
-                  </span>
-                ))}
-              </div>
-            </Field>
           </div>
 
           <a
@@ -220,7 +204,8 @@ export default function AdminSetup() {
           <p className="text-[11px] uppercase tracking-wide text-gold-400">{info.role} setup</p>
           <h1 className="mt-1 font-display text-xl font-bold text-slate-50">Set up {info.email}</h1>
           <p className="mt-1.5 text-sm text-slate-400">
-            Choose a password and add two-factor authentication. Both are required before this account can sign in.
+            Choose a password. It is the only thing protecting this account, so make it long and unique — not
+            one you use anywhere else.
           </p>
         </div>
 
@@ -247,32 +232,6 @@ export default function AdminSetup() {
           />
         </Field>
 
-        <div className="rounded-xl border border-mystic-400/30 bg-mystic-500/5 p-4">
-          <p className="text-sm font-semibold text-slate-100">Two-factor authentication</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            In your authenticator app choose &ldquo;enter a setup key&rdquo; and paste this. Then type the six-digit
-            code it shows, to prove it saved correctly.
-          </p>
-
-          <div className="mt-3">
-            <CopyableCode value={secret.replace(/(.{4})/g, '$1 ').trim()} />
-          </div>
-
-          <div className="mt-3">
-            <Field label="Six-digit code">
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="000000"
-                required
-                className="w-full rounded-xl border border-ink-600 bg-ink-950 px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-slate-100 outline-none focus:border-gold-500/60"
-              />
-            </Field>
-          </div>
-        </div>
-
         {error && (
           <p className="rounded-lg border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-xs text-ember-400">
             {error}
@@ -281,7 +240,7 @@ export default function AdminSetup() {
 
         <button
           type="submit"
-          disabled={busy || code.length !== 6 || password.length < info.minPassword}
+          disabled={busy || password.length < info.minPassword}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}

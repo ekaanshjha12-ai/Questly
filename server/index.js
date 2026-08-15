@@ -1130,20 +1130,17 @@ app.post('/api/admin/setup/:token', setupLimiter, async (req, res) => {
       return
     }
 
-    // The second factor is proven before the account becomes usable, so a
-    // privileged account can never exist in a state where a password alone
-    // would open it.
-    if (typeof secret !== 'string' || !secret) {
-      res.status(400).json({ error: 'Two-factor setup is required.' })
-      return
-    }
-    if (!checkSecondFactor({ ...user, mfa_secret: secret, mfa_enabled: 1, mfa_backup: '[]' }, mfaCode)) {
-      res.status(400).json({ error: 'That authentication code is not right. Check your authenticator app.' })
+    // A second factor is offered, not demanded. When one is supplied it is
+    // proven before being stored, so an account can never end up holding a
+    // secret its owner did not actually save.
+    const wantsMfa = typeof secret === 'string' && secret && typeof mfaCode === 'string' && mfaCode.trim()
+    if (wantsMfa && !checkSecondFactor({ ...user, mfa_secret: secret, mfa_enabled: 1, mfa_backup: '[]' }, mfaCode)) {
+      res.status(400).json({ error: 'That authentication code is not right. Check your authenticator.' })
       return
     }
 
     const recoveryCode = await completeAdminSetup(user.id, password)
-    const backupCodes = await enrolMfa(user.id, secret)
+    const backupCodes = wantsMfa ? await enrolMfa(user.id, secret) : []
     consumeSetupToken(tokenHash)
     audit({ userId: user.id, email: user.email, event: 'admin.setup', outcome: 'success', ip: req.ip })
 
@@ -1238,12 +1235,6 @@ app.post('/api/admin/users/:id/role', requireAuth, requireSuperadmin, throttleAd
   }
   if (target.role === 'superadmin' && role !== 'superadmin' && countByRole('superadmin') <= 1) {
     res.status(400).json({ error: 'This is the only superadmin. Promote another one first.' })
-    return
-  }
-  // Promotion demands a second factor already in place, so raising a password-only
-  // account to admin cannot bypass the MFA requirement.
-  if (mfaRequiredFor(role) && !target.mfa_enabled) {
-    res.status(400).json({ error: 'That account must enrol two-factor authentication before being promoted.' })
     return
   }
 

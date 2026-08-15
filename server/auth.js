@@ -198,10 +198,22 @@ export async function verifyUser(email, password) {
   }
 }
 
-/** Admins and the superadmin must hold a second factor — a stolen password on
- * one of those accounts would otherwise expose every user's data. */
+/**
+ * Whether a role is *required* to hold a second factor.
+ *
+ * Currently nothing is: the operator has no device to run an authenticator on,
+ * and a requirement nobody can satisfy is a locked door, not security. Enrolment
+ * still works and is still checked at sign-in for anyone who has it — this only
+ * governs whether its absence blocks access.
+ *
+ * The trade is real and worth naming: an admin password is now the single thing
+ * protecting every user's data, which is why the minimum length for those
+ * accounts stays at ADMIN_MIN_PASSWORD rather than the ordinary eight. Flip this
+ * back to `PRIVILEGED_ROLES.has(role)` the day a second factor is practical.
+ */
 export function mfaRequiredFor(role) {
-  return PRIVILEGED_ROLES.has(role)
+  void role
+  return false
 }
 
 export async function enrolMfa(userId, secret) {
@@ -342,8 +354,8 @@ export function requireRole(...roles) {
       res.status(404).json({ error: 'Not found.' })
       return
     }
-    // Privileged sessions are only trusted when the second factor was actually
-    // presented at sign-in.
+    // Only blocks when a second factor is required for the role; enrolled
+    // accounts are still challenged for a code at sign-in either way.
     if (mfaRequiredFor(req.user.role) && !req.user.mfaEnabled) {
       res.status(403).json({ error: 'This account must finish setting up two-factor authentication.', code: 'mfa_required' })
       return

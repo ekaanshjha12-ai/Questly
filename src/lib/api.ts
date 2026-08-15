@@ -283,10 +283,12 @@ export function fetchSetupSecret(token: string) {
   )
 }
 
-export function completeSetup(token: string, password: string, secret: string, mfaCode: string) {
+/** `secret` and `mfaCode` are accepted by the server but not sent: a second
+ * factor is optional, and this deployment has no device to run one on. */
+export function completeSetup(token: string, password: string) {
   return request<{ ok: true; recoveryCode: string; backupCodes: string[] }>(
     `/api/admin/setup/${encodeURIComponent(token)}`,
-    { method: 'POST', body: JSON.stringify({ password, secret, mfaCode }) },
+    { method: 'POST', body: JSON.stringify({ password }) },
   )
 }
 
