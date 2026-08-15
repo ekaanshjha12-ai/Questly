@@ -423,6 +423,8 @@ export interface BoardRow {
   position: number
   name: string
   xp: number
+  /** Derived server-side from XP, so it reveals nothing the XP figure does not. */
+  rank: string
   you?: boolean
 }
 

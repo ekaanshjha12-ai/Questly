@@ -6,10 +6,10 @@ import { fetchLeaderboard, setLeaderboardVisibility, type BoardRow } from '../li
 /**
  * Standings by XP.
  *
- * Name and total, and nothing else. Everywhere else in the app a person's data
- * is theirs alone, so the one screen that crosses that line shows the least it
- * can while still being a ranking — no level, no streak, no goals, never an
- * email.
+ * Name, rank and total, and nothing else. Everywhere else in the app a person's
+ * data is theirs alone, so the one screen that crosses that line shows the least
+ * it can while still being a ranking — no streak, no goals, never an email. Rank
+ * is computed from the XP already on the row, so it adds no new disclosure.
  */
 function Row({ row, highlight }: { row: BoardRow; highlight?: boolean }) {
   const medal = row.position <= 3
@@ -26,9 +26,12 @@ function Row({ row, highlight }: { row: BoardRow; highlight?: boolean }) {
       >
         {row.position}
       </span>
-      <span className={`min-w-0 flex-1 truncate text-sm ${highlight ? 'text-gold-200' : 'text-slate-200'}`}>
-        {row.name}
-        {highlight && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-gold-400">you</span>}
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-sm ${highlight ? 'text-gold-200' : 'text-slate-200'}`}>
+          {row.name}
+          {highlight && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-gold-400">you</span>}
+        </span>
+        <span className="block truncate text-[11px] text-slate-500">{row.rank}</span>
       </span>
       <span className="shrink-0 text-sm tabular-nums text-slate-300">{row.xp.toLocaleString()}</span>
       <span className="shrink-0 text-[10px] text-slate-600">XP</span>

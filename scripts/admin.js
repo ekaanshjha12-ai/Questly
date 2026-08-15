@@ -32,18 +32,30 @@ function issueLink(userId) {
   const token = makeSetupToken()
   const expiresAt = new Date(Date.now() + SETUP_TTL_MINUTES * 60_000).toISOString()
   insertSetupToken({ tokenHash: hashSetupToken(token), userId, expiresAt })
-  return { url: `${baseUrl()}/admin-setup#${token}`, expiresAt }
+  return { url: `${baseUrl()}/admin-setup#${token}`, token, expiresAt }
 }
 
-function printLink({ url, expiresAt }, email) {
+/**
+ * Prints the code first and the link second.
+ *
+ * Deploy consoles do not reliably let you select or click text, which made a
+ * long link the one thing standing between an operator and their own account.
+ * The code is short enough to read off the screen and type by hand, so the
+ * link is a convenience rather than the only route.
+ */
+function printLink({ url, token, expiresAt }, email) {
   console.log('')
-  console.log('  Open this once, within %d minutes, to set the password for %s:', SETUP_TTL_MINUTES, email)
+  console.log('  Setup code for %s:', email)
   console.log('')
+  console.log('      %s', token)
+  console.log('')
+  console.log('  Go to %s/admin-setup and type it in.', baseUrl())
+  console.log('  Or open this directly, if your console lets you click it:')
   console.log('    %s', url)
   console.log('')
-  console.log('  It expires at %s and works exactly once.', expiresAt)
-  console.log('  Do not paste this link into chat, email or a ticket — anyone holding it')
-  console.log('  can claim the account until it is used or expires.')
+  console.log('  Valid for %d minutes (until %s) and works exactly once.', SETUP_TTL_MINUTES, expiresAt)
+  console.log('  Do not paste it into chat, email or a ticket — anyone holding it can')
+  console.log('  claim the account until it is used or expires.')
   console.log('')
 }
 

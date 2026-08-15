@@ -1,6 +1,6 @@
 // node-sqlite3-wasm ships CommonJS, so it has no named ESM exports.
 import sqlite3Wasm from 'node-sqlite3-wasm'
-import { requiredMaxXp } from './statecheck.js'
+import { requiredMaxXp, levelFromXp } from './statecheck.js'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -284,11 +284,26 @@ export function setRecovery(userId, recoveryHash, recoverySalt) {
 /**
  * The leaderboard, built from stored state.
  *
- * Returns a name and an XP figure and nothing else. It is the only place in the
- * app where one account can see another, so it hands back the two fields the
- * ranking needs rather than anything the caller might filter client-side —
- * email, level, streak and goals never leave the server here.
+ * Returns a name, an XP figure and the rank that figure earns — nothing else.
+ * It is the only place in the app where one account can see another, so it
+ * hands back exactly the fields the ranking needs rather than anything the
+ * caller might filter client-side; email, streak and goals never leave the
+ * server here.
+ *
+ * Rank is derived from XP rather than read from the stored state, for two
+ * reasons: the stored level is client-written and so not trustworthy, and a
+ * rank computed from a number already on screen discloses nothing further.
  */
+const BOARD_RANKS = [
+  ['Heisenberg', 40], ['God', 30], ['Celestial', 24], ['King', 18],
+  ['Monarch', 14], ['Champion', 10], ['Knight', 6], ['Soldier', 3], ['Recruit', 1],
+]
+
+function rankName(level) {
+  for (const [name, min] of BOARD_RANKS) if (level >= min) return name
+  return 'Recruit'
+}
+
 export function leaderboard(limit = 50) {
   const rows = db.all(`
     SELECT u.id, u.hide_from_leaderboard AS hidden, s.data
@@ -309,7 +324,7 @@ export function leaderboard(limit = 50) {
       continue
     }
     if (!name) name = 'Adventurer'
-    ranked.push({ id: row.id, name, xp })
+    ranked.push({ id: row.id, name, xp, rank: rankName(levelFromXp(xp)) })
   }
 
   ranked.sort((a, b) => b.xp - a.xp)

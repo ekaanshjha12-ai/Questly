@@ -355,10 +355,30 @@ export function requireRole(...roles) {
 export const requireAdmin = requireRole('admin', 'superadmin')
 export const requireSuperadmin = requireRole('superadmin')
 
+/**
+ * Setup tokens are short enough to read off a screen and type by hand.
+ *
+ * A 64-character hex string is fine in a link, but the deploy console this gets
+ * printed into does not reliably allow selecting or clicking text, which left
+ * the only route to an admin account blocked. Twelve characters from an
+ * unambiguous alphabet is about sixty bits — far beyond guessing inside a
+ * thirty-minute window behind a rate limit — and can be typed in fifteen
+ * seconds.
+ */
+export function normalizeSetupToken(token) {
+  return String(token ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
 export function hashSetupToken(token) {
-  return sha256(token)
+  return sha256(normalizeSetupToken(token))
 }
 
 export function makeSetupToken() {
-  return randomBytes(32).toString('hex')
+  const bytes = randomBytes(12)
+  let out = ''
+  for (let i = 0; i < 12; i++) {
+    if (i > 0 && i % 4 === 0) out += '-'
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
+  }
+  return out
 }

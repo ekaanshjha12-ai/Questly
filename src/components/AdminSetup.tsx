@@ -59,7 +59,8 @@ function CopyableCode({ value }: { value: string }) {
 }
 
 export default function AdminSetup() {
-  const [token] = useState(readTokenFromUrl)
+  const [token, setToken] = useState(readTokenFromUrl)
+  const [typed, setTyped] = useState('')
   const [info, setInfo] = useState<SetupInfo | null>(null)
   const [secret, setSecret] = useState('')
   const [password, setPassword] = useState('')
@@ -71,10 +72,8 @@ export default function AdminSetup() {
   const [done, setDone] = useState<{ recoveryCode: string; backupCodes: string[] } | null>(null)
 
   useEffect(() => {
-    if (!token) {
-      setLoadError('This page needs the setup link that was printed when the account was created.')
-      return
-    }
+    // No token yet — the code form below is shown instead.
+    if (!token) return
     void (async () => {
       try {
         const [i, s] = await Promise.all([fetchSetupInfo(token), fetchSetupSecret(token)])
@@ -83,7 +82,7 @@ export default function AdminSetup() {
       } catch (err) {
         setLoadError(
           err instanceof ApiError && err.status === 404
-            ? 'That setup link is invalid, already used, or has expired. Issue a new one with: npm run admin -- link <email>'
+            ? 'That code is invalid, already used, or has expired. Issue a new one with: npm run admin -- link <email>'
             : 'Could not load the setup page.',
         )
       }
@@ -106,6 +105,43 @@ export default function AdminSetup() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // Reached by typing the code rather than following the link. The deploy
+  // console does not reliably allow selecting or clicking text, so this is the
+  // route that always works.
+  if (!token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (typed.trim()) setToken(typed.trim())
+          }}
+          className="w-full max-w-sm rounded-2xl border border-ink-600 bg-ink-900 p-6"
+        >
+          <ShieldCheck className="h-7 w-7 text-gold-400" />
+          <h1 className="mt-3 font-display text-xl font-bold text-slate-50">Enter your setup code</h1>
+          <p className="mt-1.5 text-sm text-slate-400">
+            The code printed when the account was created. Case and dashes do not matter.
+          </p>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value.toUpperCase())}
+            autoFocus
+            placeholder="XXXX-XXXX-XXXX"
+            className="mt-4 w-full rounded-xl border border-ink-600 bg-ink-950 px-3 py-2.5 text-center font-mono text-lg tracking-widest text-slate-100 outline-none focus:border-gold-500/60"
+          />
+          <button
+            type="submit"
+            disabled={typed.replace(/[^A-Za-z0-9]/g, '').length < 8}
+            className="mt-4 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Continue
+          </button>
+        </form>
+      </div>
+    )
   }
 
   if (loadError) {

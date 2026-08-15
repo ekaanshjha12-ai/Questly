@@ -24,6 +24,7 @@ import {
   hashSetupToken,
   makeSetupToken,
   mfaRequiredFor,
+  normalizeSetupToken,
   resetWithCode,
   endSession,
   requireAdmin,
@@ -1071,8 +1072,8 @@ app.get('/api/leaderboard', requireAuth, rateLimit({ name: 'board', max: 30, win
   const stored = findUserById(req.user.id)
 
   res.json({
-    top: full.slice(0, 50).map((r) => ({ position: r.position, name: r.name, xp: r.xp, you: r.id === req.user.id })),
-    me: me ? { position: me.position, name: me.name, xp: me.xp } : null,
+    top: full.slice(0, 50).map((r) => ({ position: r.position, name: r.name, xp: r.xp, rank: r.rank, you: r.id === req.user.id })),
+    me: me ? { position: me.position, name: me.name, xp: me.xp, rank: me.rank } : null,
     total: full.length,
     hidden: Boolean(stored?.hide_from_leaderboard),
   })
