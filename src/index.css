@@ -383,6 +383,23 @@ button[class*='fixed'][class*='rounded-l-xl'] {
     inset 0 1px 0 var(--clay-sheen);
 }
 
+/* Card-sized buttons press like the keys do, just with more travel to match
+   their greater thickness. A slab that does not move under a finger reads as a
+   picture of a button rather than one. */
+/* Shadow only. The movement is framer's, because its inline transform would
+   overwrite anything set here and the two would fight. */
+button[class*='rounded-2xl'][class*='bg-ink-8']:active,
+button[class*='rounded-2xl'][class*='bg-ink-9']:active {
+  box-shadow:
+    0 3px 0 var(--extrude-card),
+    0 4px 8px -3px var(--clay-lift),
+    inset 0 1px 0 var(--clay-sheen);
+}
+button[class*='rounded-2xl'][class*='bg-ink-8'],
+button[class*='rounded-2xl'][class*='bg-ink-9'] {
+  transition: box-shadow 0.12s ease;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
 }

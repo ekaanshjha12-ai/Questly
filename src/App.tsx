@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw } from 'lucide-react'
+import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw, ArrowLeft } from 'lucide-react'
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
 import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
@@ -308,6 +308,17 @@ function AuthedApp({
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
         <Nav view={view} onChange={setView} />
+
+        {view !== 'home' && (
+          <button
+            type="button"
+            onClick={() => setView('home')}
+            className="flex items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-850 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:text-slate-100"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Home
+          </button>
+        )}
 
         {view === 'home' && <HomeScreen state={state} onGo={setView} />}
         {view === 'dashboard' && (

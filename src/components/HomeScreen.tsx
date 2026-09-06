@@ -119,6 +119,10 @@ export default function HomeScreen({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.035, type: 'spring', stiffness: 320, damping: 26 }}
+              // Both halves of the press live here. The CSS handles the shadow
+              // collapsing; the transform has to be framer's, since its inline
+              // style would overwrite a CSS one and the two would fight.
+              whileTap={{ scale: 0.975, y: 4 }}
               className={`group flex items-center gap-3 rounded-2xl border border-ink-600 bg-ink-850 p-4 text-left ${
                 card.wide ? 'col-span-2' : ''
               }`}
