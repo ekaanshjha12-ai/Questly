@@ -92,6 +92,8 @@
   --clay-sheen: rgba(255, 255, 255, 0.95);
   --clay-top: rgba(255, 255, 255, 0.55);
   --clay-bottom: rgba(94, 62, 66, 0.07);
+  --extrude-accent: rgb(206 118 88);
+  --extrude-neutral: rgb(206 186 178);
   --clay-border: rgba(120, 88, 88, 0.13);
 }
 
@@ -156,6 +158,8 @@
   --clay-sheen: rgba(255, 236, 224, 0.09);
   --clay-top: rgba(255, 236, 224, 0.045);
   --clay-bottom: rgba(0, 0, 0, 0.22);
+  --extrude-accent: rgb(168 96 70);
+  --extrude-neutral: rgb(30 26 30);
   --clay-border: rgba(255, 236, 224, 0.06);
 }
 
@@ -236,15 +240,49 @@ textarea[class*='rounded-lg'] {
  * depth only reads when something else is sunk to compare it against.
  */
 
-/* Solid accent buttons: the most raised things on screen. */
+/**
+ * Solid accent buttons: physical keys.
+ *
+ * The first shadow has no blur, which is what makes it read as the *side* of an
+ * extruded object rather than a shadow cast by a flat one — a solid band of a
+ * darker tone standing between the face and the surface. The blurred layers
+ * after it are the shadow that band throws.
+ *
+ * Pressing moves the face down onto its own side, so the travel is the button
+ * compressing rather than sliding. The distances have to agree: three pixels
+ * down and three off the extrusion, or the key appears to sink through the page.
+ */
 button[class*='rounded-xl'][class*='bg-gradient-to-r'],
 button[class*='rounded-lg'][class*='bg-gradient-to-r'] {
-  border-radius: 0.9rem;
+  border-radius: 999px;
   box-shadow:
-    0 1px 2px var(--clay-contact),
-    0 6px 14px -6px var(--clay-lift),
-    0 14px 26px -14px var(--clay-far),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    0 5px 0 var(--extrude-accent),
+    0 7px 12px -4px var(--clay-lift),
+    0 14px 26px -10px var(--clay-far),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+}
+button[class*='rounded-xl'][class*='bg-gradient-to-r']:hover,
+button[class*='rounded-lg'][class*='bg-gradient-to-r']:hover {
+  filter: brightness(1.04);
+}
+button[class*='rounded-xl'][class*='bg-gradient-to-r']:active,
+button[class*='rounded-lg'][class*='bg-gradient-to-r']:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 2px 0 var(--extrude-accent),
+    0 3px 6px -2px var(--clay-lift),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+/* A disabled key is not pressable, so it should not look it. */
+button[class*='bg-gradient-to-r']:disabled {
+  box-shadow:
+    0 2px 0 var(--extrude-accent),
+    0 3px 6px -3px var(--clay-lift);
+  transform: none;
 }
 
 /* Outlined and tinted buttons: present, but clearly a step below a solid one. */
@@ -254,9 +292,23 @@ button[class*='rounded-xl'][class*='bg-ink'],
 button[class*='rounded-lg'][class*='bg-ink'],
 label[class*='rounded-xl'][class*='border'],
 a[class*='rounded-xl'][class*='border-ink'] {
+  border-radius: 999px;
   box-shadow:
-    0 1px 1px var(--clay-contact),
-    0 3px 8px -4px var(--clay-lift),
+    0 3px 0 var(--extrude-neutral),
+    0 4px 8px -3px var(--clay-lift),
+    inset 0 1px 0 var(--clay-sheen);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+button[class*='rounded-xl'][class*='border-ink']:active,
+button[class*='rounded-lg'][class*='border-ink']:active,
+button[class*='rounded-xl'][class*='bg-ink']:active,
+button[class*='rounded-lg'][class*='bg-ink']:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 var(--extrude-neutral),
+    0 2px 4px -2px var(--clay-lift),
     inset 0 1px 0 var(--clay-sheen);
 }
 
@@ -276,10 +328,19 @@ nav[class*='rounded-xl'] {
     0 1px 0 var(--clay-sheen);
 }
 nav button[class*='bg-gradient-to-r'] {
+  border-radius: 999px;
   box-shadow:
-    0 1px 2px var(--clay-contact),
-    0 5px 12px -5px var(--clay-lift),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 4px 0 var(--extrude-accent),
+    0 6px 12px -4px var(--clay-lift),
+    0 0 18px -2px var(--glow-gold),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+nav button[class*='bg-gradient-to-r']:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 var(--extrude-accent),
+    0 3px 6px -3px var(--clay-lift),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 /* Tracks and empty checkboxes are hollows, so what fills them reads as solid. */
