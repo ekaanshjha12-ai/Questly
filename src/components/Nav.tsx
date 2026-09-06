@@ -1,6 +1,6 @@
 import { LayoutDashboard, ScrollText, Trophy, Shield, ListChecks, CalendarDays, Timer, Layers } from 'lucide-react'
 
-export type View = 'dashboard' | 'todos' | 'schedule' | 'focus' | 'cards' | 'goals' | 'avatar' | 'achievements'
+export type View = 'home' | 'dashboard' | 'todos' | 'schedule' | 'focus' | 'cards' | 'goals' | 'avatar' | 'achievements'
 
 interface Props {
   view: View

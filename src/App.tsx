@@ -21,6 +21,7 @@ import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
+import HomeScreen from './components/HomeScreen'
 import Celebration from './components/Celebration'
 import AdminSetup from './components/AdminSetup'
 import AdminConsole from './components/AdminConsole'
@@ -203,7 +204,9 @@ function AuthedApp({
     buyModel,
     equipModel,
   } = useAppState(user.id, initialState)
-  const [view, setView] = useState<View>('dashboard')
+  // Opens on the hub rather than inside a section, so the first thing on screen
+  // is a choice rather than someone else's idea of what matters today.
+  const [view, setView] = useState<View>('home')
   // Offered once per account, after onboarding has produced the goals it talks about.
   const [tourOpen, setTourOpen] = useState(false)
   // Bumped on every forward step, which is what restarts the burst.
@@ -263,10 +266,17 @@ function AuthedApp({
     <div className="min-h-screen">
       <header className="border-b border-ink-700/60">
         <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-500 to-ember-500">
-            <Swords className="h-4.5 w-4.5 text-onAccent" />
-          </div>
-          <span className="font-display text-base font-bold tracking-wide text-gold-300">Questly</span>
+          <button
+            type="button"
+            onClick={() => setView('home')}
+            aria-label="Home"
+            className="flex items-center gap-2"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-500 to-ember-500">
+              <Swords className="h-4.5 w-4.5 text-onAccent" />
+            </span>
+            <span className="font-display text-base font-bold tracking-wide text-gold-300">Questly</span>
+          </button>
 
           <div className="ml-auto flex items-center gap-3">
             {clock.running && (
@@ -299,6 +309,7 @@ function AuthedApp({
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
         <Nav view={view} onChange={setView} />
 
+        {view === 'home' && <HomeScreen state={state} onGo={setView} />}
         {view === 'dashboard' && (
           <Dashboard
             state={state}
