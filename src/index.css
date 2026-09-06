@@ -20,118 +20,139 @@
  * theme, whiter in the light one — and slate always runs loud to quiet. That is
  * why the numbers do not flip: the token names describe a role, not a lightness.
  */
-:root,
-:root[data-theme='dark'] {
-  color-scheme: dark;
-
-  --ink-950: 14 10 8;
-  --ink-900: 22 16 13;
-  --ink-850: 28 21 17;
-  --ink-800: 36 27 22;
-  --ink-700: 48 36 29;
-  --ink-600: 64 48 38;
-  --ink-500: 86 64 50;
-
-  --slate-50: 253 250 247;
-  --slate-100: 246 240 234;
-  --slate-200: 232 222 212;
-  --slate-300: 205 191 178;
-  --slate-400: 163 146 132;
-  --slate-500: 124 108 95;
-  --slate-600: 92 78 67;
-
-  --gold-300: 238 205 156;
-  --gold-400: 231 184 118;
-  --gold-500: 216 158 80;
-  --gold-600: 186 132 62;
-
-  --ember-400: 226 150 116;
-  --ember-500: 212 124 86;
-  --ember-600: 182 100 64;
-
-  --mystic-400: 139 127 255;
-  --mystic-500: 108 92 231;
-  --mystic-600: 83 65 214;
-
-  --emerald-400: 52 211 153;
-  --blue-400: 96 165 250;
-
-  /* Ink for text and icons sitting on a gold or ember fill. Those fills stay
-     warm and bright in both themes, so this stays dark in both. */
-  --on-accent: 10 10 18;
-
-  --glow-gold: rgba(224, 160, 92, 0.26);
-  --glow-mystic: rgba(212, 124, 86, 0.20);
-
-  --wash-mystic: rgba(216, 146, 92, 0.07);
-  --wash-gold: rgba(224, 158, 88, 0.11);
-  --wash-ember: rgba(212, 112, 70, 0.09);
-
-  --scrollbar-thumb: 64 48 38;
-
-  /* The lit-panel treatment. Warm and clearly visible against near-black. */
-  --panel-sheen: rgba(226, 168, 106, 0.05);
-  --panel-edge: rgba(230, 186, 138, 0.20);
-}
 
 /**
- * The light theme is chosen, not derived. Lightness is re-stepped by hand and
- * the accents are darkened, because a hue tuned to glow against near-black is
- * washed out and illegible on white — gold at #ffe27a is close to invisible as
- * text on a light card.
+ * Light: soft clay.
+ *
+ * A dusty mauve page with cream surfaces floating above it, peach and powder
+ * blue as the two accents. Depth comes from diffuse shadow rather than outline,
+ * so borders are nearly invisible and do the work of a seam rather than a frame.
  */
+:root,
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ink-950: 253 233 218;
-  --ink-900: 255 245 237;
-  --ink-850: 255 245 237;
-  --ink-800: 255 240 229;
-  --ink-700: 250 224 204;
-  --ink-600: 245 210 185;
-  --ink-500: 232 182 148;
+  --ink-950: 231 219 222;
+  --ink-900: 253 249 244;
+  --ink-850: 251 245 239;
+  --ink-800: 247 238 230;
+  --ink-700: 240 227 217;
+  --ink-600: 231 214 202;
+  --ink-500: 213 191 177;
 
-  --slate-50: 38 24 16;
-  --slate-100: 54 35 24;
-  --slate-200: 74 50 35;
-  --slate-300: 104 74 55;
-  --slate-400: 138 104 80;
-  --slate-500: 163 128 102;
-  --slate-600: 190 158 132;
+  /* Warm near-black rather than grey — a neutral grey reads as cold and dirty
+     against cream. */
+  --slate-50: 58 44 42;
+  --slate-100: 72 56 53;
+  --slate-200: 92 74 69;
+  --slate-300: 120 100 94;
+  --slate-400: 152 130 123;
+  --slate-500: 176 156 148;
+  --slate-600: 200 182 175;
 
-  /* 300 and 400 are used as text, so they carry the contrast burden; 500 and
-     600 are fills and stay saturated. */
-  --gold-300: 140 92 38;
-  --gold-400: 163 110 52;
-  --gold-500: 214 156 92;
-  --gold-600: 182 126 68;
+  /* Peach. 300 and 400 carry text so they are darkened to stay legible on
+     cream; 500 and 600 are fills and stay soft. */
+  --gold-300: 168 92 58;
+  --gold-400: 190 110 72;
+  --gold-500: 240 168 140;
+  --gold-600: 222 142 112;
 
-  --ember-400: 170 92 56;
-  --ember-500: 214 132 96;
-  --ember-600: 150 78 46;
+  /* Coral — the warmer, deeper end of the same family. */
+  --ember-400: 194 104 78;
+  --ember-500: 238 150 124;
+  --ember-600: 188 98 74;
 
-  --mystic-400: 132 92 58;
-  --mystic-500: 186 142 102;
-  --mystic-600: 110 74 44;
+  /* Powder blue, the counterweight that stops the whole thing being one hue. */
+  --mystic-400: 96 132 168;
+  --mystic-500: 166 194 220;
+  --mystic-600: 124 158 190;
 
-  --emerald-400: 4 120 87;
-  --blue-400: 29 78 216;
+  --emerald-400: 46 122 96;
+  --blue-400: 74 118 168;
 
-  --on-accent: 26 18 5;
+  --on-accent: 58 36 26;
 
-  --glow-gold: rgba(214, 156, 92, 0.20);
-  --glow-mystic: rgba(214, 132, 96, 0.16);
+  --glow-gold: rgba(240, 168, 140, 0.34);
+  --glow-mystic: rgba(166, 194, 220, 0.38);
 
-  --wash-mystic: rgba(224, 172, 128, 0.10);
-  --wash-gold: rgba(226, 176, 132, 0.13);
-  --wash-ember: rgba(214, 146, 110, 0.10);
+  /* Pools of colour in the page itself, so the background is a soft field
+     rather than a flat wash. */
+  --wash-gold: rgba(244, 196, 172, 0.55);
+  --wash-ember: rgba(236, 206, 210, 0.5);
+  --wash-mystic: rgba(196, 212, 232, 0.45);
 
-  --scrollbar-thumb: 240 206 180;
+  --scrollbar-thumb: 222 202 194;
 
-  /* Barely there on white — a glow on a light surface reads as a smudge, so
-     this is a hint of warmth rather than a light source. */
-  --panel-sheen: rgba(255, 160, 90, 0.05);
-  --panel-edge: rgba(255, 252, 248, 0.75);
+  /* The clay treatment. `lift` is the cast shadow, `contact` the tight one that
+     sits a surface on the page, `sheen` the highlight along its lit top edge. */
+  --clay-lift: rgba(122, 88, 84, 0.20);
+  --clay-contact: rgba(122, 88, 84, 0.10);
+  --clay-far: rgba(122, 88, 84, 0.13);
+  --clay-inset: rgba(150, 118, 110, 0.14);
+  --clay-sheen: rgba(255, 255, 255, 0.9);
+  --clay-border: rgba(160, 128, 120, 0.09);
+}
+
+/**
+ * Dark: the same world at night.
+ *
+ * Not an inversion — the hues are kept and the lightness re-stepped, so peach
+ * stays peach and the blue stays blue. Shadow cannot create depth on a dark
+ * ground the way it does on a light one, so here the top edge does more of the
+ * work and the cast shadow less.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink-950: 30 26 30;
+  --ink-900: 41 36 41;
+  --ink-850: 47 41 47;
+  --ink-800: 55 48 54;
+  --ink-700: 68 59 66;
+  --ink-600: 84 73 81;
+  --ink-500: 110 96 106;
+
+  --slate-50: 250 246 244;
+  --slate-100: 240 234 230;
+  --slate-200: 224 215 210;
+  --slate-300: 196 184 178;
+  --slate-400: 160 146 140;
+  --slate-500: 128 114 110;
+  --slate-600: 100 88 86;
+
+  --gold-300: 246 202 178;
+  --gold-400: 240 182 152;
+  --gold-500: 232 156 124;
+  --gold-600: 206 130 100;
+
+  --ember-400: 238 162 138;
+  --ember-500: 226 132 106;
+  --ember-600: 198 104 80;
+
+  --mystic-400: 176 200 226;
+  --mystic-500: 146 178 210;
+  --mystic-600: 116 148 182;
+
+  --emerald-400: 110 214 176;
+  --blue-400: 140 180 226;
+
+  --on-accent: 34 24 20;
+
+  --glow-gold: rgba(232, 156, 124, 0.28);
+  --glow-mystic: rgba(146, 178, 210, 0.24);
+
+  --wash-gold: rgba(190, 118, 92, 0.16);
+  --wash-ember: rgba(150, 96, 96, 0.14);
+  --wash-mystic: rgba(96, 124, 160, 0.14);
+
+  --scrollbar-thumb: 84 73 81;
+
+  --clay-lift: rgba(0, 0, 0, 0.5);
+  --clay-contact: rgba(0, 0, 0, 0.32);
+  --clay-far: rgba(0, 0, 0, 0.38);
+  --clay-inset: rgba(0, 0, 0, 0.3);
+  --clay-sheen: rgba(255, 236, 224, 0.07);
+  --clay-border: rgba(255, 236, 224, 0.06);
 }
 
 html,
@@ -142,49 +163,71 @@ body,
 
 body {
   @apply bg-ink-950 text-slate-100 font-body antialiased;
-  /* Pools of warm light rather than an even tint — a single flat wash reads as
-     a coloured background, whereas offset pools read as something lit. */
+  /* Offset pools rather than one even tint: a flat wash reads as a coloured
+     background, offset pools read as a lit surface. */
   background-image:
-    radial-gradient(ellipse 70% 45% at 50% -5%, var(--wash-gold), transparent 70%),
-    radial-gradient(ellipse 60% 40% at 12% 22%, var(--wash-ember), transparent 70%),
-    radial-gradient(ellipse 65% 50% at 88% 78%, var(--wash-mystic), transparent 72%);
+    radial-gradient(ellipse 80% 50% at 15% 0%, var(--wash-gold), transparent 62%),
+    radial-gradient(ellipse 70% 55% at 90% 20%, var(--wash-mystic), transparent 65%),
+    radial-gradient(ellipse 90% 60% at 50% 105%, var(--wash-ember), transparent 68%);
   background-attachment: fixed;
 }
 
 /**
- * The lit-panel treatment.
+ * The clay treatment.
  *
- * Two things happen on every card: a hairline of light along the top edge,
- * where a surface facing an overhead source would catch it, and a soft pool
- * bleeding down from that edge. Together they make a flat rectangle read as a
- * physical panel under a warm light rather than a lighter square.
+ * Three things together make a flat rectangle read as a moulded object: a wide
+ * soft shadow for the light it blocks, a tight one where it meets the page, and
+ * a highlight along the top edge where it faces the source. Any one alone reads
+ * as a drop shadow; all three read as depth.
  *
- * Applied by attribute selector rather than by editing components: every card
- * in this app is already `rounded-2xl` with an `ink` background, so the styling
- * follows the existing markup instead of requiring a class on all of them.
+ * Applied by attribute selector so it follows the markup already in the app
+ * rather than needing a class on every card. The :not() guards are
+ * load-bearing — `position: relative` here outranks Tailwind's own `fixed` on
+ * specificity, and without them any floating panel silently falls back into the
+ * document flow.
  */
-/* The :not() guards are load-bearing. `position: relative` here would otherwise
-   beat Tailwind's own `fixed`/`absolute` on specificity — two attribute
-   selectors outrank one class — and silently drop any floating panel that
-   happens to be a rounded card with an ink background back into the document
-   flow. */
 [class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute']),
 [class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute']),
 [class*='rounded-xl'][class*='bg-ink-85']:not([class*='fixed']):not([class*='absolute']) {
   position: relative;
-  background-image: radial-gradient(ellipse 80% 60% at 50% 0%, var(--panel-sheen), transparent 75%);
+  border-radius: 1.6rem;
+  border-color: var(--clay-border);
+  /* Four layers, each doing one job: the seam where it meets the page, the
+     shadow it casts nearby, the far diffuse one that gives it height, and the
+     highlight along the lit top edge. */
+  box-shadow:
+    0 1px 2px var(--clay-contact),
+    0 8px 20px -8px var(--clay-lift),
+    0 24px 48px -20px var(--clay-far),
+    inset 0 1px 0 var(--clay-sheen);
 }
 
-[class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute'])::before,
-[class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute'])::before {
-  content: '';
-  position: absolute;
-  inset-inline: 12%;
-  top: 0;
-  height: 1px;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--panel-edge), transparent);
-  pointer-events: none;
+/**
+ * Inputs read as pressed *into* the surface rather than raised from it.
+ *
+ * Depth only reads as depth when it has a direction. If every element is
+ * lifted, none of them look lifted — the recessed field is what makes the card
+ * around it look raised.
+ */
+input[class*='rounded-xl'],
+textarea[class*='rounded-xl'],
+input[class*='rounded-lg'],
+textarea[class*='rounded-lg'] {
+  box-shadow:
+    inset 0 2px 4px var(--clay-inset),
+    inset 0 -1px 0 var(--clay-sheen);
+}
+
+/* Buttons and pills get the same moulding at a smaller scale, so controls feel
+   like objects on the surface rather than printed onto it. */
+button[class*='rounded-xl'][class*='bg-gradient-to-r'],
+button[class*='rounded-lg'][class*='bg-gradient-to-r'] {
+  border-radius: 0.9rem;
+  box-shadow:
+    0 1px 2px var(--clay-contact),
+    0 6px 14px -6px var(--clay-lift),
+    0 14px 26px -14px var(--clay-far),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 ::-webkit-scrollbar {
