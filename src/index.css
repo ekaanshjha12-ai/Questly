@@ -94,6 +94,8 @@
   --clay-bottom: rgba(94, 62, 66, 0.07);
   --extrude-accent: rgb(206 118 88);
   --extrude-neutral: rgb(206 186 178);
+  --extrude-card: rgb(228 210 202);
+  --extrude-row: rgb(232 216 208);
   --clay-border: rgba(120, 88, 88, 0.13);
 }
 
@@ -160,6 +162,8 @@
   --clay-bottom: rgba(0, 0, 0, 0.22);
   --extrude-accent: rgb(168 96 70);
   --extrude-neutral: rgb(30 26 30);
+  --extrude-card: rgb(26 22 26);
+  --extrude-row: rgb(32 28 32);
   --clay-border: rgba(255, 236, 224, 0.06);
 }
 
@@ -208,9 +212,9 @@ body {
      shadow it casts nearby, the far diffuse one that gives it height, and the
      highlight along the lit top edge. */
   box-shadow:
-    0 1px 2px var(--clay-contact),
-    0 8px 20px -8px var(--clay-lift),
-    0 24px 48px -20px var(--clay-far),
+    0 7px 0 var(--extrude-card),
+    0 10px 16px -4px var(--clay-lift),
+    0 26px 48px -18px var(--clay-far),
     inset 0 1px 0 var(--clay-sheen);
 }
 
@@ -316,8 +320,8 @@ button[class*='rounded-lg'][class*='bg-ink']:active {
 [class*='rounded-xl'][class*='bg-ink-8']:not(button):not(input):not(textarea):not([class*='fixed']):not([class*='absolute']),
 [class*='rounded-lg'][class*='bg-ink-8']:not(button):not(input):not(textarea):not([class*='fixed']):not([class*='absolute']) {
   box-shadow:
-    0 1px 1px var(--clay-contact),
-    0 4px 10px -6px var(--clay-lift),
+    0 3px 0 var(--extrude-row),
+    0 5px 10px -4px var(--clay-lift),
     inset 0 1px 0 var(--clay-sheen);
 }
 
@@ -352,6 +356,31 @@ nav button[class*='bg-gradient-to-r']:active {
 }
 button[class*='rounded'][class*='border-ink-5'][class*='bg-ink-9'] {
   box-shadow: inset 0 1px 2px var(--clay-inset);
+}
+
+/* Small pills — XP chips, tags, counters — get a hairline of thickness. Any
+   more and a label starts competing with the controls around it. */
+span[class*='rounded-full'][class*='bg-'],
+span[class*='rounded'][class*='bg-gold-5'],
+span[class*='rounded'][class*='bg-mystic-5'] {
+  box-shadow:
+    0 2px 0 var(--clay-contact),
+    0 3px 6px -3px var(--clay-lift);
+}
+
+/* The rails are keys mounted on the edge of the screen, so their thickness runs
+   sideways rather than down. */
+button[class*='fixed'][class*='rounded-r-xl'] {
+  box-shadow:
+    3px 0 0 var(--extrude-neutral),
+    5px 0 12px -4px var(--clay-lift),
+    inset 0 1px 0 var(--clay-sheen);
+}
+button[class*='fixed'][class*='rounded-l-xl'] {
+  box-shadow:
+    -3px 0 0 var(--extrude-neutral),
+    -5px 0 12px -4px var(--clay-lift),
+    inset 0 1px 0 var(--clay-sheen);
 }
 
 ::-webkit-scrollbar {
