@@ -189,18 +189,24 @@ body {
 }
 
 /**
- * The cursor.
+ * The cursor: a drawn sword, tip where the pointer actually is.
  *
  * A real CSS cursor from an inline SVG, not an element chasing the mouse. A
- * JavaScript follower always trails the actual pointer by a frame or two, which
- * reads as lag on every single movement, and it has to be hidden again for
+ * JavaScript follower always trails the true pointer by a frame or two, which
+ * reads as lag on every single movement, and it has to be undone again for
  * touch. This costs nothing, never lags, and the OS keeps drawing it over
  * everything including the 3D canvases.
  *
- * Two states only: the arrow, and the accent-filled arrow over anything you can
- * press. Both carry a light fill inside a dark outline so they stay legible on
- * the pale green of the light theme and the near-black of the dark one — the
- * same reason every OS cursor is drawn that way.
+ * Drawn at 32px, which is the largest size every platform will still render as
+ * a cursor, and built from four heavy shapes rather than fine detail — a thin
+ * line at this size disappears into the pixel grid. Blade, guard, grip, pommel,
+ * and nothing else.
+ *
+ * Two states: a pale blade normally, and the accent blade over anything you can
+ * press, so the pointer and the hover style say the same thing. Both sit inside
+ * the same dark outline, which is why every OS cursor is drawn that way — it is
+ * the only way one icon stays legible on both the pale green theme and the
+ * near-black one.
  *
  * Gated on a real pointing device. On a phone there is no cursor to restyle,
  * and `cursor: pointer` on touch has its own side effects.
@@ -208,13 +214,13 @@ body {
 @media (hover: hover) and (pointer: fine) {
   body {
     cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath d='M3 2.4 3 23.2 8.5 18.3 11.9 25.8 15.8 24 12.3 16.6 19.6 16.3Z' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E")
-        3 2,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%2314301f' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%2314301f' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%238fe388' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23f4faf5' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%238fe388' stroke='%2314301f' stroke-width='1.7'/%3E%3C/svg%3E")
+        3 3,
       auto;
   }
 
-  /* Anything you can press gets the accent fill, so the cursor itself tells you
-     the thing under it is live — the hover style and the pointer agree. */
+  /* Anything you can press draws the blade in the accent, so the cursor itself
+     tells you the thing under it is live. */
   a,
   button,
   summary,
@@ -226,8 +232,8 @@ body {
   input[type='radio'],
   input[type='file'] {
     cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath d='M3 2.4 3 23.2 8.5 18.3 11.9 25.8 15.8 24 12.3 16.6 19.6 16.3Z' fill='%238fe388' stroke='%2314301f' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E")
-        3 2,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%2314301f' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%2314301f' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%238fe388' stroke='%2314301f' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%23f4faf5' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23f4faf5' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.7'/%3E%3C/svg%3E")
+        3 3,
       pointer;
   }
 

@@ -18,6 +18,7 @@ import type { AppState, SuccessOutlook } from '../types'
 import { ApiError, analyseOutlook } from '../lib/api'
 import { computeStats, evidenceFor, formatFocusTotal, goalProgress } from '../lib/progress'
 import Achievements from './Achievements'
+import HabitTracker from './HabitTracker'
 
 interface AchievementView {
   id: string
@@ -196,6 +197,11 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
         <StatTile icon={Trophy} label="Verified Quests" value={String(stats.questsVerified)} accent="#e0c56b" />
         <StatTile icon={Star} label="Level" value={String(stats.level)} accent="#ffe27a" />
       </div>
+
+      {/* Above the outlook on purpose. The tiles say where you are and the
+          outlook says where you are heading, but only this says what you have
+          actually been doing — and it is the part that needs no API key. */}
+      <HabitTracker state={state} />
 
       <section className="rounded-2xl border border-ink-600 bg-ink-850/60 p-4 sm:p-5">
         {!outlook ? (
