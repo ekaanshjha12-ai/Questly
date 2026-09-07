@@ -52,34 +52,34 @@
 
   /* Peach. 300 and 400 carry text so they are darkened to stay legible on
      cream; 500 and 600 are fills and stay soft. */
-  --gold-300: 22 100 74;
-  --gold-400: 30 122 92;
-  --gold-500: 104 198 156;
-  --gold-600: 66 166 126;
+  --gold-300: 62 122 42;
+  --gold-400: 82 148 56;
+  --gold-500: 150 222 132;
+  --gold-600: 116 196 96;
 
   /* Coral — the warmer, deeper end of the same family. */
-  --ember-400: 26 108 86;
-  --ember-500: 92 184 148;
-  --ember-600: 42 128 100;
+  --ember-400: 74 138 54;
+  --ember-500: 134 214 118;
+  --ember-600: 96 176 78;
 
   /* Powder blue, the counterweight that stops the whole thing being one hue. */
-  --mystic-400: 34 114 120;
-  --mystic-500: 126 196 200;
-  --mystic-600: 68 150 156;
+  --mystic-400: 70 136 92;
+  --mystic-500: 160 216 176;
+  --mystic-600: 112 180 132;
 
-  --emerald-400: 26 118 88;
+  --emerald-400: 70 140 60;
   --blue-400: 44 116 150;
 
   --on-accent: 16 40 30;
 
-  --glow-gold: rgba(104, 198, 156, 0.36);
-  --glow-mystic: rgba(126, 196, 200, 0.36);
+  --glow-gold: rgba(150, 222, 132, 0.42);
+  --glow-mystic: rgba(160, 216, 176, 0.4);
 
   /* Pools of colour in the page itself, so the background is a soft field
      rather than a flat wash. */
-  --wash-gold: rgba(150, 210, 172, 0.55);
-  --wash-ember: rgba(176, 210, 186, 0.5);
-  --wash-mystic: rgba(158, 206, 206, 0.48);
+  --wash-gold: rgba(168, 226, 150, 0.55);
+  --wash-ember: rgba(186, 224, 170, 0.5);
+  --wash-mystic: rgba(174, 218, 186, 0.48);
 
   --scrollbar-thumb: 176 198 180;
 
@@ -92,7 +92,7 @@
   --clay-sheen: rgba(255, 255, 255, 0.95);
   --clay-top: rgba(255, 255, 255, 0.55);
   --clay-bottom: rgba(46, 76, 62, 0.07);
-  --extrude-accent: rgb(64 162 122);
+  --extrude-accent: rgb(112 186 92);
   --extrude-neutral: rgb(198 218 198);
   --extrude-card: rgb(214 230 212);
   --extrude-row: rgb(222 236 220);
@@ -126,30 +126,30 @@
   --slate-500: 112 136 124;
   --slate-600: 88 108 98;
 
-  --gold-300: 176 240 212;
-  --gold-400: 138 226 188;
-  --gold-500: 88 204 158;
-  --gold-600: 58 170 128;
+  --gold-300: 214 250 198;
+  --gold-400: 184 244 168;
+  --gold-500: 150 234 132;
+  --gold-600: 118 208 100;
 
-  --ember-400: 118 224 198;
-  --ember-500: 70 196 174;
-  --ember-600: 46 162 142;
+  --ember-400: 170 240 156;
+  --ember-500: 134 226 118;
+  --ember-600: 104 198 90;
 
-  --mystic-400: 150 220 230;
-  --mystic-500: 98 192 206;
-  --mystic-600: 68 158 176;
+  --mystic-400: 182 236 202;
+  --mystic-500: 146 218 172;
+  --mystic-600: 112 186 140;
 
-  --emerald-400: 110 224 176;
+  --emerald-400: 150 240 140;
   --blue-400: 128 190 220;
 
   --on-accent: 12 30 24;
 
-  --glow-gold: rgba(88, 204, 158, 0.3);
-  --glow-mystic: rgba(98, 192, 206, 0.26);
+  --glow-gold: rgba(150, 234, 132, 0.38);
+  --glow-mystic: rgba(146, 218, 172, 0.32);
 
-  --wash-gold: rgba(60, 150, 112, 0.18);
-  --wash-ember: rgba(46, 120, 104, 0.15);
-  --wash-mystic: rgba(56, 128, 144, 0.15);
+  --wash-gold: rgba(96, 190, 84, 0.2);
+  --wash-ember: rgba(86, 176, 76, 0.16);
+  --wash-mystic: rgba(96, 170, 120, 0.16);
 
   --scrollbar-thumb: 68 84 74;
 
@@ -160,7 +160,7 @@
   --clay-sheen: rgba(226, 255, 240, 0.09);
   --clay-top: rgba(226, 255, 240, 0.045);
   --clay-bottom: rgba(0, 0, 0, 0.22);
-  --extrude-accent: rgb(44 138 104);
+  --extrude-accent: rgb(96 176 82);
   --extrude-neutral: rgb(20 28 25);
   --extrude-card: rgb(18 25 22);
   --extrude-row: rgb(24 32 28);
