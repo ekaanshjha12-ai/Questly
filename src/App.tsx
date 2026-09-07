@@ -291,17 +291,7 @@ function AuthedApp({
               </button>
             )}
             <SyncBadge status={syncStatus} />
-            <span className="hidden text-[11px] text-slate-500 sm:inline">{user.email}</span>
             <InstallButton />
-            <button
-              type="button"
-              onClick={handleSignOut}
-              title="Sign out"
-              aria-label="Sign out"
-              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-ink-800 hover:text-slate-200"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </header>
@@ -375,6 +365,22 @@ function AuthedApp({
         {view === 'achievements' && (
           <ProgressScreen state={state} achievements={achievements} onSetOutlook={setOutlook} />
         )}
+
+        {/* Sign out lives at the foot of the page, not in the header. It is the
+            one control here you almost never want and can least afford to hit
+            by accident, and it had been sitting a few pixels from the install
+            button in the top-right cluster. */}
+        <footer className="flex items-center justify-between gap-3 border-t border-ink-700/60 pt-4 text-[11px] text-slate-500">
+          <span className="min-w-0 truncate">{user.email}</span>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 font-medium transition-colors hover:bg-ink-800 hover:text-slate-200"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign out
+          </button>
+        </footer>
       </main>
 
       <VerifyModalHost

@@ -189,6 +189,74 @@ body {
 }
 
 /**
+ * The cursor.
+ *
+ * A real CSS cursor from an inline SVG, not an element chasing the mouse. A
+ * JavaScript follower always trails the actual pointer by a frame or two, which
+ * reads as lag on every single movement, and it has to be hidden again for
+ * touch. This costs nothing, never lags, and the OS keeps drawing it over
+ * everything including the 3D canvases.
+ *
+ * Two states only: the arrow, and the accent-filled arrow over anything you can
+ * press. Both carry a light fill inside a dark outline so they stay legible on
+ * the pale green of the light theme and the near-black of the dark one — the
+ * same reason every OS cursor is drawn that way.
+ *
+ * Gated on a real pointing device. On a phone there is no cursor to restyle,
+ * and `cursor: pointer` on touch has its own side effects.
+ */
+@media (hover: hover) and (pointer: fine) {
+  body {
+    cursor:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath d='M3 2.4 3 23.2 8.5 18.3 11.9 25.8 15.8 24 12.3 16.6 19.6 16.3Z' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E")
+        3 2,
+      auto;
+  }
+
+  /* Anything you can press gets the accent fill, so the cursor itself tells you
+     the thing under it is live — the hover style and the pointer agree. */
+  a,
+  button,
+  summary,
+  label[for],
+  select,
+  [role='button'],
+  [role='tab'],
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'] {
+    cursor:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath d='M3 2.4 3 23.2 8.5 18.3 11.9 25.8 15.8 24 12.3 16.6 19.6 16.3Z' fill='%238fe388' stroke='%2314301f' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E")
+        3 2,
+      pointer;
+  }
+
+  /* A dead control should not claim to be pressable. `:disabled` beats the rule
+     above on specificity, which is why it sits here rather than earlier. */
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  /* Text entry keeps the system caret — a custom arrow over a text field hides
+     where the insertion point actually is. */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  input[type='number'],
+  input[type='url'],
+  input[type='date'],
+  input[type='time'],
+  textarea,
+  [contenteditable='true'] {
+    cursor: text;
+  }
+}
+
+/**
  * The clay treatment.
  *
  * Three things together make a flat rectangle read as a moulded object: a wide
