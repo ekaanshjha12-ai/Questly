@@ -1,4 +1,6 @@
-import { LayoutDashboard, ScrollText, Trophy, Shield, ListChecks, CalendarDays, Timer, Layers } from 'lucide-react'
+import {
+  QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, GoalsIcon, HeroIcon, StatsIcon,
+} from './SectionIcons'
 
 export type View = 'home' | 'dashboard' | 'todos' | 'schedule' | 'focus' | 'cards' | 'goals' | 'avatar' | 'achievements'
 
@@ -9,17 +11,17 @@ interface Props {
 
 /** `short` keeps the phone labels narrow enough that eight tabs still fit on a
  * 360px screen without scrolling. */
-const TABS: { id: View; label: string; short: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'dashboard', label: 'Quest Log', short: 'Quests', icon: LayoutDashboard },
-  { id: 'todos', label: 'To-Do', short: 'To-Do', icon: ListChecks },
-  { id: 'schedule', label: 'Schedule', short: 'Plan', icon: CalendarDays },
-  { id: 'focus', label: 'Focus', short: 'Focus', icon: Timer },
-  { id: 'cards', label: 'Study', short: 'Study', icon: Layers },
-  { id: 'goals', label: 'Goals', short: 'Goals', icon: ScrollText },
-  { id: 'avatar', label: 'Avatar', short: 'Hero', icon: Shield },
+const TABS: { id: View; label: string; short: string; icon: typeof QuestIcon }[] = [
+  { id: 'dashboard', label: 'Quest Log', short: 'Quests', icon: QuestIcon },
+  { id: 'todos', label: 'To-Do', short: 'To-Do', icon: TodoIcon },
+  { id: 'schedule', label: 'Schedule', short: 'Plan', icon: PlanIcon },
+  { id: 'focus', label: 'Focus', short: 'Focus', icon: FocusIcon },
+  { id: 'cards', label: 'Study', short: 'Study', icon: StudyIcon },
+  { id: 'goals', label: 'Goals', short: 'Goals', icon: GoalsIcon },
+  { id: 'avatar', label: 'Avatar', short: 'Hero', icon: HeroIcon },
   // Stats and achievements share a tab — both answer "how am I doing", and a
   // ninth tab would not fit a 360px screen.
-  { id: 'achievements', label: 'Progress', short: 'Stats', icon: Trophy },
+  { id: 'achievements', label: 'Progress', short: 'Stats', icon: StatsIcon },
 ]
 
 export default function Nav({ view, onChange }: Props) {

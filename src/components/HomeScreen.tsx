@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { ChevronRight } from 'lucide-react'
 import {
-  CalendarDays, ChevronRight, Layers, LayoutDashboard, ListChecks,
-  ScrollText, Shield, Timer, Trophy,
-} from 'lucide-react'
+  QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, GoalsIcon, HeroIcon, StatsIcon,
+} from './SectionIcons'
 import type { AppState } from '../types'
 import type { View } from './Nav'
 import { periodKey } from '../lib/period'
@@ -40,7 +40,7 @@ export default function HomeScreen({
     return [
       {
         id: 'dashboard' as View,
-        icon: LayoutDashboard,
+        icon: QuestIcon,
         title: 'Quests',
         stat: today.length ? `${doneToday} of ${today.length} done today` : 'No quests yet',
         tone: 'gold' as const,
@@ -48,49 +48,49 @@ export default function HomeScreen({
       },
       {
         id: 'todos' as View,
-        icon: ListChecks,
+        icon: TodoIcon,
         title: 'To-Do',
         stat: openTodos ? `${openTodos} open` : 'All clear',
         tone: 'mystic' as const,
       },
       {
         id: 'schedule' as View,
-        icon: CalendarDays,
+        icon: PlanIcon,
         title: 'Plan',
         stat: scheduled ? `${scheduled} placed` : 'Nothing scheduled',
         tone: 'gold' as const,
       },
       {
         id: 'focus' as View,
-        icon: Timer,
+        icon: FocusIcon,
         title: 'Focus',
         stat: stats.focusSessions ? `${hours}h over ${stats.focusSessions}` : 'Start a session',
         tone: 'ember' as const,
       },
       {
         id: 'cards' as View,
-        icon: Layers,
+        icon: StudyIcon,
         title: 'Study',
         stat: cardCount ? `${cardCount} cards` : 'Make a deck',
         tone: 'mystic' as const,
       },
       {
         id: 'goals' as View,
-        icon: ScrollText,
+        icon: GoalsIcon,
         title: 'Goals',
         stat: activeGoals ? `${activeGoals} active` : 'Set your first',
         tone: 'gold' as const,
       },
       {
         id: 'avatar' as View,
-        icon: Shield,
+        icon: HeroIcon,
         title: 'Hero',
         stat: `${rank.name} · Level ${state.progression.level}`,
         tone: 'ember' as const,
       },
       {
         id: 'achievements' as View,
-        icon: Trophy,
+        icon: StatsIcon,
         title: 'Progress',
         stat: state.outlook ? `${state.outlook.probability}% likely` : `${stats.questsVerified} verified`,
         tone: 'mystic' as const,
@@ -127,7 +127,7 @@ export default function HomeScreen({
                 card.wide ? 'col-span-2' : ''
               }`}
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink-800">
+              <span className="icon-well flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink-800">
                 <Icon className={`h-5 w-5 ${TONE[card.tone]}`} />
               </span>
               <span className="min-w-0 flex-1">
