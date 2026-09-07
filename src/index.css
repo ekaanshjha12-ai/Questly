@@ -32,71 +32,71 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ink-950: 209 191 197;
-  --ink-900: 253 249 244;
-  --ink-850: 251 245 239;
-  --ink-800: 242 230 220;
-  --ink-700: 228 210 198;
-  --ink-600: 212 189 175;
-  --ink-500: 186 156 141;
+  --ink-950: 201 214 203;
+  --ink-900: 250 253 249;
+  --ink-850: 246 251 245;
+  --ink-800: 236 245 234;
+  --ink-700: 220 235 219;
+  --ink-600: 202 224 202;
+  --ink-500: 168 200 170;
 
   /* Warm near-black rather than grey — a neutral grey reads as cold and dirty
      against cream. */
-  --slate-50: 58 44 42;
-  --slate-100: 72 56 53;
-  --slate-200: 92 74 69;
-  --slate-300: 120 100 94;
-  --slate-400: 152 130 123;
-  --slate-500: 176 156 148;
-  --slate-600: 200 182 175;
+  --slate-50: 26 42 34;
+  --slate-100: 36 56 46;
+  --slate-200: 52 76 64;
+  --slate-300: 78 104 90;
+  --slate-400: 112 140 124;
+  --slate-500: 140 166 150;
+  --slate-600: 170 192 178;
 
   /* Peach. 300 and 400 carry text so they are darkened to stay legible on
      cream; 500 and 600 are fills and stay soft. */
-  --gold-300: 168 92 58;
-  --gold-400: 190 110 72;
-  --gold-500: 240 168 140;
-  --gold-600: 222 142 112;
+  --gold-300: 22 100 74;
+  --gold-400: 30 122 92;
+  --gold-500: 104 198 156;
+  --gold-600: 66 166 126;
 
   /* Coral — the warmer, deeper end of the same family. */
-  --ember-400: 194 104 78;
-  --ember-500: 238 150 124;
-  --ember-600: 188 98 74;
+  --ember-400: 26 108 86;
+  --ember-500: 92 184 148;
+  --ember-600: 42 128 100;
 
   /* Powder blue, the counterweight that stops the whole thing being one hue. */
-  --mystic-400: 96 132 168;
-  --mystic-500: 166 194 220;
-  --mystic-600: 124 158 190;
+  --mystic-400: 34 114 120;
+  --mystic-500: 126 196 200;
+  --mystic-600: 68 150 156;
 
-  --emerald-400: 46 122 96;
-  --blue-400: 74 118 168;
+  --emerald-400: 26 118 88;
+  --blue-400: 44 116 150;
 
-  --on-accent: 58 36 26;
+  --on-accent: 16 40 30;
 
-  --glow-gold: rgba(240, 168, 140, 0.34);
-  --glow-mystic: rgba(166, 194, 220, 0.38);
+  --glow-gold: rgba(104, 198, 156, 0.36);
+  --glow-mystic: rgba(126, 196, 200, 0.36);
 
   /* Pools of colour in the page itself, so the background is a soft field
      rather than a flat wash. */
-  --wash-gold: rgba(238, 178, 150, 0.6);
-  --wash-ember: rgba(214, 176, 184, 0.55);
-  --wash-mystic: rgba(172, 194, 222, 0.5);
+  --wash-gold: rgba(150, 210, 172, 0.55);
+  --wash-ember: rgba(176, 210, 186, 0.5);
+  --wash-mystic: rgba(158, 206, 206, 0.48);
 
-  --scrollbar-thumb: 196 170 164;
+  --scrollbar-thumb: 176 198 180;
 
   /* The clay treatment. `lift` is the cast shadow, `contact` the tight one that
      sits a surface on the page, `sheen` the highlight along its lit top edge. */
-  --clay-lift: rgba(94, 62, 66, 0.30);
-  --clay-contact: rgba(94, 62, 66, 0.16);
-  --clay-far: rgba(94, 62, 66, 0.20);
-  --clay-inset: rgba(120, 88, 88, 0.20);
+  --clay-lift: rgba(46, 76, 62, 0.30);
+  --clay-contact: rgba(46, 76, 62, 0.16);
+  --clay-far: rgba(46, 76, 62, 0.20);
+  --clay-inset: rgba(60, 92, 76, 0.20);
   --clay-sheen: rgba(255, 255, 255, 0.95);
   --clay-top: rgba(255, 255, 255, 0.55);
-  --clay-bottom: rgba(94, 62, 66, 0.07);
-  --extrude-accent: rgb(206 118 88);
-  --extrude-neutral: rgb(206 186 178);
-  --extrude-card: rgb(228 210 202);
-  --extrude-row: rgb(232 216 208);
-  --clay-border: rgba(120, 88, 88, 0.13);
+  --clay-bottom: rgba(46, 76, 62, 0.07);
+  --extrude-accent: rgb(64 162 122);
+  --extrude-neutral: rgb(198 218 198);
+  --extrude-card: rgb(214 230 212);
+  --extrude-row: rgb(222 236 220);
+  --clay-border: rgba(60, 92, 76, 0.13);
 }
 
 /**
@@ -110,61 +110,61 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ink-950: 22 19 22;
-  --ink-900: 41 36 41;
-  --ink-850: 47 41 47;
-  --ink-800: 55 48 54;
-  --ink-700: 68 59 66;
-  --ink-600: 84 73 81;
-  --ink-500: 110 96 106;
+  --ink-950: 16 22 20;
+  --ink-900: 28 38 34;
+  --ink-850: 33 44 39;
+  --ink-800: 40 52 46;
+  --ink-700: 52 66 58;
+  --ink-600: 68 84 74;
+  --ink-500: 92 112 100;
 
-  --slate-50: 250 246 244;
-  --slate-100: 240 234 230;
-  --slate-200: 224 215 210;
-  --slate-300: 196 184 178;
-  --slate-400: 160 146 140;
-  --slate-500: 128 114 110;
-  --slate-600: 100 88 86;
+  --slate-50: 242 250 246;
+  --slate-100: 230 242 236;
+  --slate-200: 212 228 220;
+  --slate-300: 180 200 190;
+  --slate-400: 144 168 156;
+  --slate-500: 112 136 124;
+  --slate-600: 88 108 98;
 
-  --gold-300: 246 202 178;
-  --gold-400: 240 182 152;
-  --gold-500: 232 156 124;
-  --gold-600: 206 130 100;
+  --gold-300: 176 240 212;
+  --gold-400: 138 226 188;
+  --gold-500: 88 204 158;
+  --gold-600: 58 170 128;
 
-  --ember-400: 238 162 138;
-  --ember-500: 226 132 106;
-  --ember-600: 198 104 80;
+  --ember-400: 118 224 198;
+  --ember-500: 70 196 174;
+  --ember-600: 46 162 142;
 
-  --mystic-400: 176 200 226;
-  --mystic-500: 146 178 210;
-  --mystic-600: 116 148 182;
+  --mystic-400: 150 220 230;
+  --mystic-500: 98 192 206;
+  --mystic-600: 68 158 176;
 
-  --emerald-400: 110 214 176;
-  --blue-400: 140 180 226;
+  --emerald-400: 110 224 176;
+  --blue-400: 128 190 220;
 
-  --on-accent: 34 24 20;
+  --on-accent: 12 30 24;
 
-  --glow-gold: rgba(232, 156, 124, 0.28);
-  --glow-mystic: rgba(146, 178, 210, 0.24);
+  --glow-gold: rgba(88, 204, 158, 0.3);
+  --glow-mystic: rgba(98, 192, 206, 0.26);
 
-  --wash-gold: rgba(190, 118, 92, 0.16);
-  --wash-ember: rgba(150, 96, 96, 0.14);
-  --wash-mystic: rgba(96, 124, 160, 0.14);
+  --wash-gold: rgba(60, 150, 112, 0.18);
+  --wash-ember: rgba(46, 120, 104, 0.15);
+  --wash-mystic: rgba(56, 128, 144, 0.15);
 
-  --scrollbar-thumb: 84 73 81;
+  --scrollbar-thumb: 68 84 74;
 
   --clay-lift: rgba(0, 0, 0, 0.5);
   --clay-contact: rgba(0, 0, 0, 0.32);
   --clay-far: rgba(0, 0, 0, 0.38);
   --clay-inset: rgba(0, 0, 0, 0.3);
-  --clay-sheen: rgba(255, 236, 224, 0.09);
-  --clay-top: rgba(255, 236, 224, 0.045);
+  --clay-sheen: rgba(226, 255, 240, 0.09);
+  --clay-top: rgba(226, 255, 240, 0.045);
   --clay-bottom: rgba(0, 0, 0, 0.22);
-  --extrude-accent: rgb(168 96 70);
-  --extrude-neutral: rgb(30 26 30);
-  --extrude-card: rgb(26 22 26);
-  --extrude-row: rgb(32 28 32);
-  --clay-border: rgba(255, 236, 224, 0.06);
+  --extrude-accent: rgb(44 138 104);
+  --extrude-neutral: rgb(20 28 25);
+  --extrude-card: rgb(18 25 22);
+  --extrude-row: rgb(24 32 28);
+  --clay-border: rgba(226, 255, 240, 0.06);
 }
 
 html,
