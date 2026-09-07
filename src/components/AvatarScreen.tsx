@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Coins, Check, Lock, Map, Shirt, Camera, Trophy } from 'lucide-react'
+import { Coins, Map, Shirt, Camera, Trophy } from 'lucide-react'
 import type { AppState } from '../types'
-import { CHARACTER_MODELS, findRank, isModelUnlocked, rankForLevel, nextRank } from '../data/ranks'
+import { rankForLevel, nextRank } from '../data/ranks'
 import { characterById } from '../data/gear'
 import { appearanceFor } from '../lib/appearance'
 import { xpToReachLevel, type LevelInfo } from '../lib/leveling'
 import Avatar3D from './Avatar3D'
 import RankRoadmap from './RankRoadmap'
 import Leaderboard from './Leaderboard'
+import CharacterCards from './CharacterCards'
 
 interface Props {
   state: AppState
@@ -112,7 +112,7 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
           <RankRoadmap level={level} xp={state.player.xp} />
         </section>
       ) : (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <StarterCard
             name={starter.name}
             blurb={starter.blurb}
@@ -120,86 +120,12 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
             onEquip={() => onEquipModel(null)}
           />
 
-          {CHARACTER_MODELS.map((model) => {
-            const owned = state.collection.unlocked.includes(model.id)
-            const rankReached = isModelUnlocked(model, level)
-            const affordable = state.player.coins >= model.price
-            const active = state.collection.active === model.id
-            const modelRank = findRank(model.rankId)
-
-            return (
-              <motion.div
-                key={model.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex gap-4 rounded-2xl border p-3 ${
-                  active ? 'border-gold-500/50 bg-gold-500/5' : 'border-ink-600 bg-ink-850/60'
-                }`}
-              >
-                <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-900">
-                  <img
-                    src={model.previewUrl}
-                    alt={model.name}
-                    loading="lazy"
-                    className={`h-full w-full object-contain ${rankReached ? '' : 'opacity-25 grayscale'}`}
-                  />
-                  {!rankReached && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Lock className="h-6 w-6 text-slate-500" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-1 flex-col justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display font-semibold text-slate-100">{model.name}</p>
-                      <span
-                        className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{ background: `${modelRank.color}22`, color: modelRank.color }}
-                      >
-                        {modelRank.name}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-400">{model.blurb}</p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    {owned ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> Owned
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-sm text-gold-300">
-                        <Coins className="h-3.5 w-3.5" />
-                        {model.price}
-                      </span>
-                    )}
-
-                    {owned ? (
-                      <button
-                        type="button"
-                        onClick={() => onEquipModel(model.id)}
-                        disabled={active}
-                        className="rounded-lg border border-ink-600 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-gold-500/50 hover:text-gold-300 disabled:cursor-default disabled:border-gold-500/50 disabled:text-gold-300"
-                      >
-                        {active ? 'Worn' : 'Wear'}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onBuyModel(model.id)}
-                        disabled={!rankReached || !affordable}
-                        className="rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 px-3 py-1.5 text-xs font-semibold text-onAccent transition hover:opacity-90 disabled:cursor-not-allowed disabled:from-ink-700 disabled:to-ink-700 disabled:text-slate-500"
-                      >
-                        {!rankReached ? `Reach ${modelRank.name}` : affordable ? 'Buy' : 'Not enough coins'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
+          <CharacterCards
+            state={state}
+            level={level}
+            onBuy={onBuyModel}
+            onEquip={onEquipModel}
+          />
         </section>
       )}
     </div>
