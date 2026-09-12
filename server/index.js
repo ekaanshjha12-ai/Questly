@@ -109,6 +109,16 @@ import {
   insertPostImage,
   listFeed,
   softDeletePost,
+  countConversationsStartedSince,
+  countMessagesBy,
+  createConversation,
+  findConversationBetween,
+  getConversation,
+  insertDirectMessage,
+  listConversationsFor,
+  listDirectMessages,
+  markConversationRead,
+  setConversationStatus,
   getState,
   insertSetupToken,
   listAudit,
@@ -1908,6 +1918,201 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
     ip: req.ip,
     detail: `post ${post.id} by ${post.user_id}: ${reason || 'no reason given'}`,
   })
+  res.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
+// Messages
+//
+// One conversation per pair. The first message is a request: until the other
+// person replies or accepts, the one who wrote it cannot send another, which is
+// what keeps a stranger from filling someone's inbox when there is no follow
+// list to keep them out. Every read and write re-checks that the two may still
+// interact.
+//
+// Declining hides the request from the person who declined, and to the one who
+// sent it, it still looks like it is waiting. Nobody is told they were turned
+// down, so declining never invites a "why?". The person who declined can still
+// change their mind: writing back opens the chat.
+// ---------------------------------------------------------------------------
+
+/** How many conversations one person may open with new people in a day. */
+const MAX_NEW_CONVERSATIONS_PER_DAY = 20
+
+/** The person a request was sent to, while it is unanswered (or declined). */
+function isAnswering(row, userId) {
+  return row.status !== 'open' && row.created_by !== userId
+}
+
+/** The person who sent a request that has not been answered yet. */
+function isWaiting(row, userId) {
+  return row.status !== 'open' && row.created_by === userId && countMessagesBy(row.id, userId) > 0
+}
+
+function conversationView(row, viewerId, { unread = 0, lastBody = null, lastUser = null } = {}) {
+  const other = findUserById(row.user_a === viewerId ? row.user_b : row.user_a)
+  return {
+    id: row.id,
+    status: row.status === 'open' ? 'open' : 'request',
+    requestForMe: isAnswering(row, viewerId),
+    other: other ? playerSummary(other) : null,
+    lastMessage: lastBody ? { body: lastBody, mine: lastUser === viewerId } : null,
+    lastMessageAt: row.last_message_at,
+    unread,
+  }
+}
+
+function loadConversation(req, res) {
+  const row = getConversation(String(req.params.id ?? ''))
+  if (!row || (row.user_a !== req.user.id && row.user_b !== req.user.id)) {
+    res.status(404).json({ error: 'No such conversation.' })
+    return null
+  }
+  const otherId = row.user_a === req.user.id ? row.user_b : row.user_a
+  if (interactionBlocker(findUserById(req.user.id), findUserById(otherId))) {
+    res.status(404).json({ error: 'This conversation is no longer available.' })
+    return null
+  }
+  return row
+}
+
+function readMessage(req, res, conversationId) {
+  const message = validateMessage(req.body?.body)
+  if (message.ok) return message.value
+  if (/content filter/.test(message.error)) {
+    audit({ userId: req.user.id, email: req.user.email, event: 'moderation.dm', outcome: 'blocked', ip: req.ip, detail: conversationId })
+  }
+  res.status(400).json({ error: message.error })
+  return null
+}
+
+function refuseWaiting(res) {
+  res.status(409).json({ error: 'Wait for them to accept your request before sending more.', code: 'awaiting_accept' })
+}
+
+app.get('/api/messages', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const conversations = listConversationsFor(viewer.id)
+    .filter((row) => {
+      if (row.status === 'declined' && row.created_by !== viewer.id) return false
+      return !interactionBlocker(viewer, findUserById(row.user_a === viewer.id ? row.user_b : row.user_a))
+    })
+    .map((row) => conversationView(row, viewer.id, { unread: row.unread, lastBody: row.last_body, lastUser: row.last_user }))
+  res.json({
+    conversations,
+    unread: conversations.filter((c) => !c.requestForMe).reduce((sum, c) => sum + c.unread, 0),
+    requests: conversations.filter((c) => c.requestForMe).length,
+  })
+})
+
+/** Whether there is already a conversation with this player, and whether you
+ * could start one — what a card's Message button needs to know. */
+app.get('/api/messages/with/:username', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const target = findUserRowByUsername(String(req.params.username ?? '').replace(/^@+/, '').toLowerCase())
+  const blocker = interactionBlocker(viewer, target)
+  if (blocker) {
+    res.status(404).json({ error: blocker })
+    return
+  }
+  const row = findConversationBetween(viewer.id, target.id)
+  res.json({
+    conversationId: row?.id ?? null,
+    player: playerSummary(target),
+    canStart: levelOf(viewer.id) >= UNLOCKS.message,
+    unlockLevel: UNLOCKS.message,
+  })
+})
+
+app.post('/api/messages/start', requireAuth, throttleChat, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const target = findUserRowByUsername(String(req.body?.username ?? '').replace(/^@+/, '').toLowerCase())
+  const blocker = interactionBlocker(viewer, target)
+  if (blocker) {
+    res.status(404).json({ error: blocker })
+    return
+  }
+
+  let row = findConversationBetween(viewer.id, target.id)
+  if (row && isWaiting(row, viewer.id)) {
+    refuseWaiting(res)
+    return
+  }
+  const body = readMessage(req, res, row?.id ?? null)
+  if (body === null) return
+
+  if (!row) {
+    if (levelOf(viewer.id) < UNLOCKS.message) {
+      res.status(403).json({ error: `Messaging unlocks at level ${UNLOCKS.message}.`, code: 'locked' })
+      return
+    }
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+    if (countConversationsStartedSince(viewer.id, dayAgo) >= MAX_NEW_CONVERSATIONS_PER_DAY) {
+      res.status(429).json({ error: 'You have started a lot of conversations today. Try again tomorrow.' })
+      return
+    }
+    const id = randomUUID()
+    createConversation(id, viewer.id, target.id)
+    row = getConversation(id)
+  } else if (isAnswering(row, viewer.id)) {
+    // Writing back to someone who asked to talk opens the chat.
+    setConversationStatus(row.id, 'open')
+  }
+
+  const messageId = insertDirectMessage(row.id, viewer.id, body)
+  markConversationRead(row.id, viewer.id, messageId)
+  res.status(201).json({ conversation: conversationView(getConversation(row.id), viewer.id, { lastBody: body, lastUser: viewer.id }) })
+})
+
+app.get('/api/messages/:id', requireAuth, throttleSocialRead, (req, res) => {
+  const row = loadConversation(req, res)
+  if (!row) return
+  const after = Math.max(0, Number(req.query.after) || 0)
+  const messages = listDirectMessages(row.id, after).map((m) => ({
+    id: m.id,
+    mine: m.user_id === req.user.id,
+    body: m.body,
+    at: m.created_at,
+  }))
+  if (messages.length) markConversationRead(row.id, req.user.id, messages[messages.length - 1].id)
+  res.json({ conversation: conversationView(row, req.user.id), messages, canSend: !isWaiting(row, req.user.id) })
+})
+
+app.post('/api/messages/:id', requireAuth, throttleChat, (req, res) => {
+  const row = loadConversation(req, res)
+  if (!row) return
+  if (isWaiting(row, req.user.id)) {
+    refuseWaiting(res)
+    return
+  }
+  const body = readMessage(req, res, row.id)
+  if (body === null) return
+  // Replying to a request is accepting it.
+  if (isAnswering(row, req.user.id)) setConversationStatus(row.id, 'open')
+  const id = insertDirectMessage(row.id, req.user.id, body)
+  markConversationRead(row.id, req.user.id, id)
+  res.status(201).json({ message: { id, mine: true, body, at: new Date().toISOString() } })
+})
+
+app.post('/api/messages/:id/accept', requireAuth, throttleChat, (req, res) => {
+  const row = loadConversation(req, res)
+  if (!row) return
+  if (!isAnswering(row, req.user.id)) {
+    res.status(409).json({ error: 'There is no request to accept here.' })
+    return
+  }
+  setConversationStatus(row.id, 'open')
+  res.json({ conversation: conversationView(getConversation(row.id), req.user.id) })
+})
+
+app.post('/api/messages/:id/decline', requireAuth, throttleChat, (req, res) => {
+  const row = loadConversation(req, res)
+  if (!row) return
+  if (!isAnswering(row, req.user.id)) {
+    res.status(409).json({ error: 'There is no request to decline here.' })
+    return
+  }
+  setConversationStatus(row.id, 'declined')
   res.json({ ok: true })
 })
 

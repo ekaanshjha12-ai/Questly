@@ -33,6 +33,7 @@ import ModeSwitch, { ModeWash } from './components/ModeSwitch'
 import SocialHome from './components/social/SocialHome'
 import { useMode, type AppMode } from './hooks/useMode'
 import { useChallenges } from './hooks/useChallenges'
+import { useMessages } from './hooks/useMessages'
 import { formatClock } from './lib/time'
 import { useCelebrations } from './lib/prefs'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -252,6 +253,7 @@ function AuthedApp({
     claimed: state.challengeRewards,
     onReward: grantChallengeReward,
   })
+  const inbox = useMessages({ enabled: user.profileComplete === true, fast: mode === 'social' })
   // Offered once per account, after onboarding has produced the goals it talks about.
   const [tourOpen, setTourOpen] = useState(false)
   // Bumped on every forward step, which is what restarts the burst.
@@ -348,7 +350,7 @@ function AuthedApp({
               <ModeSwitch
                 mode={mode}
                 size={52}
-                badge={mode === 'focus' ? challengeFeed.incomingCount : 0}
+                badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
                 onToggle={(origin) => {
                   if (wash) return
                   setWash({ origin, to: mode === 'social' ? 'focus' : 'social' })
@@ -361,7 +363,7 @@ function AuthedApp({
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
         {mode === 'social' ? (
-          <SocialHome state={state} user={user} challenges={challengeFeed} onSetCard={setCard} />
+          <SocialHome state={state} user={user} challenges={challengeFeed} inbox={inbox} onSetCard={setCard} />
         ) : (
           <>
         {view !== 'home' && (

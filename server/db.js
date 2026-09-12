@@ -311,6 +311,51 @@ db.run(`
   )
 `)
 
+/**
+ * Direct messages.
+ *
+ * One conversation per pair, stored with the two ids in sorted order so the
+ * pair has exactly one row whoever wrote first. A conversation starts as a
+ * request: the person who opened it cannot keep writing into it until the other
+ * side replies or accepts, which is what stops a stranger filling someone's
+ * inbox in a system with no follow list to keep them out.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS conversations (
+    id              TEXT PRIMARY KEY,
+    user_a          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_b          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_by      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    last_message_at TEXT NOT NULL,
+    UNIQUE (user_a, user_b)
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_conversations_a ON conversations(user_a)')
+db.run('CREATE INDEX IF NOT EXISTS idx_conversations_b ON conversations(user_b)')
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS direct_messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body            TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_direct_messages ON direct_messages(conversation_id, id)')
+
+/** How far each person has read, for unread counts. */
+db.run(`
+  CREATE TABLE IF NOT EXISTS conversation_reads (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_read_id    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (conversation_id, user_id)
+  )
+`)
+
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
@@ -906,7 +951,17 @@ export function insertChallengeMessage(challengeId, userId, body) {
   return Number(result.lastInsertRowid)
 }
 
+/** Messages after `afterId` in order; with no `afterId`, the latest `limit`
+ * of them, so a long chat opens on its newest messages rather than its first. */
 export function listChallengeMessages(challengeId, afterId = 0, limit = 100) {
+  if (!afterId) {
+    return db
+      .all('SELECT id, user_id, body, created_at FROM challenge_messages WHERE challenge_id = ? ORDER BY id DESC LIMIT ?', [
+        challengeId,
+        limit,
+      ])
+      .reverse()
+  }
   return db.all(
     'SELECT id, user_id, body, created_at FROM challenge_messages WHERE challenge_id = ? AND id > ? ORDER BY id LIMIT ?',
     [challengeId, afterId, limit],
@@ -1014,4 +1069,93 @@ export function countRecentPosts(userId, sinceIso, withImages = false) {
     `SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND created_at > ?${withImages ? ' AND image_id IS NOT NULL' : ''}`,
     [userId, sinceIso],
   )?.n ?? 0
+}
+
+/* --- direct messages ------------------------------------------------------ */
+
+function pair(x, y) {
+  return x < y ? [x, y] : [y, x]
+}
+
+export function findConversationBetween(x, y) {
+  const [a, b] = pair(x, y)
+  return db.get('SELECT * FROM conversations WHERE user_a = ? AND user_b = ?', [a, b]) ?? null
+}
+
+export function getConversation(id) {
+  return db.get('SELECT * FROM conversations WHERE id = ?', [id]) ?? null
+}
+
+export function createConversation(id, creatorId, otherId) {
+  const [a, b] = pair(creatorId, otherId)
+  const now = new Date().toISOString()
+  db.run(
+    "INSERT INTO conversations (id, user_a, user_b, created_by, status, created_at, last_message_at) VALUES (?, ?, ?, ?, 'request', ?, ?)",
+    [id, a, b, creatorId, now, now],
+  )
+}
+
+export function setConversationStatus(id, status) {
+  db.run('UPDATE conversations SET status = ? WHERE id = ?', [status, id])
+}
+
+/** A conversation's list entry: the other person, the latest message, and how
+ * many messages this viewer has not read. */
+export function listConversationsFor(userId, limit = 100) {
+  return db.all(
+    `SELECT c.*,
+       (SELECT body FROM direct_messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_body,
+       (SELECT user_id FROM direct_messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_user,
+       (SELECT COUNT(*) FROM direct_messages m WHERE m.conversation_id = c.id AND m.user_id != ?
+          AND m.id > COALESCE((SELECT last_read_id FROM conversation_reads r WHERE r.conversation_id = c.id AND r.user_id = ?), 0)) AS unread
+     FROM conversations c
+     WHERE (c.user_a = ? OR c.user_b = ?)
+     ORDER BY c.last_message_at DESC LIMIT ?`,
+    [userId, userId, userId, userId, limit],
+  )
+}
+
+export function insertDirectMessage(conversationId, userId, body) {
+  const now = new Date().toISOString()
+  const result = db.run('INSERT INTO direct_messages (conversation_id, user_id, body, created_at) VALUES (?, ?, ?, ?)', [
+    conversationId,
+    userId,
+    body,
+    now,
+  ])
+  db.run('UPDATE conversations SET last_message_at = ? WHERE id = ?', [now, conversationId])
+  return Number(result.lastInsertRowid)
+}
+
+/** As listChallengeMessages: with no `afterId`, the latest `limit` messages. */
+export function listDirectMessages(conversationId, afterId = 0, limit = 200) {
+  if (!afterId) {
+    return db
+      .all('SELECT id, user_id, body, created_at FROM direct_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?', [
+        conversationId,
+        limit,
+      ])
+      .reverse()
+  }
+  return db.all(
+    'SELECT id, user_id, body, created_at FROM direct_messages WHERE conversation_id = ? AND id > ? ORDER BY id LIMIT ?',
+    [conversationId, afterId, limit],
+  )
+}
+
+export function countMessagesBy(conversationId, userId) {
+  return db.get('SELECT COUNT(*) AS n FROM direct_messages WHERE conversation_id = ? AND user_id = ?', [conversationId, userId])?.n ?? 0
+}
+
+export function markConversationRead(conversationId, userId, lastId) {
+  db.run(
+    `INSERT INTO conversation_reads (conversation_id, user_id, last_read_id) VALUES (?, ?, ?)
+     ON CONFLICT(conversation_id, user_id) DO UPDATE SET last_read_id = MAX(last_read_id, excluded.last_read_id)`,
+    [conversationId, userId, lastId],
+  )
+}
+
+/** Requests someone has started in the last day, for the cap on cold messages. */
+export function countConversationsStartedSince(userId, sinceIso) {
+  return db.get('SELECT COUNT(*) AS n FROM conversations WHERE created_by = ? AND created_at > ?', [userId, sinceIso])?.n ?? 0
 }

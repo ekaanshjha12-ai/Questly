@@ -708,3 +708,64 @@ export function fetchUnlocks() {
     '/api/social/unlocks',
   )
 }
+
+/* --- messages ---------------------------------------------------------------- */
+
+export interface Conversation {
+  id: string
+  /** `request` until the person it was sent to replies or accepts. */
+  status: 'request' | 'open'
+  /** A request someone sent you, waiting on your answer. */
+  requestForMe: boolean
+  other: PlayerSummary | null
+  lastMessage: { body: string; mine: boolean } | null
+  lastMessageAt: string
+  unread: number
+}
+
+export interface DirectMessage {
+  id: number
+  mine: boolean
+  body: string
+  at: string
+}
+
+export function fetchConversations() {
+  return request<{ conversations: Conversation[]; unread: number; requests: number }>('/api/messages')
+}
+
+/** Whether you already have a conversation with this player, and whether you
+ * could start one. */
+export function lookupConversation(username: string) {
+  return request<{ conversationId: string | null; player: PlayerSummary; canStart: boolean; unlockLevel: number }>(
+    `/api/messages/with/${encodeURIComponent(username)}`,
+  )
+}
+
+export function fetchConversation(id: string, after = 0) {
+  return request<{ conversation: Conversation; messages: DirectMessage[]; canSend: boolean }>(
+    `/api/messages/${encodeURIComponent(id)}?after=${after}`,
+  )
+}
+
+export function startConversation(username: string, body: string) {
+  return request<{ conversation: Conversation }>('/api/messages/start', {
+    method: 'POST',
+    body: JSON.stringify({ username, body }),
+  })
+}
+
+export function sendDirectMessage(id: string, body: string) {
+  return request<{ message: DirectMessage }>(`/api/messages/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
+export function acceptConversation(id: string) {
+  return request<{ conversation: Conversation }>(`/api/messages/${encodeURIComponent(id)}/accept`, { method: 'POST' })
+}
+
+export function declineConversation(id: string) {
+  return request<{ ok: true }>(`/api/messages/${encodeURIComponent(id)}/decline`, { method: 'POST' })
+}

@@ -1,30 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Ban, Check, Flag, Loader2, Swords, UserRound, X } from 'lucide-react'
+import { Ban, Check, Flag, Loader2, MessageCircle, Swords, UserRound, X } from 'lucide-react'
 import { blockPlayer, fetchPlayer, reportPlayer, type Challenge, type PublicPlayer } from '../lib/api'
 import { publicCardData, publicDefaultCard } from '../lib/card'
 import ProfileCard from './ProfileCard'
 import ChallengeComposer from './ChallengeComposer'
 import { StatusPill } from './ChallengeParts'
+import { ConversationSheet } from './social/Conversation'
 
 /**
  * Someone else's card, with the two things you can do about it right there:
  * view their profile, or challenge them.
  *
  * Challenge is the primary action and needs nothing first — no follow, no
- * friend request. The server still decides whether the two of you can
- * interact at all, and this sheet just shows what it says.
+ * friend request. Message sits just under the two. The server still decides
+ * whether the two of you can interact at all, and this sheet just shows what
+ * it says.
  */
 export default function PlayerCardSheet({
   username,
   myName,
   onClose,
   onChallengeSent,
+  onMessage,
 }: {
   username: string
   myName: string
   onClose: () => void
   onChallengeSent?: (challenge: Challenge) => void
+  /** Where Message goes when the caller already has the conversation open.
+   * Without it, the conversation opens as a sheet over this one. */
+  onMessage?: () => void
 }) {
   const [player, setPlayer] = useState<PublicPlayer | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +42,7 @@ export default function PlayerCardSheet({
   const [reported, setReported] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
   const [blocked, setBlocked] = useState(false)
+  const [messaging, setMessaging] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -48,10 +55,10 @@ export default function PlayerCardSheet({
   }, [username])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !composing && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !composing && !messaging && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [composing, onClose])
+  }, [composing, messaging, onClose])
 
   const data = useMemo(() => (player ? publicCardData(player) : null), [player])
   const design = useMemo(() => player?.card ?? publicDefaultCard(), [player])
@@ -133,6 +140,15 @@ export default function PlayerCardSheet({
                   Challenge
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => (onMessage ? onMessage() : setMessaging(true))}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-600 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-ink-500 hover:text-slate-100"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Message
+              </button>
 
               {sent ? (
                 <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5">
@@ -231,6 +247,10 @@ export default function PlayerCardSheet({
             }}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {messaging && player && <ConversationSheet username={player.username} player={player} onClose={() => setMessaging(false)} />}
       </AnimatePresence>
     </>
   )

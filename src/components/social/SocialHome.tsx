@@ -1,27 +1,31 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { IdCard, Lock, Newspaper, Swords, Unlock } from 'lucide-react'
+import { IdCard, Lock, MessageCircle, Newspaper, Swords, Unlock } from 'lucide-react'
 import type { AppState, CardDesign } from '../../types'
 import type { AuthUser, Challenge } from '../../lib/api'
 import { cardData } from '../../lib/card'
 import { UNLOCKS, UNLOCK_LIST } from '../../lib/social'
+import type { Inbox } from '../../hooks/useMessages'
 import FeedScreen from './FeedScreen'
+import MessagesScreen from './MessagesScreen'
 import ChallengesScreen from '../ChallengesScreen'
 import CardEditor from '../CardEditor'
 
 /**
- * The social side of Questly: the feed, challenges, and your own card.
+ * The social side of Questly: the feed, challenges, messages, and your own
+ * card.
  *
  * No followers and no following — everyone in your age band shares one feed,
- * and the way to connect with a person is to open their card and challenge
- * them.
+ * and the way to connect with a person is to open their card: challenge them,
+ * or message them.
  */
 
-export type SocialTab = 'feed' | 'challenges' | 'card'
+export type SocialTab = 'feed' | 'challenges' | 'messages' | 'card'
 
 const TABS: { id: SocialTab; label: string; icon: typeof Newspaper }[] = [
   { id: 'feed', label: 'Feed', icon: Newspaper },
   { id: 'challenges', label: 'Challenges', icon: Swords },
+  { id: 'messages', label: 'Messages', icon: MessageCircle },
   { id: 'card', label: 'My card', icon: IdCard },
 ]
 
@@ -29,11 +33,13 @@ export default function SocialHome({
   state,
   user,
   challenges,
+  inbox,
   onSetCard,
   startSharing,
 }: {
   state: AppState
   user: AuthUser
+  inbox: Inbox
   challenges: {
     challenges: Challenge[] | null
     error: string | null
@@ -50,33 +56,40 @@ export default function SocialHome({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-ink-600 bg-ink-850 p-1">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            aria-pressed={tab === id}
-            className={`relative flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${
-              tab === id ? 'text-onAccent' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {tab === id && (
-              <motion.span
-                layoutId="social-tab"
-                className="absolute inset-0 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500"
-                transition={{ type: 'spring', stiffness: 400, damping: 34 }}
-              />
-            )}
-            <Icon className="relative h-4 w-4" />
-            <span className="relative">{label}</span>
-            {id === 'challenges' && challenges.incomingCount > 0 && (
-              <span className="relative flex h-4 min-w-4 items-center justify-center rounded-full bg-ember-500 px-1 text-[9px] font-bold text-onAccent">
-                {challenges.incomingCount}
+      {/* Four tabs: on a phone, icon over label so each fits its quarter. */}
+      <div className="grid grid-cols-4 gap-1 rounded-2xl border border-ink-600 bg-ink-850 p-1">
+        {TABS.map(({ id, label, icon: Icon }) => {
+          const badge = id === 'challenges' ? challenges.incomingCount : id === 'messages' ? inbox.unread + inbox.requests : 0
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              aria-pressed={tab === id}
+              aria-label={badge > 0 ? `${label}, ${badge} new` : label}
+              className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:py-2.5 sm:text-xs ${
+                tab === id ? 'text-onAccent' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {tab === id && (
+                <motion.span
+                  layoutId="social-tab"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500"
+                  transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+                />
+              )}
+              <span className="relative">
+                <Icon className="h-4 w-4" />
+                {badge > 0 && (
+                  <span className="absolute -right-2.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-ember-500 px-1 text-[8px] font-bold leading-none text-onAccent ring-2 ring-ink-850">
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
               </span>
-            )}
-          </button>
-        ))}
+              <span className="relative">{label}</span>
+            </button>
+          )
+        })}
       </div>
 
       {tab === 'feed' && <FeedScreen state={state} myName={state.player.name} startSharing={startSharing} />}
@@ -90,6 +103,8 @@ export default function SocialHome({
           onUpsert={challenges.upsert}
         />
       )}
+
+      {tab === 'messages' && <MessagesScreen inbox={inbox} level={level} myName={state.player.name} />}
 
       {tab === 'card' && (
         <div className="space-y-4">
