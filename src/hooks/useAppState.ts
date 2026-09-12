@@ -16,6 +16,8 @@ import type {
   PlanItem,
   QuestPool,
   Todo,
+  Habit,
+  MoodSlot,
   VerificationKind,
 } from '../types'
 import { hydrate, saveCachedState } from '../lib/storage'
@@ -76,6 +78,13 @@ type Action =
     }
   | { type: 'DELETE_SESSION'; sessionId: string }
   | { type: 'VERIFY_QUEST'; questId: string; kind: VerificationKind; note: string }
+  | { type: 'ADD_HABIT'; name: string; color: string }
+  | { type: 'RENAME_HABIT'; habitId: string; name: string }
+  | { type: 'RECOLOR_HABIT'; habitId: string; color: string }
+  | { type: 'DELETE_HABIT'; habitId: string }
+  | { type: 'TOGGLE_HABIT_MARK'; habitId: string; date: string }
+  /** `moodId: null` clears the slot, which is how you undo a mistap. */
+  | { type: 'SET_MOOD'; date: string; slot: MoodSlot; moodId: string | null }
   | { type: 'HYDRATE'; state: AppState }
 
 export const TODO_XP = 10
@@ -116,6 +125,16 @@ function makeGoal(title: string, category: GoalCategory, detail?: string): Goal 
     title: title.trim(),
     category,
     ...(trimmedDetail ? { detail: trimmedDetail } : {}),
+    createdAt: new Date().toISOString(),
+    archived: false,
+  }
+}
+
+function makeHabit(name: string, color: string): Habit {
+  return {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    color,
     createdAt: new Date().toISOString(),
     archived: false,
   }
@@ -263,6 +282,64 @@ function reducer(state: AppState, action: Action): AppState {
         todos: state.todos.filter((t) => t.id !== action.todoId),
         schedule: state.schedule.filter((e) => !(e.refType === 'todo' && e.refId === action.todoId)),
       }
+
+    case 'ADD_HABIT': {
+      const name = action.name.trim()
+      if (!name) return state
+      return { ...state, habits: [...state.habits, makeHabit(name, action.color)] }
+    }
+
+    case 'RENAME_HABIT': {
+      const name = action.name.trim()
+      if (!name) return state
+      return {
+        ...state,
+        habits: state.habits.map((h) => (h.id === action.habitId ? { ...h, name } : h)),
+      }
+    }
+
+    case 'RECOLOR_HABIT':
+      return {
+        ...state,
+        habits: state.habits.map((h) =>
+          h.id === action.habitId ? { ...h, color: action.color } : h,
+        ),
+      }
+
+    case 'DELETE_HABIT': {
+      // The marks go with it. Keeping them would quietly resurrect the row the
+      // next time someone reused the id, and orphaned marks are dead weight in
+      // every save from then on.
+      const { [action.habitId]: _dropped, ...marks } = state.habitMarks
+      return {
+        ...state,
+        habits: state.habits.filter((h) => h.id !== action.habitId),
+        habitMarks: marks,
+      }
+    }
+
+    case 'TOGGLE_HABIT_MARK': {
+      const marked = state.habitMarks[action.habitId] ?? []
+      const has = marked.includes(action.date)
+      const next = has
+        ? marked.filter((d) => d !== action.date)
+        : [...marked, action.date].sort()
+      return { ...state, habitMarks: { ...state.habitMarks, [action.habitId]: next } }
+    }
+
+    case 'SET_MOOD': {
+      const day = { ...(state.moods[action.date] ?? {}) }
+      if (action.moodId === null) delete day[action.slot]
+      else day[action.slot] = action.moodId
+
+      // An emptied day is removed rather than left as `{}`, so a month of
+      // tapping and untapping does not leave the save full of blank records.
+      const moods = { ...state.moods }
+      if (Object.keys(day).length) moods[action.date] = day
+      else delete moods[action.date]
+
+      return { ...state, moods }
+    }
 
     case 'CLEAR_DONE_TODOS': {
       const cleared = new Set(state.todos.filter((t) => t.done).map((t) => t.id))
@@ -718,6 +795,30 @@ export function useAppState(
     dispatch({ type: 'CLEAR_DONE_TODOS' })
   }, [])
 
+  const addHabit = useCallback((name: string, color: string) => {
+    dispatch({ type: 'ADD_HABIT', name, color })
+  }, [])
+
+  const renameHabit = useCallback((habitId: string, name: string) => {
+    dispatch({ type: 'RENAME_HABIT', habitId, name })
+  }, [])
+
+  const recolorHabit = useCallback((habitId: string, color: string) => {
+    dispatch({ type: 'RECOLOR_HABIT', habitId, color })
+  }, [])
+
+  const deleteHabit = useCallback((habitId: string) => {
+    dispatch({ type: 'DELETE_HABIT', habitId })
+  }, [])
+
+  const toggleHabitMark = useCallback((habitId: string, date: string) => {
+    dispatch({ type: 'TOGGLE_HABIT_MARK', habitId, date })
+  }, [])
+
+  const setMood = useCallback((date: string, slot: MoodSlot, moodId: string | null) => {
+    dispatch({ type: 'SET_MOOD', date, slot, moodId })
+  }, [])
+
   const scheduleTask = useCallback(
     (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => {
       dispatch({ type: 'SCHEDULE_TASK', refType, refId, date, block })
@@ -846,6 +947,12 @@ export function useAppState(
     toggleTodo,
     deleteTodo,
     clearDoneTodos,
+    addHabit,
+    renameHabit,
+    recolorHabit,
+    deleteHabit,
+    toggleHabitMark,
+    setMood,
     scheduleTask,
     moveScheduleEntry,
     unschedule,

@@ -221,6 +221,35 @@ export interface SuccessOutlook {
   createdAt: string
 }
 
+/**
+ * A habit the user tracks by hand, ticked day by day.
+ *
+ * Deliberately separate from goals and quests. Those are generated, carry XP
+ * and are marked complete through the app's own machinery; a habit is a row the
+ * user wrote themselves and ticks themselves, and nothing else touches it.
+ */
+export interface Habit {
+  id: string
+  name: string
+  /** Key into HABIT_COLORS — stored as a key rather than a hex value so the
+   * palette can be adjusted later without rewriting everyone's saved habits. */
+  color: string
+  createdAt: string
+  archived: boolean
+}
+
+/** Habit id → the days it was ticked, as `YYYY-MM-DD`.
+ *
+ * A set of ticked days per habit rather than a row per day: the grid is mostly
+ * empty for most people, and storing only the marks keeps a year of tracking to
+ * a few kilobytes instead of a few hundred. */
+export type HabitMarks = Record<string, string[]>
+
+export type MoodSlot = 'am' | 'pm'
+
+/** `YYYY-MM-DD` → the mood recorded for each half of that day. */
+export type MoodLog = Record<string, Partial<Record<MoodSlot, string>>>
+
 export interface Achievement {
   id: string
   title: string
@@ -244,4 +273,8 @@ export interface AppState {
   outlook: SuccessOutlook | null
   collection: Collection
   progression: Progression
+  /** Hand-tracked habits and their ticks. */
+  habits: Habit[]
+  habitMarks: HabitMarks
+  moods: MoodLog
 }

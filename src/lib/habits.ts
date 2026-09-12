@@ -23,8 +23,10 @@ export interface DayPoint {
   verified: number
   todos: number
   sessions: number
+  /** Hand-ticked habit boxes. */
+  habits: number
   focusMs: number
-  /** Quests + to-dos + sessions. What "did I show up" means here. */
+  /** Quests + to-dos + sessions + habit ticks. What "did I show up" means. */
   total: number
 }
 
@@ -36,6 +38,7 @@ function emptyDay(date: Date): DayPoint {
     verified: 0,
     todos: 0,
     sessions: 0,
+    habits: 0,
     focusMs: 0,
     total: 0,
   }
@@ -89,6 +92,23 @@ export function dailySeries(state: AppState, days: number, now: Date = new Date(
       day.sessions++
       day.focusMs += Math.max(0, session.durationMs)
       day.total++
+    }
+  }
+
+  // Hand-ticked habits count the same as anything else the app tracks — they
+  // are days the user showed up, and leaving them out would make the graphs
+  // disagree with the grid printed directly above them.
+  //
+  // Marks are already stored as day keys, so they land on a bucket without a
+  // Date round-trip. Ticks on a deleted habit cannot appear: DELETE_HABIT drops
+  // that habit's marks with it.
+  for (const marks of Object.values(state.habitMarks ?? {})) {
+    for (const mark of marks) {
+      const point = byDate.get(mark)
+      if (point) {
+        point.habits++
+        point.total++
+      }
     }
   }
 

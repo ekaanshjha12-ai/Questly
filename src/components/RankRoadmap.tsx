@@ -61,8 +61,8 @@ function RankNode({
         disabled={!onSelect}
         className="group relative z-10 flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 transition disabled:cursor-default"
         style={{
-          borderColor: reached ? rank.color : '#2c3242',
-          background: state === 'current' ? `${rank.color}22` : '#161a24',
+          borderColor: reached ? rank.color : 'rgb(var(--ink-600))',
+          background: state === 'current' ? `${rank.color}22` : 'rgb(var(--ink-900))',
           boxShadow: state === 'current' ? `0 0 24px -4px ${rank.color}` : 'none',
         }}
       >
@@ -89,7 +89,7 @@ function RankNode({
         <div className="flex items-center gap-2">
           <p
             className="font-display text-base font-semibold"
-            style={{ color: reached ? rank.color : '#5b6479' }}
+            style={{ color: reached ? rank.color : 'rgb(var(--slate-500))' }}
           >
             {rank.name}
           </p>

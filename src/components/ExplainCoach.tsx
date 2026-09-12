@@ -37,8 +37,8 @@ function errorText(err: unknown): string {
 }
 
 function scoreColour(score: number): string {
-  if (score >= 85) return '#8fe388'
-  if (score >= 65) return '#7fd3f0'
+  if (score >= 85) return 'rgb(var(--gold-500))'
+  if (score >= 65) return 'rgb(var(--gold-400))'
   if (score >= 45) return '#e0c56b'
   if (score >= 25) return '#e09a5a'
   return '#e0625a'
@@ -110,10 +110,10 @@ function VoiceField({
 function ReportView({ report, onDone }: { report: ExplainReport; onDone: () => void }) {
   const colour = scoreColour(report.score)
   const sections: { title: string; items: string[]; icon: typeof Check; tone: string }[] = [
-    { title: 'What you had solid', items: report.strengths, icon: Check, tone: '#8fe388' },
+    { title: 'What you had solid', items: report.strengths, icon: Check, tone: 'rgb(var(--gold-400))' },
     { title: 'What was missing', items: report.gaps, icon: Target, tone: '#e0c56b' },
     { title: 'What you had wrong', items: report.misconceptions, icon: AlertTriangle, tone: '#e0625a' },
-    { title: 'Study next', items: report.nextSteps, icon: Lightbulb, tone: '#7fd3f0' },
+    { title: 'Study next', items: report.nextSteps, icon: Lightbulb, tone: 'rgb(var(--slate-200))' },
   ]
 
   return (
@@ -123,7 +123,7 @@ function ReportView({ report, onDone }: { report: ExplainReport; onDone: () => v
 
         <div className="relative mx-auto mt-3 h-28 w-28">
           <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#2c3242" strokeWidth="9" />
+            <circle cx="50" cy="50" r="42" fill="none" stroke="rgb(var(--ink-700))" strokeWidth="9" />
             <motion.circle
               cx="50"
               cy="50"

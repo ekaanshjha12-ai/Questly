@@ -43,6 +43,12 @@ export default {
           600: 'rgb(var(--ember-600) / <alpha-value>)',
         },
         mystic: {
+          // 100–300 were used by a dozen components before they existed here,
+          // so those classes silently generated nothing and the text fell back
+          // to whatever it inherited.
+          100: 'rgb(var(--mystic-100) / <alpha-value>)',
+          200: 'rgb(var(--mystic-200) / <alpha-value>)',
+          300: 'rgb(var(--mystic-300) / <alpha-value>)',
           400: 'rgb(var(--mystic-400) / <alpha-value>)',
           500: 'rgb(var(--mystic-500) / <alpha-value>)',
           600: 'rgb(var(--mystic-600) / <alpha-value>)',

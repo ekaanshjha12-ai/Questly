@@ -22,153 +22,162 @@
  */
 
 /**
- * Light: soft clay.
+ * Light: white, black and green.
  *
- * A dusty mauve page with cream surfaces floating above it, peach and powder
- * blue as the two accents. Depth comes from diffuse shadow rather than outline,
- * so borders are nearly invisible and do the work of a seam rather than a frame.
+ * The neutrals are true neutrals — no tint. Everything that is not a colour
+ * decision is black, white or a grey between them, and green is the only hue on
+ * the page. That is what keeps the green meaningful: when the surfaces were
+ * green-tinted too, an accent had nothing to stand out against.
+ *
+ * The page sits a step below white so the cards, which are white, have
+ * something to rise off. Depth is still shadow, now plain black shadow.
  */
 :root,
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --ink-950: 186 203 189;
-  --ink-900: 250 253 249;
-  --ink-850: 246 251 245;
-  --ink-800: 236 245 234;
-  --ink-700: 220 235 219;
-  --ink-600: 202 224 202;
-  --ink-500: 168 200 170;
+  --ink-950: 230 230 230;
+  --ink-900: 255 255 255;
+  --ink-850: 250 250 250;
+  --ink-800: 241 241 241;
+  --ink-700: 226 226 226;
+  --ink-600: 210 210 210;
+  --ink-500: 176 176 176;
 
-  /* Warm near-black rather than grey — a neutral grey reads as cold and dirty
-     against cream. */
-  --slate-50: 26 42 34;
-  --slate-100: 36 56 46;
-  --slate-200: 52 76 64;
-  --slate-300: 78 104 90;
-  --slate-400: 112 140 124;
-  --slate-500: 140 166 150;
-  --slate-600: 170 192 178;
+  --slate-50: 10 10 10;
+  --slate-100: 23 23 23;
+  --slate-200: 38 38 38;
+  --slate-300: 64 64 64;
+  --slate-400: 96 96 96;
+  --slate-500: 124 124 124;
+  --slate-600: 163 163 163;
 
-  /* Peach. 300 and 400 carry text so they are darkened to stay legible on
-     cream; 500 and 600 are fills and stay soft. */
-  --gold-300: 62 122 42;
-  --gold-400: 82 148 56;
-  --gold-500: 150 222 132;
-  --gold-600: 116 196 96;
+  /* Green. 300 and 400 carry text, so they are the deep greens that stay
+     legible on white; 500 and 600 are fills and stay bright. */
+  --gold-300: 22 101 52;
+  --gold-400: 21 128 61;
+  --gold-500: 74 222 128;
+  --gold-600: 34 197 94;
 
-  /* Coral — the warmer, deeper end of the same family. */
-  --ember-400: 74 138 54;
-  --ember-500: 134 214 118;
-  --ember-600: 96 176 78;
+  --ember-400: 22 101 52;
+  --ember-500: 34 197 94;
+  --ember-600: 22 163 74;
 
-  /* Powder blue, the counterweight that stops the whole thing being one hue. */
-  --mystic-400: 70 136 92;
-  --mystic-500: 160 216 176;
-  --mystic-600: 112 180 132;
+  /* The neutral accent: black here, white in the dark theme. It marks things
+     as done or selected without spending the green on them, so green keeps
+     meaning "act on this". */
+  --mystic-100: 10 10 10;
+  --mystic-200: 23 23 23;
+  --mystic-300: 38 38 38;
+  --mystic-400: 64 64 64;
+  --mystic-500: 23 23 23;
+  --mystic-600: 10 10 10;
 
-  --emerald-400: 70 140 60;
-  --blue-400: 44 116 150;
+  --emerald-400: 21 128 61;
+  --blue-400: 64 64 64;
 
-  --on-accent: 16 40 30;
+  --on-accent: 0 0 0;
 
-  --glow-gold: rgba(150, 222, 132, 0.42);
-  --glow-mystic: rgba(160, 216, 176, 0.4);
+  --glow-gold: rgba(74, 222, 128, 0.4);
+  --glow-mystic: rgba(0, 0, 0, 0.12);
 
-  /* Pools of colour in the page itself, so the background is a soft field
-     rather than a flat wash. */
-  --wash-gold: rgba(168, 226, 150, 0.55);
-  --wash-ember: rgba(186, 224, 170, 0.5);
-  --wash-mystic: rgba(174, 218, 186, 0.48);
+  /* One green pool and one white one. The page reads as a lit grey field with a
+     hint of the accent, not as a green background. */
+  --wash-gold: rgba(74, 222, 128, 0.16);
+  --wash-ember: rgba(34, 197, 94, 0.07);
+  --wash-mystic: rgba(255, 255, 255, 0.7);
 
-  --scrollbar-thumb: 176 198 180;
+  --scrollbar-thumb: 190 190 190;
 
-  /* The clay treatment. `lift` is the cast shadow, `contact` the tight one that
-     sits a surface on the page, `sheen` the highlight along its lit top edge. */
-  --clay-lift: rgba(20, 40, 30, 0.55);
-  --clay-contact: rgba(20, 40, 30, 0.4);
-  --clay-far: rgba(16, 34, 26, 0.44);
-  --clay-inset: rgba(28, 54, 42, 0.4);
-  --clay-sheen: rgba(255, 255, 255, 0.95);
-  --clay-top: rgba(255, 255, 255, 0.55);
-  --clay-bottom: rgba(20, 40, 30, 0.16);
-  --extrude-accent: rgb(112 186 92);
-  --extrude-neutral: rgb(170 194 172);
-  --extrude-card: rgb(178 200 180);
-  --extrude-row: rgb(192 212 192);
-  --icon-shadow: rgba(16, 34, 26, 0.5);
-  --icon-sheen: rgba(255, 255, 255, 0.85);
-  --clay-border: rgba(60, 92, 76, 0.13);
+  --clay-lift: rgba(0, 0, 0, 0.4);
+  --clay-contact: rgba(0, 0, 0, 0.28);
+  --clay-far: rgba(0, 0, 0, 0.32);
+  --clay-inset: rgba(0, 0, 0, 0.24);
+  --clay-sheen: rgba(255, 255, 255, 1);
+  --clay-top: rgba(255, 255, 255, 0.7);
+  --clay-bottom: rgba(0, 0, 0, 0.07);
+  --extrude-accent: rgb(22 163 74);
+  --extrude-neutral: rgb(196 196 196);
+  --extrude-card: rgb(200 200 200);
+  --extrude-row: rgb(212 212 212);
+  --icon-shadow: rgba(0, 0, 0, 0.4);
+  --icon-sheen: rgba(255, 255, 255, 0.9);
+  --clay-border: rgba(0, 0, 0, 0.08);
 }
 
 /**
- * Dark: the same world at night.
+ * Dark: black, white and green.
  *
- * Not an inversion — the hues are kept and the lightness re-stepped, so peach
- * stays peach and the blue stays blue. Shadow cannot create depth on a dark
- * ground the way it does on a light one, so here the top edge does more of the
- * work and the cast shadow less.
+ * Near-black rather than pure black for the surfaces, so a card can be lighter
+ * than the page and still read as black — pure #000 everywhere leaves nothing
+ * for depth to work with. Text is plain white. Shadow does less on a dark
+ * ground, so the lit top edge carries more of the depth.
  */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ink-950: 16 22 20;
-  --ink-900: 28 38 34;
-  --ink-850: 33 44 39;
-  --ink-800: 40 52 46;
-  --ink-700: 52 66 58;
-  --ink-600: 68 84 74;
-  --ink-500: 92 112 100;
+  --ink-950: 11 11 11;
+  --ink-900: 20 20 20;
+  --ink-850: 24 24 24;
+  --ink-800: 32 32 32;
+  --ink-700: 44 44 44;
+  --ink-600: 58 58 58;
+  --ink-500: 84 84 84;
 
-  --slate-50: 242 250 246;
-  --slate-100: 230 242 236;
-  --slate-200: 212 228 220;
-  --slate-300: 180 200 190;
-  --slate-400: 144 168 156;
-  --slate-500: 112 136 124;
-  --slate-600: 88 108 98;
+  --slate-50: 255 255 255;
+  --slate-100: 245 245 245;
+  --slate-200: 229 229 229;
+  --slate-300: 200 200 200;
+  --slate-400: 163 163 163;
+  --slate-500: 128 128 128;
+  --slate-600: 92 92 92;
 
-  --gold-300: 214 250 198;
-  --gold-400: 184 244 168;
-  --gold-500: 150 234 132;
-  --gold-600: 118 208 100;
+  --gold-300: 187 247 208;
+  --gold-400: 134 239 172;
+  --gold-500: 74 222 128;
+  --gold-600: 34 197 94;
 
-  --ember-400: 170 240 156;
-  --ember-500: 134 226 118;
-  --ember-600: 104 198 90;
+  --ember-400: 74 222 128;
+  --ember-500: 34 197 94;
+  --ember-600: 22 163 74;
 
-  --mystic-400: 182 236 202;
-  --mystic-500: 146 218 172;
-  --mystic-600: 112 186 140;
+  /* White for text; a mid grey for fills, because "done" boxes draw a white
+     tick on top of mystic-500 and a white fill would swallow it. */
+  --mystic-100: 255 255 255;
+  --mystic-200: 245 245 245;
+  --mystic-300: 229 229 229;
+  --mystic-400: 212 212 212;
+  --mystic-500: 72 72 72;
+  --mystic-600: 52 52 52;
 
-  --emerald-400: 150 240 140;
-  --blue-400: 128 190 220;
+  --emerald-400: 74 222 128;
+  --blue-400: 212 212 212;
 
-  --on-accent: 12 30 24;
+  --on-accent: 0 0 0;
 
-  --glow-gold: rgba(150, 234, 132, 0.38);
-  --glow-mystic: rgba(146, 218, 172, 0.32);
+  --glow-gold: rgba(74, 222, 128, 0.35);
+  --glow-mystic: rgba(255, 255, 255, 0.12);
 
-  --wash-gold: rgba(96, 190, 84, 0.2);
-  --wash-ember: rgba(86, 176, 76, 0.16);
-  --wash-mystic: rgba(96, 170, 120, 0.16);
+  --wash-gold: rgba(74, 222, 128, 0.1);
+  --wash-ember: rgba(34, 197, 94, 0.05);
+  --wash-mystic: rgba(255, 255, 255, 0.03);
 
-  --scrollbar-thumb: 68 84 74;
+  --scrollbar-thumb: 64 64 64;
 
-  --clay-lift: rgba(0, 0, 0, 0.78);
-  --clay-contact: rgba(0, 0, 0, 0.6);
-  --clay-far: rgba(0, 0, 0, 0.68);
-  --clay-inset: rgba(0, 0, 0, 0.44);
-  --clay-sheen: rgba(226, 255, 240, 0.09);
-  --clay-top: rgba(226, 255, 240, 0.045);
-  --clay-bottom: rgba(0, 0, 0, 0.3);
-  --extrude-accent: rgb(96 176 82);
-  --extrude-neutral: rgb(20 28 25);
-  --extrude-card: rgb(10 15 13);
-  --extrude-row: rgb(14 20 17);
-  --icon-shadow: rgba(0, 0, 0, 0.78);
-  --icon-sheen: rgba(226, 255, 240, 0.16);
-  --clay-border: rgba(226, 255, 240, 0.06);
+  --clay-lift: rgba(0, 0, 0, 0.85);
+  --clay-contact: rgba(0, 0, 0, 0.65);
+  --clay-far: rgba(0, 0, 0, 0.75);
+  --clay-inset: rgba(0, 0, 0, 0.5);
+  --clay-sheen: rgba(255, 255, 255, 0.08);
+  --clay-top: rgba(255, 255, 255, 0.035);
+  --clay-bottom: rgba(0, 0, 0, 0.35);
+  --extrude-accent: rgb(22 140 66);
+  --extrude-neutral: rgb(6 6 6);
+  --extrude-card: rgb(0 0 0);
+  --extrude-row: rgb(4 4 4);
+  --icon-shadow: rgba(0, 0, 0, 0.8);
+  --icon-sheen: rgba(255, 255, 255, 0.14);
+  --clay-border: rgba(255, 255, 255, 0.07);
 }
 
 html,
@@ -214,7 +223,7 @@ body {
 @media (hover: hover) and (pointer: fine) {
   body {
     cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%2314301f' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%2314301f' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%238fe388' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23f4faf5' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%238fe388' stroke='%2314301f' stroke-width='1.7'/%3E%3C/svg%3E")
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%230a0a0a' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%230a0a0a' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%23ffffff' stroke='%230a0a0a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%234ade80' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%234ade80' stroke='%230a0a0a' stroke-width='1.7'/%3E%3C/svg%3E")
         3 3,
       auto;
   }
@@ -232,7 +241,7 @@ body {
   input[type='radio'],
   input[type='file'] {
     cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%2314301f' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%2314301f' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%238fe388' stroke='%2314301f' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%23f4faf5' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23f4faf5' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%23f4faf5' stroke='%2314301f' stroke-width='1.7'/%3E%3C/svg%3E")
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%230a0a0a' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%230a0a0a' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%234ade80' stroke='%230a0a0a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%23ffffff' stroke='%230a0a0a' stroke-width='1.7'/%3E%3C/svg%3E")
         3 3,
       pointer;
   }

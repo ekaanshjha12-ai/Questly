@@ -43,6 +43,9 @@ export function defaultState(): AppState {
       level: 1,
       proofs: 0,
     },
+    habits: [],
+    habitMarks: {},
+    moods: {},
   }
 }
 

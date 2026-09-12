@@ -14,7 +14,7 @@ import {
   Quote,
   RefreshCw,
 } from 'lucide-react'
-import type { AppState, SuccessOutlook } from '../types'
+import type { AppState, MoodSlot, SuccessOutlook } from '../types'
 import { ApiError, analyseOutlook } from '../lib/api'
 import { computeStats, evidenceFor, formatFocusTotal, goalProgress } from '../lib/progress'
 import Achievements from './Achievements'
@@ -32,12 +32,24 @@ interface Props {
   state: AppState
   achievements: AchievementView[]
   onSetOutlook: (outlook: Omit<SuccessOutlook, 'createdAt'>) => void
+  habitActions: HabitActions
+}
+
+/** Bundled rather than spread across Props: they belong to one component
+ * further down and passing them as a group keeps this signature readable. */
+export interface HabitActions {
+  onAddHabit: (name: string, color: string) => void
+  onRenameHabit: (habitId: string, name: string) => void
+  onRecolorHabit: (habitId: string, color: string) => void
+  onDeleteHabit: (habitId: string) => void
+  onToggleMark: (habitId: string, date: string) => void
+  onSetMood: (date: string, slot: MoodSlot, moodId: string | null) => void
 }
 
 /** Green through amber to red. Deliberately not green-for-everything — an
  * honest low score should look like one. */
 function scoreColor(pct: number): string {
-  if (pct >= 75) return '#6ee7a8'
+  if (pct >= 75) return '#4ade80'
   if (pct >= 55) return '#e0c56b'
   if (pct >= 35) return '#e8934a'
   return '#e8685a'
@@ -80,7 +92,7 @@ function ScoreRing({ pct }: { pct: number }) {
   return (
     <div className="relative h-32 w-32 shrink-0">
       <svg viewBox="0 0 128 128" className="h-full w-full -rotate-90">
-        <circle cx="64" cy="64" r={radius} fill="none" stroke="#1e2536" strokeWidth="10" />
+        <circle cx="64" cy="64" r={radius} fill="none" stroke="rgb(var(--ink-700))" strokeWidth="10" />
         <motion.circle
           cx="64"
           cy="64"
@@ -141,7 +153,7 @@ const CONFIDENCE_NOTE: Record<SuccessOutlook['confidence'], string> = {
   high: 'Based on a long, consistent record.',
 }
 
-export default function ProgressScreen({ state, achievements, onSetOutlook }: Props) {
+export default function ProgressScreen({ state, achievements, onSetOutlook, habitActions }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -183,25 +195,25 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
           label="Success Probability"
           value={outlook ? `${outlook.probability}` : '—'}
           unit={outlook ? '%' : undefined}
-          accent={outlook ? scoreColor(outlook.probability) : '#7b8ba8'}
+          accent={outlook ? scoreColor(outlook.probability) : 'rgb(var(--slate-500))'}
         />
-        <StatTile icon={Timer} label="Focus Time" value={focus.value} unit={focus.unit} accent="#7fd3f0" />
-        <StatTile icon={Zap} label="Focus Sessions" value={String(stats.focusSessions)} accent="#b06bd6" />
+        <StatTile icon={Timer} label="Focus Time" value={focus.value} unit={focus.unit} accent="rgb(var(--gold-400))" />
+        <StatTile icon={Zap} label="Focus Sessions" value={String(stats.focusSessions)} accent="rgb(var(--slate-50))" />
         <StatTile
           icon={Flame}
           label="Current Streak"
           value={String(stats.currentStreak)}
           unit={stats.currentStreak === 1 ? 'day' : 'days'}
-          accent="#e8934a"
+          accent="rgb(var(--gold-400))"
         />
-        <StatTile icon={Trophy} label="Verified Quests" value={String(stats.questsVerified)} accent="#e0c56b" />
-        <StatTile icon={Star} label="Level" value={String(stats.level)} accent="#ffe27a" />
+        <StatTile icon={Trophy} label="Verified Quests" value={String(stats.questsVerified)} accent="rgb(var(--slate-50))" />
+        <StatTile icon={Star} label="Level" value={String(stats.level)} accent="rgb(var(--gold-400))" />
       </div>
 
       {/* Above the outlook on purpose. The tiles say where you are and the
           outlook says where you are heading, but only this says what you have
           actually been doing — and it is the part that needs no API key. */}
-      <HabitTracker state={state} />
+      <HabitTracker state={state} {...habitActions} />
 
       <section className="rounded-2xl border border-ink-600 bg-ink-850/60 p-4 sm:p-5">
         {!outlook ? (
@@ -273,7 +285,7 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
 
             {(outlook.drivers.length > 0 || outlook.risks.length > 0) && (
               <div className="grid gap-4 border-t border-ink-700/60 pt-4 sm:grid-cols-2">
-                <Bullets title="Working for you" items={outlook.drivers} icon={TrendingUp} accent="#6ee7a8" />
+                <Bullets title="Working for you" items={outlook.drivers} icon={TrendingUp} accent="rgb(var(--gold-400))" />
                 <Bullets title="Working against you" items={outlook.risks} icon={TriangleAlert} accent="#e8934a" />
               </div>
             )}

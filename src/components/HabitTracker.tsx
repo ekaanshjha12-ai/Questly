@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Flame, TrendingDown, TrendingUp, Minus } from 'lucide-react'
-import type { AppState } from '../types'
+import type { AppState, MoodSlot } from '../types'
+import HabitGrid from './HabitGrid'
 import {
   dailySeries,
   heatLevel,
@@ -34,7 +35,17 @@ const RANGES = [
 const W = 340
 const H = 92
 
-export default function HabitTracker({ state }: { state: AppState }) {
+interface Props {
+  state: AppState
+  onAddHabit: (name: string, color: string) => void
+  onRenameHabit: (habitId: string, name: string) => void
+  onRecolorHabit: (habitId: string, color: string) => void
+  onDeleteHabit: (habitId: string) => void
+  onToggleMark: (habitId: string, date: string) => void
+  onSetMood: (date: string, slot: MoodSlot, moodId: string | null) => void
+}
+
+export default function HabitTracker({ state, ...actions }: Props) {
   const [rangeId, setRangeId] = useState<(typeof RANGES)[number]['id']>('12w')
   const range = RANGES.find((r) => r.id === rangeId) ?? RANGES[1]
 
@@ -74,10 +85,14 @@ export default function HabitTracker({ state }: { state: AppState }) {
         </div>
       </div>
 
+      {/* The grid comes first: it is the part you act on, and the graphs below
+          are what it adds up to. */}
+      <HabitGrid state={state} {...actions} />
+
       {empty ? (
         <p className="rounded-2xl border border-ink-600 bg-ink-850 p-4 text-xs leading-relaxed text-slate-400">
-          Nothing tracked in this window yet. Finish a quest, tick a to-do or run a focus session
-          and it appears here the same day — the graphs fill themselves in.
+          Nothing tracked in this window yet. Tick a habit above, finish a quest, or run a focus
+          session and it appears here the same day — the graphs fill themselves in.
         </p>
       ) : null}
 

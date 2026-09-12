@@ -185,6 +185,12 @@ function AuthedApp({
     toggleTodo,
     deleteTodo,
     clearDoneTodos,
+    addHabit,
+    renameHabit,
+    recolorHabit,
+    deleteHabit,
+    toggleHabitMark,
+    setMood,
     scheduleTask,
     moveScheduleEntry,
     unschedule,
@@ -363,7 +369,19 @@ function AuthedApp({
           />
         )}
         {view === 'achievements' && (
-          <ProgressScreen state={state} achievements={achievements} onSetOutlook={setOutlook} />
+          <ProgressScreen
+            state={state}
+            achievements={achievements}
+            onSetOutlook={setOutlook}
+            habitActions={{
+              onAddHabit: addHabit,
+              onRenameHabit: renameHabit,
+              onRecolorHabit: recolorHabit,
+              onDeleteHabit: deleteHabit,
+              onToggleMark: toggleHabitMark,
+              onSetMood: setMood,
+            }}
+          />
         )}
 
         {/* Sign out lives at the foot of the page, not in the header. It is the
