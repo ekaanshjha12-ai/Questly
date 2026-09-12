@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Eye, EyeOff, Loader2, Trophy } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ChevronRight, Eye, EyeOff, Loader2, Trophy } from 'lucide-react'
+import PlayerCardSheet from './PlayerCardSheet'
 import { fetchLeaderboard, setLeaderboardVisibility, type BoardRow } from '../lib/api'
 
 /**
@@ -11,13 +12,20 @@ import { fetchLeaderboard, setLeaderboardVisibility, type BoardRow } from '../li
  * it can while still being a ranking — no streak, no goals, never an email. Rank
  * is computed from the XP already on the row, so it adds no new disclosure.
  */
-function Row({ row, highlight }: { row: BoardRow; highlight?: boolean }) {
+/**
+ * A row opens that player's card when the server has said this viewer may see
+ * it — the row then carries a username. Rows without one stay plain text.
+ */
+function Row({ row, highlight, onOpen }: { row: BoardRow; highlight?: boolean; onOpen?: (username: string) => void }) {
   const medal = row.position <= 3
+  const openable = Boolean(row.username && onOpen && !row.you)
+  const Tag = openable ? 'button' : 'div'
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+    <Tag
+      {...(openable ? { type: 'button' as const, onClick: () => onOpen?.(row.username as string), 'aria-label': `Open ${row.name}'s card` } : {})}
+      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left ${
         highlight ? 'border-gold-500/50 bg-gold-500/10' : 'border-ink-600 bg-ink-850/60'
-      }`}
+      } ${openable ? 'transition-colors hover:border-gold-500/40' : ''}`}
     >
       <span
         className={`w-7 shrink-0 text-center font-display text-sm font-bold tabular-nums ${
@@ -35,12 +43,14 @@ function Row({ row, highlight }: { row: BoardRow; highlight?: boolean }) {
       </span>
       <span className="shrink-0 text-sm tabular-nums text-slate-300">{row.xp.toLocaleString()}</span>
       <span className="shrink-0 text-[10px] text-slate-600">XP</span>
-    </div>
+      {openable && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />}
+    </Tag>
   )
 }
 
-export default function Leaderboard() {
+export default function Leaderboard({ myName }: { myName: string }) {
   const [data, setData] = useState<{ top: BoardRow[]; me: BoardRow | null; total: number; hidden: boolean } | null>(null)
+  const [viewing, setViewing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -107,7 +117,7 @@ export default function Leaderboard() {
       <div className="space-y-1.5">
         {data.top.map((row) => (
           <motion.div key={row.position} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-            <Row row={row} highlight={row.you} />
+            <Row row={row} highlight={row.you} onOpen={setViewing} />
           </motion.div>
         ))}
       </div>
@@ -118,6 +128,10 @@ export default function Leaderboard() {
           <Row row={data.me} highlight />
         </>
       )}
+
+      <AnimatePresence>
+        {viewing && <PlayerCardSheet username={viewing} myName={myName} onClose={() => setViewing(null)} />}
+      </AnimatePresence>
 
       {!data.top.length && (
         <p className="rounded-xl border border-dashed border-ink-600 px-3 py-6 text-center text-xs text-slate-500">

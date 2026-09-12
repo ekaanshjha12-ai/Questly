@@ -18,6 +18,7 @@ const MODEL = 'claude-opus-5'
 const FEATURES = [
   { id: 'dashboard', name: 'Quest Log', what: 'Daily, weekly and monthly quests written for each goal they set. Ticking one earns XP.' },
   { id: 'verify', name: 'Photo proof', what: 'Photograph the thing they just did. Verified quests are worth more, and levels only unlock with photo proof, so progress has to be real.' },
+  { id: 'challenges', name: 'Challenges', what: 'Open another player\'s card and challenge them directly — agree the objective, length, rules and XP reward, then check in each day and talk it through in the challenge\'s own chat.' },
   { id: 'todos', name: 'To-Do', what: 'A plain list for everything that is not a quest.' },
   { id: 'schedule', name: 'Plan', what: 'Daily, weekly and monthly planner. A task placed on a day shows on all three views.' },
   { id: 'planner', name: 'AI Planner', what: 'Describe a goal, answer a few questions, optionally attach a syllabus or training plan, and it writes a dated plan straight into the planner.' },

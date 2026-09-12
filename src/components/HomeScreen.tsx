@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import {
   QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, HabitsIcon, GoalsIcon, HeroIcon, StatsIcon,
-  PersonaliseIcon,
+  PersonaliseIcon, ChallengesIcon,
 } from './SectionIcons'
 import type { AppState } from '../types'
 import { dailyKey, periodKey } from '../lib/period'
@@ -17,6 +17,7 @@ import Greeting from './Greeting'
 export type View =
   | 'home'
   | 'dashboard'
+  | 'challenges'
   | 'todos'
   | 'schedule'
   | 'focus'
@@ -37,9 +38,12 @@ export type View =
 export default function HomeScreen({
   state,
   onGo,
+  challenges,
 }: {
   state: AppState
   onGo: (view: View) => void
+  /** Offers waiting on this player, and challenges running. Null until loaded. */
+  challenges?: { offers: number; running: number } | null
 }) {
   const cards = useMemo(() => {
     const stats = computeStats(state)
@@ -65,6 +69,21 @@ export default function HomeScreen({
         stat: today.length ? `${doneToday} of ${today.length} done today` : 'No quests yet',
         tone: 'gold' as const,
         wide: true,
+      },
+      {
+        id: 'challenges' as View,
+        icon: ChallengesIcon,
+        title: 'Challenges',
+        stat: !challenges
+          ? 'Challenge another player'
+          : challenges.offers
+            ? `${challenges.offers} offer${challenges.offers === 1 ? '' : 's'} waiting for you`
+            : challenges.running
+              ? `${challenges.running} running`
+              : 'Challenge another player',
+        tone: 'ember' as const,
+        wide: true,
+        badge: challenges?.offers ?? 0,
       },
       {
         id: 'todos' as View,
@@ -131,7 +150,7 @@ export default function HomeScreen({
         wide: true,
       },
     ]
-  }, [state])
+  }, [state, challenges])
 
   const TONE = {
     gold: 'text-gold-400',
@@ -169,6 +188,14 @@ export default function HomeScreen({
                 <span className="block font-display text-sm font-semibold text-slate-50">{card.title}</span>
                 <span className="block truncate text-xs text-slate-400">{card.stat}</span>
               </span>
+              {'badge' in card && card.badge ? (
+                <span
+                  className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-gold-500 to-ember-500 px-1.5 text-xs font-bold text-onAccent"
+                  aria-label={`${card.badge} new`}
+                >
+                  {card.badge}
+                </span>
+              ) : null}
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5" />
             </motion.button>
           )

@@ -63,6 +63,11 @@ for (const column of [
   'display_name TEXT',
   'birthdate TEXT',
   'bio TEXT',
+  // Whether other players may send this account challenges.
+  'challenges_open INTEGER NOT NULL DEFAULT 1',
+  // XP the server has awarded (challenge rewards) that the account's next state
+  // save may add on top of the normal rate ceiling. Spent as it is used.
+  'xp_allowance INTEGER NOT NULL DEFAULT 0',
 ]) {
   try {
     db.run(`ALTER TABLE users ADD COLUMN ${column}`)
@@ -202,6 +207,74 @@ db.run(`
     mime       TEXT NOT NULL,
     data       TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  )
+`)
+
+/**
+ * Challenges between two players.
+ *
+ * Terms are copied onto the row when the offer is made and never edited after,
+ * so what was accepted is exactly what is shown for the life of the challenge.
+ * `status` holds only decisions (pending, accepted, rejected, cancelled,
+ * completed); time-driven states are derived on read — see challenges.js.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS challenges (
+    id              TEXT PRIMARY KEY,
+    creator_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    opponent_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    objective       TEXT NOT NULL,
+    rules           TEXT NOT NULL,
+    duration_days   INTEGER NOT NULL,
+    reward_xp       INTEGER NOT NULL,
+    proof           TEXT NOT NULL,
+    min_checkins    INTEGER NOT NULL,
+    start_mode      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    responded_at    TEXT,
+    starts_at       TEXT,
+    ends_at         TEXT,
+    completed_at    TEXT,
+    creator_reward  INTEGER,
+    opponent_reward INTEGER
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_challenges_creator ON challenges(creator_id)')
+db.run('CREATE INDEX IF NOT EXISTS idx_challenges_opponent ON challenges(opponent_id)')
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS challenge_checkins (
+    challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day          INTEGER NOT NULL,
+    note         TEXT,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (challenge_id, user_id, day)
+  )
+`)
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS challenge_messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body         TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_challenge_messages ON challenge_messages(challenge_id, id)')
+
+/** One row per person someone has blocked. Blocking is one-sided to record but
+ * two-sided in effect: neither can see or challenge the other. */
+db.run(`
+  CREATE TABLE IF NOT EXISTS user_blocks (
+    blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (blocker_id, blocked_id)
   )
 `)
 
@@ -380,14 +453,14 @@ const BOARD_RANKS = [
   ['Monarch', 14], ['Champion', 10], ['Knight', 6], ['Soldier', 3], ['Recruit', 1],
 ]
 
-function rankName(level) {
+export function rankName(level) {
   for (const [name, min] of BOARD_RANKS) if (level >= min) return name
   return 'Recruit'
 }
 
 export function leaderboard(limit = 50) {
   const rows = db.all(`
-    SELECT u.id, u.hide_from_leaderboard AS hidden, s.data
+    SELECT u.id, u.hide_from_leaderboard AS hidden, u.username, u.birthdate, s.data
     FROM users u JOIN states s ON s.user_id = u.id
     WHERE u.disabled = 0
   `)
@@ -410,7 +483,9 @@ export function leaderboard(limit = 50) {
     // this an abusive name went straight onto a public list. Checking on the way
     // out also catches names saved before the filter existed.
     if (!name || !screenInput(name, { allowLength: 40 }).ok) name = 'Adventurer'
-    ranked.push({ id: row.id, name, xp, rank: rankName(levelFromXp(xp)) })
+    // username and birthdate ride along for the route to decide who the viewer
+    // may open; the route strips them before anything is sent.
+    ranked.push({ id: row.id, name, xp, rank: rankName(levelFromXp(xp)), username: row.username, birthdate: row.birthdate })
   }
 
   ranked.sort((a, b) => b.xp - a.xp)
@@ -641,4 +716,189 @@ export function recordVerification(userId, day) {
      ON CONFLICT(user_id, day) DO UPDATE SET count = count + 1`,
     [userId, day],
   )
+}
+
+
+/* --- players meeting each other ------------------------------------------ */
+
+/** The whole users row for a username, for the checks that decide whether two
+ * players may interact. Never returned to a client as-is. */
+export function findUserRowByUsername(username) {
+  return db.get('SELECT * FROM users WHERE username = ?', [username]) ?? null
+}
+
+/** Username prefix search, for finding someone to challenge. The caller filters
+ * the rows for age band and blocks before anything leaves the server. */
+export function searchUsernames(prefix, limit = 40) {
+  const escaped = prefix.replace(/[\\%_]/g, (c) => `\\${c}`)
+  return db.all(
+    `SELECT * FROM users
+     WHERE username LIKE ? ESCAPE '\\' AND disabled = 0 AND username IS NOT NULL AND birthdate IS NOT NULL
+     ORDER BY LENGTH(username), username LIMIT ?`,
+    [`${escaped}%`, limit],
+  )
+}
+
+export function setChallengesOpen(userId, open) {
+  db.run('UPDATE users SET challenges_open = ? WHERE id = ?', [open ? 1 : 0, userId])
+}
+
+export function isBlockedEitherWay(a, b) {
+  return Boolean(
+    db.get('SELECT 1 AS x FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', [
+      a,
+      b,
+      b,
+      a,
+    ]),
+  )
+}
+
+export function blockUser(blockerId, blockedId) {
+  db.run('INSERT OR IGNORE INTO user_blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', [
+    blockerId,
+    blockedId,
+    new Date().toISOString(),
+  ])
+}
+
+/* --- challenges ----------------------------------------------------------- */
+
+export function insertChallenge(c) {
+  db.run(
+    `INSERT INTO challenges
+       (id, creator_id, opponent_id, name, objective, rules, duration_days, reward_xp, proof, min_checkins,
+        start_mode, status, created_at, expires_at, starts_at, ends_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+    [
+      c.id, c.creatorId, c.opponentId, c.name, c.objective, c.rules, c.durationDays, c.rewardXp, c.proof,
+      c.minCheckins, c.startMode, c.createdAt, c.expiresAt, c.startsAt, c.endsAt,
+    ],
+  )
+}
+
+export function getChallenge(id) {
+  return db.get('SELECT * FROM challenges WHERE id = ?', [id]) ?? null
+}
+
+export function listChallengesFor(userId, limit = 200) {
+  return db.all(
+    'SELECT * FROM challenges WHERE creator_id = ? OR opponent_id = ? ORDER BY created_at DESC LIMIT ?',
+    [userId, userId, limit],
+  )
+}
+
+/**
+ * Moves a challenge from one decision to the next, only if it is still in the
+ * state the caller saw. Returns whether it did.
+ *
+ * The condition is the guard against two requests acting on the same challenge
+ * at once — an accept racing a cancel, or two reads both settling a finished
+ * challenge and paying its reward twice.
+ */
+const CHALLENGE_COLUMNS = new Set([
+  'status', 'responded_at', 'starts_at', 'ends_at', 'completed_at', 'creator_reward', 'opponent_reward',
+])
+
+export function transitionChallenge(id, fromStatus, fields) {
+  // Column names come from this allow-list only, never from a caller's input.
+  const keys = Object.keys(fields).filter((k) => CHALLENGE_COLUMNS.has(k))
+  if (!keys.includes('status')) throw new Error('transitionChallenge needs a status')
+  const result = db.run(
+    `UPDATE challenges SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND status = ?`,
+    [...keys.map((k) => fields[k]), id, fromStatus],
+  )
+  return result.changes > 0
+}
+
+/** Offers still waiting that someone has sent. */
+export function countPendingSent(userId, nowIso) {
+  return db.get("SELECT COUNT(*) AS n FROM challenges WHERE creator_id = ? AND status = 'pending' AND expires_at > ?", [
+    userId,
+    nowIso,
+  ])?.n ?? 0
+}
+
+/** Accepted challenges that have not reached their end, for either side. */
+export function countRunning(userId, nowIso) {
+  return db.get(
+    "SELECT COUNT(*) AS n FROM challenges WHERE (creator_id = ? OR opponent_id = ?) AND status = 'accepted' AND ends_at > ?",
+    [userId, userId, nowIso],
+  )?.n ?? 0
+}
+
+/** A live offer or challenge between these two, in either direction. */
+export function findOpenBetween(a, b, nowIso) {
+  return db.get(
+    `SELECT id FROM challenges
+     WHERE ((creator_id = ? AND opponent_id = ?) OR (creator_id = ? AND opponent_id = ?))
+       AND ((status = 'pending' AND expires_at > ?) OR (status = 'accepted' AND ends_at > ?))
+     LIMIT 1`,
+    [a, b, b, a, nowIso, nowIso],
+  ) ?? null
+}
+
+/** Cancels everything still live between two players — used when one blocks
+ * the other, so a block does not leave them sharing a chat. */
+export function cancelOpenBetween(a, b) {
+  db.run(
+    `UPDATE challenges SET status = 'cancelled', completed_at = ?
+     WHERE ((creator_id = ? AND opponent_id = ?) OR (creator_id = ? AND opponent_id = ?))
+       AND status IN ('pending', 'accepted')`,
+    [new Date().toISOString(), a, b, b, a],
+  )
+}
+
+export function insertCheckin(challengeId, userId, day, note) {
+  const result = db.run(
+    'INSERT OR IGNORE INTO challenge_checkins (challenge_id, user_id, day, note, created_at) VALUES (?, ?, ?, ?, ?)',
+    [challengeId, userId, day, note, new Date().toISOString()],
+  )
+  return result.changes > 0
+}
+
+export function listCheckins(challengeId) {
+  return db.all('SELECT user_id, day, note, created_at FROM challenge_checkins WHERE challenge_id = ? ORDER BY day', [
+    challengeId,
+  ])
+}
+
+export function insertChallengeMessage(challengeId, userId, body) {
+  const result = db.run('INSERT INTO challenge_messages (challenge_id, user_id, body, created_at) VALUES (?, ?, ?, ?)', [
+    challengeId,
+    userId,
+    body,
+    new Date().toISOString(),
+  ])
+  return Number(result.lastInsertRowid)
+}
+
+export function listChallengeMessages(challengeId, afterId = 0, limit = 100) {
+  return db.all(
+    'SELECT id, user_id, body, created_at FROM challenge_messages WHERE challenge_id = ? AND id > ? ORDER BY id LIMIT ?',
+    [challengeId, afterId, limit],
+  )
+}
+
+/** Finished challenges where this player met the requirement, and all finished
+ * ones — the record shown on their card. */
+export function challengeRecord(userId) {
+  const row = db.get(
+    `SELECT
+       SUM(CASE WHEN (creator_id = ? AND creator_reward > 0) OR (opponent_id = ? AND opponent_reward > 0) THEN 1 ELSE 0 END) AS won,
+       COUNT(*) AS finished
+     FROM challenges WHERE (creator_id = ? OR opponent_id = ?) AND status = 'completed'`,
+    [userId, userId, userId, userId],
+  )
+  return { completed: row?.won ?? 0, finished: row?.finished ?? 0 }
+}
+
+/* --- rewards -------------------------------------------------------------- */
+
+export function addXpAllowance(userId, xp) {
+  db.run('UPDATE users SET xp_allowance = xp_allowance + ? WHERE id = ?', [Math.max(0, Math.round(xp)), userId])
+}
+
+export function spendXpAllowance(userId, xp) {
+  db.run('UPDATE users SET xp_allowance = MAX(0, xp_allowance - ?) WHERE id = ?', [Math.max(0, Math.round(xp)), userId])
 }

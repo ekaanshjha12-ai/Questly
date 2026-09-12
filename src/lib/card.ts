@@ -1,6 +1,6 @@
 import type { AppState, CardDesign, CardField, CardItem, CardStroke } from '../types'
-import type { AuthUser } from './api'
-import { avatarUrl } from './api'
+import type { AuthUser, PublicPlayer } from './api'
+import { avatarUrl, playerAvatarUrl } from './api'
 import { rankForLevel } from '../data/ranks'
 import { birthdayLabel } from './profile'
 
@@ -98,6 +98,18 @@ export function defaultCard(): CardDesign {
   }
 }
 
+/** The default layout for someone else's card: no birthday, which is never
+ * shared, so level and XP take the row between them instead of leaving a gap. */
+export function publicDefaultCard(): CardDesign {
+  const design = defaultCard()
+  return {
+    ...design,
+    items: design.items
+      .filter((i) => !(i.kind === 'field' && i.field === 'birthday'))
+      .map((i) => (i.kind === 'field' && i.field === 'level' ? { ...i, x: 0.34 } : i.kind === 'field' && i.field === 'xp' ? { ...i, x: 0.66 } : i)),
+  }
+}
+
 /* --- limits --------------------------------------------------------------- */
 
 const MAX_ITEMS = 40
@@ -167,5 +179,26 @@ export function cardData(state: AppState, user: AuthUser, avatarOverride?: strin
     rankIcon: rank.icon,
     rankColor: rank.color,
     avatar: avatarOverride ?? avatarUrl(user.avatarVersion),
+  }
+}
+
+/** Someone else's card. The server has already taken email and birthday off
+ * it; these stay empty here too, so nothing private can be drawn even if a
+ * design still asks for it. */
+export function publicCardData(player: PublicPlayer): CardData {
+  const rank = rankForLevel(player.level)
+  return {
+    name: player.name,
+    username: player.username,
+    bio: player.bio,
+    birthday: null,
+    joined: new Date(player.joined).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
+    email: '',
+    xp: player.xp,
+    level: player.level,
+    rankName: rank.name,
+    rankIcon: rank.icon,
+    rankColor: rank.color,
+    avatar: playerAvatarUrl(player.username, player.avatarVersion),
   }
 }

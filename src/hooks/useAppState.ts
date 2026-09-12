@@ -82,6 +82,7 @@ type Action =
   | { type: 'VERIFY_QUEST'; questId: string; kind: VerificationKind; note: string }
   | { type: 'RENAME_PLAYER'; name: string }
   | { type: 'SET_CARD'; card: CardDesign | null }
+  | { type: 'GRANT_CHALLENGE_REWARD'; challengeId: string; xp: number }
   | { type: 'ADD_HABIT'; name: string; color: string }
   | { type: 'RENAME_HABIT'; habitId: string; name: string }
   | { type: 'RECOLOR_HABIT'; habitId: string; color: string }
@@ -293,6 +294,19 @@ function reducer(state: AppState, action: Action): AppState {
       const name = action.name.trim().slice(0, 24)
       if (!name || name === state.player.name) return state
       return { ...state, player: { ...state.player, name } }
+    }
+
+    case 'GRANT_CHALLENGE_REWARD': {
+      // Keyed by challenge, so fetching the list again — or on another device
+      // sharing this state — never pays the same reward twice. XP only: the
+      // server allowed exactly this much above the normal rate, and minting
+      // coins alongside it is not part of what was agreed.
+      if (action.xp <= 0 || state.challengeRewards.includes(action.challengeId)) return state
+      return {
+        ...state,
+        player: { ...state.player, xp: state.player.xp + Math.round(action.xp) },
+        challengeRewards: [...state.challengeRewards, action.challengeId].slice(-5000),
+      }
     }
 
     case 'SET_CARD':
@@ -815,6 +829,10 @@ export function useAppState(
     dispatch({ type: 'RENAME_PLAYER', name })
   }, [])
 
+  const grantChallengeReward = useCallback((challengeId: string, xp: number) => {
+    dispatch({ type: 'GRANT_CHALLENGE_REWARD', challengeId, xp })
+  }, [])
+
   const setCard = useCallback((card: CardDesign | null) => {
     dispatch({ type: 'SET_CARD', card })
   }, [])
@@ -973,6 +991,7 @@ export function useAppState(
     clearDoneTodos,
     renamePlayer,
     setCard,
+    grantChallengeReward,
     addHabit,
     renameHabit,
     recolorHabit,

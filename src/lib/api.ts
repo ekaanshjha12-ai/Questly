@@ -14,6 +14,7 @@ export interface AuthUser {
   /** Changes whenever the picture does; null when there is none. */
   avatarVersion?: string | null
   profileComplete?: boolean
+  challengesOpen?: boolean
 }
 
 export class ApiError extends Error {
@@ -22,11 +23,15 @@ export class ApiError extends Error {
    * `username_taken` and so on — so the UI can act on it rather than parse
    * the message. */
   code: string | null
-  constructor(message: string, status: number, code: string | null = null) {
+  /** Which input the server objected to, when it says — so a form can put the
+   * message beside the right field. */
+  field: string | null
+  constructor(message: string, status: number, code: string | null = null, field: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.field = field
   }
 }
 
@@ -54,9 +59,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const body = payload && typeof payload === 'object' ? (payload as { error?: unknown; code?: unknown }) : {}
+    const body =
+      payload && typeof payload === 'object' ? (payload as { error?: unknown; code?: unknown; field?: unknown }) : {}
     const message = body.error !== undefined ? String(body.error) : `Request failed (${res.status})`
-    throw new ApiError(message, res.status, typeof body.code === 'string' ? body.code : null)
+    throw new ApiError(
+      message,
+      res.status,
+      typeof body.code === 'string' ? body.code : null,
+      typeof body.field === 'string' ? body.field : null,
+    )
   }
 
   return payload as T
@@ -478,6 +489,8 @@ export interface BoardRow {
   /** Derived server-side from XP, so it reveals nothing the XP figure does not. */
   rank: string
   you?: boolean
+  /** Present only when this viewer may open the player's card. */
+  username?: string | null
 }
 
 export function fetchLeaderboard() {
@@ -488,5 +501,167 @@ export function setLeaderboardVisibility(hidden: boolean) {
   return request<{ ok: true; hidden: boolean }>('/api/leaderboard/visibility', {
     method: 'POST',
     body: JSON.stringify({ hidden }),
+  })
+}
+
+/* --- players and challenges ---------------------------------------------- */
+
+/** Another player, as the server lets you see them. */
+export interface PlayerSummary {
+  username: string
+  name: string
+  xp: number
+  level: number
+  rank: string
+  avatarVersion: string | null
+}
+
+export interface PublicPlayer extends PlayerSummary {
+  bio: string | null
+  joined: string
+  card: import('../types').CardDesign | null
+  record: { completed: number; finished: number }
+  canChallenge: boolean
+  challengeNote: string | null
+}
+
+/** Every state a challenge can be in. `draft` only ever exists on this device,
+ * while an offer is being written; `due` is momentary, between the end of a
+ * challenge and the server settling it. */
+export type ChallengeStatus =
+  | 'draft'
+  | 'pending'
+  | 'accepted'
+  | 'active'
+  | 'due'
+  | 'completed'
+  | 'rejected'
+  | 'expired'
+  | 'cancelled'
+
+export interface ChallengeCheckin {
+  side: 'creator' | 'opponent'
+  day: number
+  note: string | null
+  at: string
+}
+
+export interface Challenge {
+  id: string
+  role: 'creator' | 'opponent'
+  status: ChallengeStatus
+  name: string
+  objective: string
+  rules: string
+  terms: string
+  durationDays: number
+  rewardXp: number
+  proof: 'required' | 'optional'
+  minCheckins: number
+  startMode: 'accept' | 'date'
+  createdAt: string
+  expiresAt: string
+  respondedAt: string | null
+  startsAt: string | null
+  endsAt: string | null
+  completedAt: string | null
+  creator: PlayerSummary | null
+  opponent: PlayerSummary | null
+  /** Which day of the challenge it is, from 0, while it is running. */
+  today: number | null
+  rewards: { creator: number; opponent: number } | null
+  checkins?: ChallengeCheckin[]
+}
+
+export interface ChallengeTermsInput {
+  name: string
+  objective: string
+  rules: string
+  durationDays: number
+  rewardXp: number
+  proof: 'required' | 'optional'
+  minCheckins: number
+  startMode: 'accept' | 'date'
+  startsAt?: string
+}
+
+export interface ChallengeMessage {
+  id: number
+  side: 'creator' | 'opponent'
+  mine: boolean
+  body: string
+  at: string
+}
+
+export function searchPlayers(q: string) {
+  return request<{ results: PlayerSummary[] }>(`/api/users/search?q=${encodeURIComponent(q)}`)
+}
+
+export function fetchPlayer(username: string) {
+  return request<{ player: PublicPlayer }>(`/api/users/${encodeURIComponent(username)}`)
+}
+
+export function playerAvatarUrl(username: string, version: string | null | undefined): string | null {
+  return version ? `/api/users/${encodeURIComponent(username)}/avatar?v=${encodeURIComponent(version)}` : null
+}
+
+export function blockPlayer(username: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(username)}/block`, { method: 'POST' })
+}
+
+export function reportPlayer(username: string, reason: string, challengeId?: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(username)}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, challengeId }),
+  })
+}
+
+export function updateSettings(settings: { challengesOpen?: boolean }) {
+  return request<{ user: AuthUser }>('/api/me/settings', { method: 'PUT', body: JSON.stringify(settings) })
+}
+
+export function fetchChallenges() {
+  return request<{ challenges: Challenge[] }>('/api/challenges')
+}
+
+export function fetchChallenge(id: string) {
+  return request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}`)
+}
+
+export function sendChallenge(opponent: string, terms: ChallengeTermsInput) {
+  return request<{ challenge: Challenge }>('/api/challenges', {
+    method: 'POST',
+    body: JSON.stringify({ opponent, ...terms }),
+  })
+}
+
+export function respondToChallenge(id: string, accept: boolean) {
+  return request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ accept }),
+  })
+}
+
+export function withdrawChallenge(id: string) {
+  return request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
+}
+
+export function checkInChallenge(id: string, note: string) {
+  return request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/checkin`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
+}
+
+export function fetchChallengeMessages(id: string, after = 0) {
+  return request<{ messages: ChallengeMessage[]; open: boolean }>(
+    `/api/challenges/${encodeURIComponent(id)}/messages?after=${after}`,
+  )
+}
+
+export function sendChallengeMessage(id: string, body: string) {
+  return request<{ message: ChallengeMessage }>(`/api/challenges/${encodeURIComponent(id)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
   })
 }

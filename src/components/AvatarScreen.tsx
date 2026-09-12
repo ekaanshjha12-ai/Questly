@@ -105,7 +105,7 @@ export default function AvatarScreen({ state, levelInfo, onBuyModel, onEquipMode
 
       {tab === 'board' ? (
         <section className="rounded-2xl border border-ink-600 bg-ink-850/40 p-4 sm:p-5">
-          <Leaderboard />
+          <Leaderboard myName={state.player.name} />
         </section>
       ) : tab === 'roadmap' ? (
         <section className="rounded-2xl border border-ink-600 bg-ink-850/40 p-4 sm:p-5">

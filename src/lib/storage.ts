@@ -47,6 +47,7 @@ export function defaultState(): AppState {
     habitMarks: {},
     moods: {},
     card: null,
+    challengeRewards: [],
   }
 }
 

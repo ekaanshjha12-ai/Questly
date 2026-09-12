@@ -29,6 +29,8 @@ import ThemeButton from './components/ThemeButton'
 import PersonaliseScreen from './components/PersonaliseScreen'
 import HabitTracker from './components/HabitTracker'
 import SignupFlow from './components/SignupFlow'
+import ChallengesScreen from './components/ChallengesScreen'
+import { useChallenges } from './hooks/useChallenges'
 import { formatClock } from './lib/time'
 import { useCelebrations } from './lib/prefs'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -207,6 +209,7 @@ function AuthedApp({
     clearDoneTodos,
     renamePlayer,
     setCard,
+    grantChallengeReward,
     addHabit,
     renameHabit,
     recolorHabit,
@@ -235,6 +238,15 @@ function AuthedApp({
   // Opens on the hub rather than inside a section, so the first thing on screen
   // is a choice rather than someone else's idea of what matters today.
   const [view, setView] = useState<View>('home')
+
+  // Polled for the whole session, not just on the Challenges screen: an offer
+  // should show on the hub badge wherever you are, and a finished challenge's
+  // reward should land without having to go and look for it.
+  const challengeFeed = useChallenges({
+    enabled: user.profileComplete === true,
+    claimed: state.challengeRewards,
+    onReward: grantChallengeReward,
+  })
   // Offered once per account, after onboarding has produced the goals it talks about.
   const [tourOpen, setTourOpen] = useState(false)
   // Bumped on every forward step, which is what restarts the burst.
@@ -338,7 +350,29 @@ function AuthedApp({
           </button>
         )}
 
-        {view === 'home' && <HomeScreen state={state} onGo={setView} />}
+        {view === 'home' && (
+          <HomeScreen
+            state={state}
+            onGo={setView}
+            challenges={
+              challengeFeed.challenges
+                ? {
+                    offers: challengeFeed.incomingCount,
+                    running: challengeFeed.challenges.filter((c) => ['accepted', 'active'].includes(c.status)).length,
+                  }
+                : null
+            }
+          />
+        )}
+        {view === 'challenges' && (
+          <ChallengesScreen
+            myName={state.player.name}
+            challenges={challengeFeed.challenges}
+            error={challengeFeed.error}
+            onRefresh={challengeFeed.refresh}
+            onUpsert={challengeFeed.upsert}
+          />
+        )}
         {view === 'dashboard' && (
           <Dashboard
             state={state}

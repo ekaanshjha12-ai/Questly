@@ -146,6 +146,21 @@ export function PersonaliseIcon(props: IconProps) {
   )
 }
 
+/** Challenges — two blades crossed, each with its own guard, because a
+ * challenge takes two people. */
+export function ChallengesIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M19.8 4.2 9.4 14.6" />
+      <path d="M4.2 4.2l10.4 10.4" />
+      <path d="M6.9 12.3l4.8 4.8" />
+      <path d="M17.1 12.3l-4.8 4.8" />
+      <path d="M8.6 15.4 4.6 19.4" />
+      <path d="M15.4 15.4l4 4" />
+    </Svg>
+  )
+}
+
 /** Goals — an arrow already in the target, not one aimed at it. */
 export function GoalsIcon(props: IconProps) {
   return (

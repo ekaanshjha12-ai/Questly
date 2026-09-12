@@ -323,4 +323,7 @@ export interface AppState {
   /** The player's decorated profile card. Null until they first change it —
    * until then the default layout is drawn. */
   card: CardDesign | null
+  /** Ids of challenges whose reward has already been added to XP, so a reward
+   * is paid into this state once however many times the list is fetched. */
+  challengeRewards: string[]
 }

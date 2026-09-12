@@ -103,6 +103,7 @@ export function checkStateWrite({
   verifiedProofs,
   levelBaseline = 1,
   proofBaseline = 0,
+  xpAllowance = 0,
 }) {
   if (!next || typeof next !== 'object') {
     return { ok: false, reason: 'malformed', detail: 'State must be an object.' }
@@ -134,18 +135,25 @@ export function checkStateWrite({
   }
 
   // --- XP rate -------------------------------------------------------------
+  // `xpAllowance` is XP the server itself awarded — a challenge reward — that
+  // the client adds in one step. It lifts the ceiling by exactly that much and
+  // is reported back as spent, so it cannot be reused, and it adds nothing to
+  // what an account could claim without it.
   const previousXp = previous ? num(previous.player?.xp) : 0
   const gained = xp - previousXp
+  let allowanceUsed = 0
   if (gained > 0) {
     const minutes = Math.max(0, elapsedMs) / 60000
     const ceiling = Math.min(MAX_XP_PER_WRITE, GRACE_XP + minutes * MAX_XP_PER_MINUTE)
-    if (gained > ceiling) {
+    const allowance = Math.max(0, num(xpAllowance))
+    if (gained > ceiling + allowance) {
       return {
         ok: false,
         reason: 'xp_rate',
-        detail: `Gained ${Math.round(gained)} XP in ${minutes.toFixed(1)} min, over the ${Math.round(ceiling)} ceiling.`,
+        detail: `Gained ${Math.round(gained)} XP in ${minutes.toFixed(1)} min, over the ${Math.round(ceiling + allowance)} ceiling.`,
       }
     }
+    allowanceUsed = Math.max(0, Math.round(gained - ceiling))
   }
 
   const nextMaxXp = Math.max(num(maxXpSeen), xp)
@@ -219,7 +227,7 @@ export function checkStateWrite({
   // --- Cheap structural sanity --------------------------------------------
   for (const [key, cap] of [
     ['goals', 200], ['quests', 20000], ['todos', 5000],
-    ['schedule', 20000], ['sessions', 20000], ['decks', 500], ['reports', 200],
+    ['schedule', 20000], ['sessions', 20000], ['decks', 500], ['reports', 200], ['challengeRewards', 5000],
   ]) {
     const value = next[key]
     if (value !== undefined && !Array.isArray(value)) {
@@ -230,5 +238,5 @@ export function checkStateWrite({
     }
   }
 
-  return { ok: true, maxXp: nextMaxXp }
+  return { ok: true, maxXp: nextMaxXp, allowanceUsed }
 }

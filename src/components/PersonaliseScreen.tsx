@@ -7,13 +7,14 @@ import {
   Moon,
   MousePointer2,
   PartyPopper,
+  Swords,
   Sun,
   UserRound,
 } from 'lucide-react'
 import type { AppState, CardDesign } from '../types'
 import { useTheme, type ThemeChoice } from '../hooks/useTheme'
 import { useCelebrations } from '../lib/prefs'
-import { ApiError, avatarUrl, updateProfile, uploadAvatar, type AuthUser } from '../lib/api'
+import { ApiError, avatarUrl, updateProfile, updateSettings, uploadAvatar, type AuthUser } from '../lib/api'
 import { BIO_MAX, type PreparedAvatar } from '../lib/profile'
 import { cardData } from '../lib/card'
 import CursorPicker from './CursorPicker'
@@ -64,6 +65,10 @@ export default function PersonaliseScreen({
 
       <Section icon={MousePointer2} title="Cursor" note="Hover a tile to try it before you pick.">
         <CursorPicker />
+      </Section>
+
+      <Section icon={Swords} title="Challenges" note="Whether other players can send you challenge offers.">
+        <ChallengesToggle user={user} onUserChange={onUserChange} />
       </Section>
 
       <Section icon={PartyPopper} title="Celebrations" note="Confetti when you level up or reach a new rank.">
@@ -382,6 +387,61 @@ function ThemePicker() {
         )
       })}
     </div>
+  )
+}
+
+/** Stored on the server, since it is other people's requests it controls —
+ * the setting has to hold on every device, not just this one. */
+function ChallengesToggle({ user, onUserChange }: { user: AuthUser; onUserChange: (user: AuthUser) => void }) {
+  const on = user.challengesOpen !== false
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function toggle() {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const { user: updated } = await updateSettings({ challengesOpen: !on })
+      onUserChange({ ...user, ...updated })
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'Could not save that.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <SwitchRow
+        on={on}
+        busy={busy}
+        onToggle={() => void toggle()}
+        label={on ? 'Open — anyone your age can challenge you' : 'Closed — nobody can send you offers'}
+      />
+      {problem && <p className="mt-1.5 text-xs text-ember-400">{problem}</p>}
+    </>
+  )
+}
+
+function SwitchRow({ on, busy = false, onToggle, label }: { on: boolean; busy?: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      disabled={busy}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-ink-600 bg-ink-800 px-3 py-2.5 text-left disabled:opacity-60"
+    >
+      <span className="text-xs text-slate-200">{label}</span>
+      <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? 'bg-gold-500' : 'bg-ink-600'}`}>
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            on ? 'translate-x-[1.35rem]' : 'translate-x-0.5'
+          }`}
+        />
+      </span>
+    </button>
   )
 }
 

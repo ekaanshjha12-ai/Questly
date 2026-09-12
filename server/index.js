@@ -51,6 +51,19 @@ import {
   validateUsername,
 } from './profile.js'
 import {
+  DAY_MS,
+  MAX_PENDING_SENT,
+  MAX_RUNNING,
+  TERMS_TEXT,
+  ageBand,
+  dayIndex,
+  deriveStatus,
+  validateCheckinNote,
+  validateMessage,
+  validateTerms,
+} from './challenges.js'
+import { randomUUID } from 'node:crypto'
+import {
   audit,
   countByRole,
   countPhotoProofs,
@@ -65,6 +78,27 @@ import {
   getAvatar,
   putAvatar,
   setProfile,
+  addXpAllowance,
+  blockUser,
+  cancelOpenBetween,
+  challengeRecord,
+  countPendingSent,
+  countRunning,
+  findOpenBetween,
+  findUserRowByUsername,
+  getChallenge,
+  insertChallenge,
+  insertChallengeMessage,
+  insertCheckin,
+  isBlockedEitherWay,
+  listChallengeMessages,
+  listChallengesFor,
+  listCheckins,
+  rankName,
+  searchUsernames,
+  setChallengesOpen,
+  spendXpAllowance,
+  transitionChallenge,
   getState,
   insertSetupToken,
   listAudit,
@@ -196,6 +230,7 @@ function publicUser(userId) {
     bio: row.bio ?? null,
     avatarVersion: avatarVersion(row.id),
     profileComplete: Boolean(row.username && row.birthdate),
+    challengesOpen: Boolean(row.challenges_open),
   }
 }
 
@@ -552,6 +587,7 @@ app.put('/api/state', requireAuth, throttleState, (req, res) => {
       verifiedProofs: countPhotoProofs(req.user.id),
       levelBaseline: stored?.level_baseline ?? 1,
       proofBaseline: stored?.proof_baseline ?? 0,
+      xpAllowance: stored?.xp_allowance ?? 0,
     })
 
     if (!verdict.ok) {
@@ -571,6 +607,9 @@ app.put('/api/state', requireAuth, throttleState, (req, res) => {
     }
 
     if (verdict.maxXp > (stored?.max_xp ?? 0)) setMaxXp(req.user.id, verdict.maxXp)
+    // A challenge reward just landed: spend the allowance it used so it cannot
+    // be claimed again.
+    if (verdict.allowanceUsed > 0) spendXpAllowance(req.user.id, verdict.allowanceUsed)
 
     const { version, updatedAt } = putState(req.user.id, JSON.stringify(state))
     res.json({ version, updatedAt })
@@ -1256,6 +1295,448 @@ app.delete('/api/admin/users/:id', requireAuth, requireSuperadmin, throttleAdmin
   res.status(204).end()
 })
 
+
+// ---------------------------------------------------------------------------
+// Players and challenges
+//
+// The one part of the app where accounts meet. Every route re-checks, on every
+// request, that the two people involved may interact: both have finished a
+// profile, they are in the same age band, neither has blocked the other, and
+// the other account is not disabled. Nothing is trusted from an earlier screen.
+// ---------------------------------------------------------------------------
+
+const throttleChallengeWrite = rateLimit({ name: 'challenge-write', max: 20, windowMs: 60 * 60_000, by: 'user' })
+const throttleChat = rateLimit({ name: 'challenge-chat', max: 30, windowMs: 60_000, by: 'user' })
+const throttleSocialRead = rateLimit({ name: 'social-read', max: 120, windowMs: 60_000, by: 'user' })
+
+/** @returns {string | null} why these two may not interact, or null if they may */
+function interactionBlocker(viewer, target) {
+  if (!target || target.disabled) return 'That player is not available.'
+  if (viewer.id === target.id) return 'That is you.'
+  if (!viewer.username || !viewer.birthdate) return 'Finish your profile first.'
+  if (!target.username || !target.birthdate) return 'That player is not available.'
+  if (ageBand(viewer.birthdate) !== ageBand(target.birthdate)) return 'That player is not available.'
+  if (isBlockedEitherWay(viewer.id, target.id)) return 'That player is not available.'
+  return null
+}
+
+function stateOf(userId) {
+  try {
+    const row = getState(userId)
+    return row ? JSON.parse(row.data) : null
+  } catch {
+    return null
+  }
+}
+
+/** Name, rank and level as other players see them — the name screened exactly
+ * as the leaderboard screens it. */
+function playerSummary(row) {
+  const state = stateOf(row.id)
+  let name = String(state?.player?.name ?? row.display_name ?? '').trim().slice(0, 40)
+  if (!name || !screenInput(name, { allowLength: 40 }).ok) name = 'Adventurer'
+  const xp = Math.max(0, Math.round(Number(state?.player?.xp) || 0))
+  const level = Math.max(1, Math.min(Number(state?.progression?.level) || 1, levelFromXp(xp)))
+  return {
+    username: row.username,
+    name,
+    xp,
+    level,
+    rank: rankName(level),
+    avatarVersion: avatarVersion(row.id),
+  }
+}
+
+/** A card design as someone else may see it: no email, no birthday, and any
+ * text that the content filter would not let through left off. */
+function publicCard(state) {
+  const card = state?.card
+  if (!card || !Array.isArray(card.items)) return null
+  return {
+    background: typeof card.background === 'string' ? card.background : 'rank',
+    items: card.items
+      .filter((item) => !(item?.kind === 'field' && (item.field === 'email' || item.field === 'birthday')))
+      .filter((item) => item?.kind !== 'text' || screenInput(String(item.text ?? ''), { allowLength: 60 }).ok)
+      .slice(0, 40),
+    strokes: Array.isArray(card.strokes) ? card.strokes.slice(-80) : [],
+  }
+}
+
+app.get('/api/users/search', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const q = String(req.query.q ?? '').trim().replace(/^@+/, '').toLowerCase()
+  if (q.length < 2 || !/^[a-z0-9_.]+$/.test(q)) {
+    res.json({ results: [] })
+    return
+  }
+  const results = searchUsernames(q)
+    .filter((row) => !interactionBlocker(viewer, row))
+    .slice(0, 10)
+    .map(playerSummary)
+  res.json({ results })
+})
+
+app.get('/api/users/:username', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
+  const blocker = interactionBlocker(viewer, target)
+  if (blocker) {
+    // The same answer for "does not exist", "blocked" and "different age
+    // band", so this cannot be used to find out which one it is.
+    res.status(404).json({ error: 'That player is not available.' })
+    return
+  }
+  const state = stateOf(target.id)
+  const now = new Date().toISOString()
+  const bio = target.bio && screenInput(target.bio, { allowLength: 160 }).ok ? target.bio : null
+  let canChallenge = true
+  let challengeNote = null
+  if (!target.challenges_open) {
+    canChallenge = false
+    challengeNote = 'Not taking challenges right now.'
+  } else if (findOpenBetween(viewer.id, target.id, now)) {
+    canChallenge = false
+    challengeNote = 'You already have a challenge going with them.'
+  }
+  res.json({
+    player: {
+      ...playerSummary(target),
+      bio,
+      joined: state?.player?.createdAt ?? target.created_at,
+      card: publicCard(state),
+      record: challengeRecord(target.id),
+      canChallenge,
+      challengeNote,
+    },
+  })
+})
+
+app.get('/api/users/:username/avatar', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
+  if (interactionBlocker(viewer, target)) {
+    res.status(404).end()
+    return
+  }
+  const row = getAvatar(target.id)
+  if (!row) {
+    res.status(404).end()
+    return
+  }
+  res.setHeader('Content-Type', row.mime)
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.send(Buffer.from(row.data, 'base64'))
+})
+
+app.post('/api/users/:username/block', requireAuth, throttleChallengeWrite, (req, res) => {
+  const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
+  if (!target || target.id === req.user.id) {
+    res.status(404).json({ error: 'That player is not available.' })
+    return
+  }
+  blockUser(req.user.id, target.id)
+  // A block also ends anything live between them, so it never leaves the two
+  // sharing a chat.
+  cancelOpenBetween(req.user.id, target.id)
+  audit({ userId: req.user.id, email: req.user.email, event: 'social.block', outcome: 'success', ip: req.ip, detail: target.id })
+  res.json({ ok: true })
+})
+
+app.post('/api/users/:username/report', requireAuth, throttleChallengeWrite, (req, res) => {
+  const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
+  if (!target || target.id === req.user.id) {
+    res.status(404).json({ error: 'That player is not available.' })
+    return
+  }
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+  const challengeId = typeof req.body?.challengeId === 'string' ? req.body.challengeId.slice(0, 60) : ''
+  // Lands in the audit log, which the admin console already lists.
+  audit({
+    userId: req.user.id,
+    email: req.user.email,
+    event: 'social.report',
+    outcome: 'filed',
+    ip: req.ip,
+    detail: `against ${target.id} (@${target.username})${challengeId ? ` in challenge ${challengeId}` : ''}: ${reason || 'no reason given'}`,
+  })
+  res.json({ ok: true })
+})
+
+app.put('/api/me/settings', requireAuth, throttleState, (req, res) => {
+  if (typeof req.body?.challengesOpen === 'boolean') setChallengesOpen(req.user.id, req.body.challengesOpen)
+  res.json({ user: publicUser(req.user.id) })
+})
+
+/**
+ * Settles a challenge whose time is up: counts each side's check-ins against
+ * the completion requirement, and pays the reward to whoever met it.
+ *
+ * Runs whenever a finished challenge is read. The status transition is
+ * conditional, so if two reads arrive together only one of them settles it and
+ * the reward is paid once.
+ */
+function settleIfDue(row, now = Date.now()) {
+  if (deriveStatus(row, now) !== 'due') return row
+  const counts = new Map()
+  for (const c of listCheckins(row.id)) counts.set(c.user_id, (counts.get(c.user_id) ?? 0) + 1)
+  const creatorReward = (counts.get(row.creator_id) ?? 0) >= row.min_checkins ? row.reward_xp : 0
+  const opponentReward = (counts.get(row.opponent_id) ?? 0) >= row.min_checkins ? row.reward_xp : 0
+  const settled = transitionChallenge(row.id, 'accepted', {
+    status: 'completed',
+    completed_at: new Date(now).toISOString(),
+    creator_reward: creatorReward,
+    opponent_reward: opponentReward,
+  })
+  if (settled) {
+    if (creatorReward) addXpAllowance(row.creator_id, creatorReward)
+    if (opponentReward) addXpAllowance(row.opponent_id, opponentReward)
+  }
+  return getChallenge(row.id)
+}
+
+/** A challenge as one of its two participants sees it. */
+function challengeView(row, viewerId, { detail = false } = {}) {
+  const now = Date.now()
+  const settled = settleIfDue(row, now)
+  const creator = findUserById(settled.creator_id)
+  const opponent = findUserById(settled.opponent_id)
+  const status = deriveStatus(settled, now)
+  const view = {
+    id: settled.id,
+    role: settled.creator_id === viewerId ? 'creator' : 'opponent',
+    status,
+    name: settled.name,
+    objective: settled.objective,
+    rules: settled.rules,
+    terms: TERMS_TEXT,
+    durationDays: settled.duration_days,
+    rewardXp: settled.reward_xp,
+    proof: settled.proof,
+    minCheckins: settled.min_checkins,
+    startMode: settled.start_mode,
+    createdAt: settled.created_at,
+    expiresAt: settled.expires_at,
+    respondedAt: settled.responded_at,
+    startsAt: settled.starts_at,
+    endsAt: settled.ends_at,
+    completedAt: settled.completed_at,
+    creator: creator ? playerSummary(creator) : null,
+    opponent: opponent ? playerSummary(opponent) : null,
+    today: dayIndex(settled, now),
+    rewards:
+      settled.status === 'completed'
+        ? { creator: settled.creator_reward ?? 0, opponent: settled.opponent_reward ?? 0 }
+        : null,
+  }
+  if (detail) {
+    view.checkins = listCheckins(settled.id).map((c) => ({
+      side: c.user_id === settled.creator_id ? 'creator' : 'opponent',
+      day: c.day,
+      note: c.note,
+      at: c.created_at,
+    }))
+  }
+  return view
+}
+
+function loadParticipantChallenge(req, res) {
+  const row = getChallenge(String(req.params.id ?? ''))
+  if (!row || (row.creator_id !== req.user.id && row.opponent_id !== req.user.id)) {
+    res.status(404).json({ error: 'No such challenge.' })
+    return null
+  }
+  return row
+}
+
+app.get('/api/challenges', requireAuth, throttleSocialRead, (req, res) => {
+  const rows = listChallengesFor(req.user.id)
+  res.json({ challenges: rows.map((row) => challengeView(row, req.user.id)) })
+})
+
+app.post('/api/challenges', requireAuth, throttleChallengeWrite, (req, res) => {
+  try {
+    const viewer = findUserById(req.user.id)
+    const target = findUserRowByUsername(String(req.body?.opponent ?? '').replace(/^@+/, '').toLowerCase())
+    const blocker = interactionBlocker(viewer, target)
+    if (blocker) {
+      res.status(404).json({ error: blocker })
+      return
+    }
+    if (!target.challenges_open) {
+      res.status(403).json({ error: 'They are not taking challenges right now.', code: 'closed' })
+      return
+    }
+
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+    const terms = validateTerms(req.body ?? {}, now)
+    if (!terms.ok) {
+      res.status(400).json({ error: terms.error, code: 'bad_terms', field: terms.field })
+      return
+    }
+    if (findOpenBetween(viewer.id, target.id, nowIso)) {
+      res.status(409).json({ error: 'You already have a challenge going with them.', code: 'already_open' })
+      return
+    }
+    if (countPendingSent(viewer.id, nowIso) >= MAX_PENDING_SENT) {
+      res.status(429).json({ error: `You have ${MAX_PENDING_SENT} offers waiting already. Give them time to answer.`, code: 'too_many_pending' })
+      return
+    }
+    if (countRunning(viewer.id, nowIso) >= MAX_RUNNING) {
+      res.status(429).json({ error: `You are already in ${MAX_RUNNING} challenges. Finish one first.`, code: 'too_many_running' })
+      return
+    }
+
+    const id = randomUUID()
+    insertChallenge({ id, creatorId: viewer.id, opponentId: target.id, createdAt: nowIso, ...terms.value })
+    audit({ userId: viewer.id, email: viewer.email, event: 'challenge.create', outcome: 'success', ip: req.ip, detail: `${id} -> ${target.id}` })
+    res.status(201).json({ challenge: challengeView(getChallenge(id), viewer.id, { detail: true }) })
+  } catch (err) {
+    console.error('challenge create failed', err)
+    res.status(500).json({ error: 'Could not send the challenge.' })
+  }
+})
+
+app.get('/api/challenges/:id', requireAuth, throttleSocialRead, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  res.json({ challenge: challengeView(row, req.user.id, { detail: true }) })
+})
+
+app.post('/api/challenges/:id/respond', requireAuth, throttleChallengeWrite, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  if (row.opponent_id !== req.user.id) {
+    res.status(403).json({ error: 'Only the person challenged can answer.' })
+    return
+  }
+  const now = Date.now()
+  const nowIso = new Date(now).toISOString()
+  if (deriveStatus(row, now) !== 'pending') {
+    res.status(409).json({ error: 'This offer is no longer open.', code: 'not_pending' })
+    return
+  }
+
+  if (req.body?.accept !== true) {
+    transitionChallenge(row.id, 'pending', { status: 'rejected', responded_at: nowIso })
+    res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
+    return
+  }
+
+  // Everything is checked again at acceptance: either side may have blocked
+  // the other, closed challenges, or filled their slots since it was sent.
+  const viewer = findUserById(req.user.id)
+  const creator = findUserById(row.creator_id)
+  if (interactionBlocker(viewer, creator)) {
+    res.status(409).json({ error: 'This challenge can no longer be accepted.', code: 'unavailable' })
+    return
+  }
+  if (countRunning(viewer.id, nowIso) >= MAX_RUNNING || countRunning(creator.id, nowIso) >= MAX_RUNNING) {
+    res.status(429).json({ error: `One of you is already in ${MAX_RUNNING} challenges. Finish one first.`, code: 'too_many_running' })
+    return
+  }
+
+  const startsAt = row.start_mode === 'date' ? row.starts_at : nowIso
+  const endsAt = new Date(Date.parse(startsAt) + row.duration_days * DAY_MS).toISOString()
+  const ok = transitionChallenge(row.id, 'pending', {
+    status: 'accepted',
+    responded_at: nowIso,
+    starts_at: startsAt,
+    ends_at: endsAt,
+  })
+  if (!ok) {
+    res.status(409).json({ error: 'This offer is no longer open.', code: 'not_pending' })
+    return
+  }
+  audit({ userId: viewer.id, email: viewer.email, event: 'challenge.accept', outcome: 'success', ip: req.ip, detail: row.id })
+  res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
+})
+
+app.post('/api/challenges/:id/cancel', requireAuth, throttleChallengeWrite, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  if (row.creator_id !== req.user.id || deriveStatus(row) !== 'pending') {
+    res.status(409).json({ error: 'Only an offer you sent that is still waiting can be withdrawn.' })
+    return
+  }
+  transitionChallenge(row.id, 'pending', { status: 'cancelled', completed_at: new Date().toISOString() })
+  res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
+})
+
+app.post('/api/challenges/:id/checkin', requireAuth, throttleChallengeWrite, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  const now = Date.now()
+  if (deriveStatus(row, now) !== 'active') {
+    res.status(409).json({ error: 'Check-ins are only open while the challenge is running.' })
+    return
+  }
+  const note = validateCheckinNote(req.body?.note, row.proof)
+  if (!note.ok) {
+    res.status(400).json({ error: note.error })
+    return
+  }
+  const day = dayIndex(row, now)
+  if (!insertCheckin(row.id, req.user.id, day, note.value)) {
+    res.status(409).json({ error: 'You have already checked in today.', code: 'already_checked_in' })
+    return
+  }
+  res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
+})
+
+/**
+ * The challenge's own chat.
+ *
+ * Opens when the offer is accepted and belongs to that challenge alone. Writing
+ * is allowed while it is accepted or running; afterwards it stays readable.
+ * Every message goes through the content filter and a per-person rate limit,
+ * and a block ends the challenge and with it the chat.
+ */
+app.get('/api/challenges/:id/messages', requireAuth, throttleSocialRead, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  if (!['accepted', 'active', 'due', 'completed'].includes(deriveStatus(row))) {
+    res.json({ messages: [], open: false })
+    return
+  }
+  const after = Math.max(0, Number(req.query.after) || 0)
+  const messages = listChallengeMessages(row.id, after).map((m) => ({
+    id: m.id,
+    side: m.user_id === row.creator_id ? 'creator' : 'opponent',
+    mine: m.user_id === req.user.id,
+    body: m.body,
+    at: m.created_at,
+  }))
+  res.json({ messages, open: ['accepted', 'active'].includes(deriveStatus(row)) })
+})
+
+app.post('/api/challenges/:id/messages', requireAuth, throttleChat, (req, res) => {
+  const row = loadParticipantChallenge(req, res)
+  if (!row) return
+  if (!['accepted', 'active'].includes(deriveStatus(row))) {
+    res.status(409).json({ error: 'This chat is closed.' })
+    return
+  }
+  const otherId = row.creator_id === req.user.id ? row.opponent_id : row.creator_id
+  // The full interaction check, not just blocks: if either account has been
+  // disabled or someone has since crossed into a different age band, the chat
+  // closes rather than carrying on under rules that no longer allow it.
+  if (interactionBlocker(findUserById(req.user.id), findUserById(otherId))) {
+    res.status(409).json({ error: 'This chat is closed.' })
+    return
+  }
+  const message = validateMessage(req.body?.body)
+  if (!message.ok) {
+    if (/content filter/.test(message.error)) {
+      audit({ userId: req.user.id, email: req.user.email, event: 'moderation.chat', outcome: 'blocked', ip: req.ip, detail: row.id })
+    }
+    res.status(400).json({ error: message.error })
+    return
+  }
+  const id = insertChallengeMessage(row.id, req.user.id, message.value)
+  res.status(201).json({ message: { id, side: row.creator_id === req.user.id ? 'creator' : 'opponent', mine: true, body: message.value, at: new Date().toISOString() } })
+})
+
 /**
  * The leaderboard.
  *
@@ -1271,9 +1752,24 @@ app.get('/api/leaderboard', requireAuth, rateLimit({ name: 'board', max: 30, win
   const mineIndex = full.findIndex((r) => r.id === req.user.id)
   const me = mineIndex >= 0 ? full[mineIndex] : null
   const stored = findUserById(req.user.id)
+  const band = ageBand(stored?.birthdate)
+
+  // A row carries its username only when the viewer is allowed to open that
+  // card — same age band, not blocked. Everyone else stays a name and a number.
+  const handleFor = (r) =>
+    r.id !== req.user.id && r.username && band && ageBand(r.birthdate) === band && !isBlockedEitherWay(req.user.id, r.id)
+      ? r.username
+      : null
 
   res.json({
-    top: full.slice(0, 50).map((r) => ({ position: r.position, name: r.name, xp: r.xp, rank: r.rank, you: r.id === req.user.id })),
+    top: full.slice(0, 50).map((r) => ({
+      position: r.position,
+      name: r.name,
+      xp: r.xp,
+      rank: r.rank,
+      you: r.id === req.user.id,
+      username: handleFor(r),
+    })),
     me: me ? { position: me.position, name: me.name, xp: me.xp, rank: me.rank } : null,
     total: full.length,
     hidden: Boolean(stored?.hide_from_leaderboard),
