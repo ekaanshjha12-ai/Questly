@@ -21,14 +21,15 @@ import NoiseButton from './components/NoiseButton'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
-import HomeScreen from './components/HomeScreen'
+import HomeScreen, { type View } from './components/HomeScreen'
 import Celebration from './components/Celebration'
 import AdminSetup from './components/AdminSetup'
 import AdminConsole from './components/AdminConsole'
 import ThemeButton from './components/ThemeButton'
-import CursorButton from './components/CursorButton'
+import PersonaliseScreen from './components/PersonaliseScreen'
+import HabitTracker from './components/HabitTracker'
 import { formatClock } from './lib/time'
-import Nav, { type View } from './components/Nav'
+import { useCelebrations } from './lib/prefs'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
 
 type Boot =
@@ -186,6 +187,7 @@ function AuthedApp({
     toggleTodo,
     deleteTodo,
     clearDoneTodos,
+    renamePlayer,
     addHabit,
     renameHabit,
     recolorHabit,
@@ -218,6 +220,8 @@ function AuthedApp({
   const [tourOpen, setTourOpen] = useState(false)
   // Bumped on every forward step, which is what restarts the burst.
   const [burst, setBurst] = useState<{ key: number; big: boolean }>({ key: 0, big: false })
+  // Switchable on the Personalise screen; the level-up modal still appears either way.
+  const [celebrate] = useCelebrations()
   const [verifyingQuestId, setVerifyingQuestId] = useState<string | null>(null)
   const verifyingQuest = state.quests.find((q) => q.id === verifyingQuestId) ?? null
 
@@ -304,8 +308,6 @@ function AuthedApp({
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
-        <Nav view={view} onChange={setView} />
-
         {view !== 'home' && (
           <button
             type="button"
@@ -370,20 +372,20 @@ function AuthedApp({
           />
         )}
         {view === 'achievements' && (
-          <ProgressScreen
+          <ProgressScreen state={state} achievements={achievements} onSetOutlook={setOutlook} />
+        )}
+        {view === 'habits' && (
+          <HabitTracker
             state={state}
-            achievements={achievements}
-            onSetOutlook={setOutlook}
-            habitActions={{
-              onAddHabit: addHabit,
-              onRenameHabit: renameHabit,
-              onRecolorHabit: recolorHabit,
-              onDeleteHabit: deleteHabit,
-              onToggleMark: toggleHabitMark,
-              onSetMood: setMood,
-            }}
+            onAddHabit={addHabit}
+            onRenameHabit={renameHabit}
+            onRecolorHabit={recolorHabit}
+            onDeleteHabit={deleteHabit}
+            onToggleMark={toggleHabitMark}
+            onSetMood={setMood}
           />
         )}
+        {view === 'personalise' && <PersonaliseScreen state={state} onRename={renamePlayer} />}
 
         {/* Sign out lives at the foot of the page, not in the header. It is the
             one control here you almost never want and can least afford to hit
@@ -412,13 +414,12 @@ function AuthedApp({
 
       {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
 
-      <CursorButton />
       <ThemeButton />
       <NoiseButton noise={noise} />
       <AiPlanner onApplyPlan={applyPlan} />
       <InstallPrompt />
 
-      {burst.key > 0 && <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />}
+      {celebrate && burst.key > 0 && <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />}
 
       <ToastStack events={events} onDismiss={dismissEvent} />
       <LevelUpModal events={events} onDismiss={dismissEvent} />

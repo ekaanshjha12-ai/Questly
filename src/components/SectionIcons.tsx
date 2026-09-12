@@ -1,5 +1,5 @@
 /**
- * Hand-drawn icons for the eight sections plus the hub.
+ * Hand-drawn icons for the ten sections plus the hub.
  *
  * Drawn rather than taken from a set so each silhouette can say what its
  * section actually does — a planted flag for quests, a shield bearing a rank
@@ -116,6 +116,32 @@ export function StudyIcon(props: IconProps) {
       <path d="M9 4.4h9.6a2 2 0 0 1 2 2v7.2" />
       <rect x="3.4" y="8" width="13.6" height="11.6" rx="2.2" />
       <path d="M6.6 12.6h7.2M6.6 15.8h4.4" />
+    </Svg>
+  )
+}
+
+/** Habits — the tracker itself: a grid of days, two of them ticked. Squares
+ * rather than a calendar so it cannot be mistaken for Plan. */
+export function HabitsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3.6" y="3.6" width="7.2" height="7.2" rx="1.9" />
+      <rect x="13.2" y="3.6" width="7.2" height="7.2" rx="1.9" fill="currentColor" />
+      <rect x="3.6" y="13.2" width="7.2" height="7.2" rx="1.9" fill="currentColor" />
+      <rect x="13.2" y="13.2" width="7.2" height="7.2" rx="1.9" />
+    </Svg>
+  )
+}
+
+/** Personalise — a painter's palette, because what lives there is how the app
+ * looks and feels, not how it works. A cog would promise settings it lacks. */
+export function PersonaliseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.4a8.6 8.6 0 1 0 0 17.2c1.2 0 1.9-.8 1.9-1.8 0-.6-.3-1-.6-1.4-.3-.4-.5-.8-.5-1.3 0-1 .8-1.8 1.8-1.8h2.2a4.3 4.3 0 0 0 4.3-4.3c0-3.8-4-6.6-9.1-6.6Z" />
+      <circle cx="7.4" cy="11.6" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="9.6" cy="7.4" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="14.4" cy="7" r="1.25" fill="currentColor" stroke="none" />
     </Svg>
   )
 }

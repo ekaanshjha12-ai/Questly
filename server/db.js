@@ -1,6 +1,7 @@
 // node-sqlite3-wasm ships CommonJS, so it has no named ESM exports.
 import sqlite3Wasm from 'node-sqlite3-wasm'
 import { requiredMaxXp, levelFromXp } from './statecheck.js'
+import { screenInput } from './moderation.js'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -323,7 +324,12 @@ export function leaderboard(limit = 50) {
     } catch {
       continue
     }
-    if (!name) name = 'Adventurer'
+    // Screened here, at the one place a name is shown to other people. The name
+    // is client-written — onboarding, and now the Personalise screen — and saved
+    // with the rest of the state, which is never content-filtered, so without
+    // this an abusive name went straight onto a public list. Checking on the way
+    // out also catches names saved before the filter existed.
+    if (!name || !screenInput(name, { allowLength: 40 }).ok) name = 'Adventurer'
     ranked.push({ id: row.id, name, xp, rank: rankName(levelFromXp(xp)) })
   }
 

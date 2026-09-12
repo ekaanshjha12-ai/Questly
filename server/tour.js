@@ -23,8 +23,10 @@ const FEATURES = [
   { id: 'planner', name: 'AI Planner', what: 'Describe a goal, answer a few questions, optionally attach a syllabus or training plan, and it writes a dated plan straight into the planner.' },
   { id: 'focus', name: 'Focus', what: 'A timer and stopwatch with a session plan, plus ambient sound.' },
   { id: 'study', name: 'Study', what: 'Flashcards generated from any topic, and a coach that listens to them explain something and marks how well they actually know it.' },
+  { id: 'habits', name: 'Habits', what: 'Their own habits in a month grid they tick off themselves, with a morning and evening mood row and graphs of how consistent they have been.' },
   { id: 'avatar', name: 'Hero', what: 'Ranks from Recruit up to Heisenberg, and characters to unlock with coins earned by showing up.' },
-  { id: 'progress', name: 'Stats', what: 'Focus hours, streak, verified quests, and an honest read on how likely they are to reach their goals.' },
+  { id: 'progress', name: 'Progress', what: 'Focus hours, streak, verified quests, and an honest read on how likely they are to reach their goals.' },
+  { id: 'personalise', name: 'Personalise', what: 'Their name, light or dark theme, a choice of cursors with animations, and whether level-ups celebrate.' },
 ]
 
 const SCHEMA = {

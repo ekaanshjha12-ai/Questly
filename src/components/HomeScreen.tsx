@@ -2,14 +2,30 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import {
-  QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, GoalsIcon, HeroIcon, StatsIcon,
+  QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, HabitsIcon, GoalsIcon, HeroIcon, StatsIcon,
+  PersonaliseIcon,
 } from './SectionIcons'
 import type { AppState } from '../types'
-import type { View } from './Nav'
-import { periodKey } from '../lib/period'
+import { dailyKey, periodKey } from '../lib/period'
 import { computeStats } from '../lib/progress'
 import { rankForLevel } from '../data/ranks'
 import Greeting from './Greeting'
+
+/** Every screen the app can show. The hub is the only way between them now —
+ * the tab strip that used to sit above every screen repeated these same cards
+ * in a row too narrow to label, so it went. */
+export type View =
+  | 'home'
+  | 'dashboard'
+  | 'todos'
+  | 'schedule'
+  | 'focus'
+  | 'cards'
+  | 'habits'
+  | 'goals'
+  | 'avatar'
+  | 'achievements'
+  | 'personalise'
 
 /**
  * The landing screen: one card per section.
@@ -36,6 +52,10 @@ export default function HomeScreen({
     const cardCount = state.decks.reduce((sum, d) => sum + d.cards.length, 0)
     const rank = rankForLevel(state.progression.level)
     const hours = Math.round((stats.totalFocusMs / 3600000) * 10) / 10
+
+    const habits = state.habits.filter((h) => !h.archived)
+    const day = dailyKey(new Date())
+    const tickedToday = habits.filter((h) => state.habitMarks[h.id]?.includes(day)).length
 
     return [
       {
@@ -75,11 +95,18 @@ export default function HomeScreen({
         tone: 'mystic' as const,
       },
       {
+        id: 'habits' as View,
+        icon: HabitsIcon,
+        title: 'Habits',
+        stat: habits.length ? `${tickedToday} of ${habits.length} ticked today` : 'Track your own',
+        tone: 'gold' as const,
+      },
+      {
         id: 'goals' as View,
         icon: GoalsIcon,
         title: 'Goals',
         stat: activeGoals ? `${activeGoals} active` : 'Set your first',
-        tone: 'gold' as const,
+        tone: 'mystic' as const,
       },
       {
         id: 'avatar' as View,
@@ -93,7 +120,15 @@ export default function HomeScreen({
         icon: StatsIcon,
         title: 'Progress',
         stat: state.outlook ? `${state.outlook.probability}% likely` : `${stats.questsVerified} verified`,
+        tone: 'gold' as const,
+      },
+      {
+        id: 'personalise' as View,
+        icon: PersonaliseIcon,
+        title: 'Personalise',
+        stat: 'Name, theme and cursor',
         tone: 'mystic' as const,
+        wide: true,
       },
     ]
   }, [state])

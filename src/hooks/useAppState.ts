@@ -78,6 +78,7 @@ type Action =
     }
   | { type: 'DELETE_SESSION'; sessionId: string }
   | { type: 'VERIFY_QUEST'; questId: string; kind: VerificationKind; note: string }
+  | { type: 'RENAME_PLAYER'; name: string }
   | { type: 'ADD_HABIT'; name: string; color: string }
   | { type: 'RENAME_HABIT'; habitId: string; name: string }
   | { type: 'RECOLOR_HABIT'; habitId: string; color: string }
@@ -282,6 +283,14 @@ function reducer(state: AppState, action: Action): AppState {
         todos: state.todos.filter((t) => t.id !== action.todoId),
         schedule: state.schedule.filter((e) => !(e.refType === 'todo' && e.refId === action.todoId)),
       }
+
+    case 'RENAME_PLAYER': {
+      // Same limit as onboarding. The leaderboard screens the name on its way
+      // out, since that is the only place anyone else sees it.
+      const name = action.name.trim().slice(0, 24)
+      if (!name || name === state.player.name) return state
+      return { ...state, player: { ...state.player, name } }
+    }
 
     case 'ADD_HABIT': {
       const name = action.name.trim()
@@ -795,6 +804,10 @@ export function useAppState(
     dispatch({ type: 'CLEAR_DONE_TODOS' })
   }, [])
 
+  const renamePlayer = useCallback((name: string) => {
+    dispatch({ type: 'RENAME_PLAYER', name })
+  }, [])
+
   const addHabit = useCallback((name: string, color: string) => {
     dispatch({ type: 'ADD_HABIT', name, color })
   }, [])
@@ -947,6 +960,7 @@ export function useAppState(
     toggleTodo,
     deleteTodo,
     clearDoneTodos,
+    renamePlayer,
     addHabit,
     renameHabit,
     recolorHabit,

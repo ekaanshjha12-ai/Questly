@@ -14,11 +14,10 @@ import {
   Quote,
   RefreshCw,
 } from 'lucide-react'
-import type { AppState, MoodSlot, SuccessOutlook } from '../types'
+import type { AppState, SuccessOutlook } from '../types'
 import { ApiError, analyseOutlook } from '../lib/api'
 import { computeStats, evidenceFor, formatFocusTotal, goalProgress } from '../lib/progress'
 import Achievements from './Achievements'
-import HabitTracker from './HabitTracker'
 
 interface AchievementView {
   id: string
@@ -32,18 +31,6 @@ interface Props {
   state: AppState
   achievements: AchievementView[]
   onSetOutlook: (outlook: Omit<SuccessOutlook, 'createdAt'>) => void
-  habitActions: HabitActions
-}
-
-/** Bundled rather than spread across Props: they belong to one component
- * further down and passing them as a group keeps this signature readable. */
-export interface HabitActions {
-  onAddHabit: (name: string, color: string) => void
-  onRenameHabit: (habitId: string, name: string) => void
-  onRecolorHabit: (habitId: string, color: string) => void
-  onDeleteHabit: (habitId: string) => void
-  onToggleMark: (habitId: string, date: string) => void
-  onSetMood: (date: string, slot: MoodSlot, moodId: string | null) => void
 }
 
 /** Green through amber to red. Deliberately not green-for-everything — an
@@ -153,7 +140,7 @@ const CONFIDENCE_NOTE: Record<SuccessOutlook['confidence'], string> = {
   high: 'Based on a long, consistent record.',
 }
 
-export default function ProgressScreen({ state, achievements, onSetOutlook, habitActions }: Props) {
+export default function ProgressScreen({ state, achievements, onSetOutlook }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -209,11 +196,6 @@ export default function ProgressScreen({ state, achievements, onSetOutlook, habi
         <StatTile icon={Trophy} label="Verified Quests" value={String(stats.questsVerified)} accent="rgb(var(--slate-50))" />
         <StatTile icon={Star} label="Level" value={String(stats.level)} accent="rgb(var(--gold-400))" />
       </div>
-
-      {/* Above the outlook on purpose. The tiles say where you are and the
-          outlook says where you are heading, but only this says what you have
-          actually been doing — and it is the part that needs no API key. */}
-      <HabitTracker state={state} {...habitActions} />
 
       <section className="rounded-2xl border border-ink-600 bg-ink-850/60 p-4 sm:p-5">
         {!outlook ? (
