@@ -9,6 +9,8 @@ import { RANKS } from '../data/ranks'
 import Avatar3D from './Avatar3D'
 
 interface Props {
+  /** Asked for during sign-up, so it is not asked again here. */
+  name: string
   onComplete: (name: string, character: CharacterId, goals: NewGoalInput[]) => void
 }
 
@@ -20,7 +22,8 @@ interface ChosenGoal {
   detail: string
 }
 
-const STEPS = [0, 1, 2, 3]
+// Starts at 1: the name step that used to be 0 moved into sign-up.
+const STEPS = [1, 2, 3]
 
 function presetToChosen(preset: GoalPreset): ChosenGoal {
   return {
@@ -32,9 +35,8 @@ function presetToChosen(preset: GoalPreset): ChosenGoal {
   }
 }
 
-export default function Onboarding({ onComplete }: Props) {
-  const [step, setStep] = useState(0)
-  const [name, setName] = useState('')
+export default function Onboarding({ name, onComplete }: Props) {
+  const [step, setStep] = useState(1)
   const [character, setCharacter] = useState<CharacterId>('female')
   const [chosen, setChosen] = useState<ChosenGoal[]>([])
   const [customDraft, setCustomDraft] = useState('')
@@ -108,33 +110,6 @@ export default function Onboarding({ onComplete }: Props) {
           </div>
         </div>
 
-        {step === 0 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-100">What should we call you, hero?</h2>
-              <p className="text-sm text-slate-400 mt-1">This is your character name on the quest log.</p>
-            </div>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              maxLength={24}
-              autoComplete="off"
-              name="questly-hero-name"
-              className="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60 focus:ring-1 focus:ring-gold-500/40"
-              onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep(1)}
-            />
-            <button
-              onClick={() => setStep(1)}
-              disabled={!name.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
         {step === 1 && (
           <div className="space-y-4">
             <div>
@@ -163,12 +138,6 @@ export default function Onboarding({ onComplete }: Props) {
               })}
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => setStep(0)}
-                className="rounded-xl border border-ink-600 px-4 py-3 text-sm text-slate-300 hover:bg-ink-800"
-              >
-                Back
-              </button>
               <button
                 onClick={() => setStep(2)}
                 className="flex-1 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"

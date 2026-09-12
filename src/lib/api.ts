@@ -3,14 +3,30 @@ import type { AppState, QuestPool, SuccessOutlook } from '../types'
 export interface AuthUser {
   id: string
   email: string
+  /** Everything below comes from the server. A user recalled from this
+   * device's cache for an offline start has only id and email, so these are
+   * optional and "unknown" must not be read as "missing". */
+  username?: string | null
+  displayName?: string | null
+  /** `YYYY-MM-DD`. */
+  birthdate?: string | null
+  bio?: string | null
+  /** Changes whenever the picture does; null when there is none. */
+  avatarVersion?: string | null
+  profileComplete?: boolean
 }
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Machine-readable reason, when the server gives one — `underage`,
+   * `username_taken` and so on — so the UI can act on it rather than parse
+   * the message. */
+  code: string | null
+  constructor(message: string, status: number, code: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -38,11 +54,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const message =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? String((payload as { error: unknown }).error)
-        : `Request failed (${res.status})`
-    throw new ApiError(message, res.status)
+    const body = payload && typeof payload === 'object' ? (payload as { error?: unknown; code?: unknown }) : {}
+    const message = body.error !== undefined ? String(body.error) : `Request failed (${res.status})`
+    throw new ApiError(message, res.status, typeof body.code === 'string' ? body.code : null)
   }
 
   return payload as T
@@ -52,11 +66,47 @@ export function authConfig() {
   return request<{ inviteRequired: boolean }>('/api/auth/config')
 }
 
-export function signup(email: string, password: string, inviteCode?: string) {
+export interface SignupInput {
+  email: string
+  password: string
+  inviteCode?: string
+  name: string
+  username: string
+  birthdate: string
+  bio?: string
+}
+
+export function signup(input: SignupInput) {
   return request<{ user: AuthUser; recoveryCode: string }>('/api/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ email, password, inviteCode }),
+    body: JSON.stringify(input),
   })
+}
+
+export function checkUsername(username: string) {
+  return request<{ available: boolean; error: string | null }>(
+    `/api/auth/username?u=${encodeURIComponent(username)}`,
+  )
+}
+
+export function updateProfile(fields: { name?: string; username?: string; birthdate?: string; bio?: string }) {
+  return request<{ user: AuthUser }>('/api/me/profile', {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  })
+}
+
+export function uploadAvatar(imageBase64: string, mediaType: string) {
+  return request<{ avatarVersion: string }>('/api/me/avatar', {
+    method: 'PUT',
+    body: JSON.stringify({ imageBase64, mediaType }),
+  })
+}
+
+/** Versioned, so a new picture is a new URL and the old one can be cached
+ * indefinitely. */
+export function avatarUrl(version: string | null | undefined): string | null {
+  return version ? `/api/me/avatar?v=${encodeURIComponent(version)}` : null
 }
 
 export function resetPassword(email: string, code: string, password: string) {

@@ -28,6 +28,7 @@ import AdminConsole from './components/AdminConsole'
 import ThemeButton from './components/ThemeButton'
 import PersonaliseScreen from './components/PersonaliseScreen'
 import HabitTracker from './components/HabitTracker'
+import SignupFlow from './components/SignupFlow'
 import { formatClock } from './lib/time'
 import { useCelebrations } from './lib/prefs'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -151,6 +152,19 @@ export default function App() {
     return <AuthScreen onAuthed={(user) => void loadForUser(user)} />
   }
 
+  // Accounts made before profiles existed finish one before anything else.
+  // Strictly `false`: a user recalled from cache for an offline start has no
+  // profile fields at all, and being offline must not lock them out.
+  if (boot.user.profileComplete === false) {
+    return (
+      <SignupFlow
+        mode="complete"
+        initialName={boot.initialState?.player?.name ?? ''}
+        onCompleted={(user) => setBoot({ ...boot, user })}
+      />
+    )
+  }
+
   return (
     // Remounting per user guarantees no state bleeds between accounts.
     <AuthedApp
@@ -158,6 +172,7 @@ export default function App() {
       user={boot.user}
       initialState={boot.initialState}
       onSignedOut={() => setBoot({ phase: 'anonymous' })}
+      onUserChange={(user) => setBoot((current) => (current.phase === 'ready' ? { ...current, user } : current))}
     />
   )
 }
@@ -166,10 +181,13 @@ function AuthedApp({
   user,
   initialState,
   onSignedOut,
+  onUserChange,
 }: {
   user: AuthUser
   initialState: AppState | null
   onSignedOut: () => void
+  /** A profile edit in Personalise — new bio, new picture. */
+  onUserChange: (user: AuthUser) => void
 }) {
   const {
     state,
@@ -188,6 +206,7 @@ function AuthedApp({
     deleteTodo,
     clearDoneTodos,
     renamePlayer,
+    setCard,
     addHabit,
     renameHabit,
     recolorHabit,
@@ -270,7 +289,7 @@ function AuthedApp({
   }
 
   if (!state.onboarded) {
-    return <Onboarding onComplete={onboard} />
+    return <Onboarding name={user.displayName ?? state.player.name} onComplete={onboard} />
   }
 
   return (
@@ -385,7 +404,15 @@ function AuthedApp({
             onSetMood={setMood}
           />
         )}
-        {view === 'personalise' && <PersonaliseScreen state={state} onRename={renamePlayer} />}
+        {view === 'personalise' && (
+          <PersonaliseScreen
+            state={state}
+            user={user}
+            onRename={renamePlayer}
+            onSetCard={setCard}
+            onUserChange={onUserChange}
+          />
+        )}
 
         {/* Sign out lives at the foot of the page, not in the header. It is the
             one control here you almost never want and can least afford to hit

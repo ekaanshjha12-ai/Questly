@@ -26,7 +26,7 @@ const FEATURES = [
   { id: 'habits', name: 'Habits', what: 'Their own habits in a month grid they tick off themselves, with a morning and evening mood row and graphs of how consistent they have been.' },
   { id: 'avatar', name: 'Hero', what: 'Ranks from Recruit up to Heisenberg, and characters to unlock with coins earned by showing up.' },
   { id: 'progress', name: 'Progress', what: 'Focus hours, streak, verified quests, and an honest read on how likely they are to reach their goals.' },
-  { id: 'personalise', name: 'Personalise', what: 'Their name, light or dark theme, a choice of cursors with animations, and whether level-ups celebrate.' },
+  { id: 'personalise', name: 'Personalise', what: 'Their profile card showing their rank and XP, which they can decorate with stickers, text and drawings; plus their picture and bio, theme, cursors, and whether level-ups celebrate.' },
 ]
 
 const SCHEMA = {

@@ -18,6 +18,7 @@ import type {
   Todo,
   Habit,
   MoodSlot,
+  CardDesign,
   VerificationKind,
 } from '../types'
 import { hydrate, saveCachedState } from '../lib/storage'
@@ -28,6 +29,7 @@ import { advanceProgression, levelFromXp, proofsOutstanding, PROOFS_PER_LEVEL } 
 import { evaluateAchievements, ACHIEVEMENTS } from '../lib/achievements'
 import { findModel, isModelUnlocked, rankForLevel } from '../data/ranks'
 import { sessionXp } from '../lib/time'
+import { tidyCard } from '../lib/card'
 
 export type AppEvent =
   | { id: string; type: 'xp'; amount: number }
@@ -79,6 +81,7 @@ type Action =
   | { type: 'DELETE_SESSION'; sessionId: string }
   | { type: 'VERIFY_QUEST'; questId: string; kind: VerificationKind; note: string }
   | { type: 'RENAME_PLAYER'; name: string }
+  | { type: 'SET_CARD'; card: CardDesign | null }
   | { type: 'ADD_HABIT'; name: string; color: string }
   | { type: 'RENAME_HABIT'; habitId: string; name: string }
   | { type: 'RECOLOR_HABIT'; habitId: string; color: string }
@@ -291,6 +294,10 @@ function reducer(state: AppState, action: Action): AppState {
       if (!name || name === state.player.name) return state
       return { ...state, player: { ...state.player, name } }
     }
+
+    case 'SET_CARD':
+      // Tidied on the way in, so an oversized drawing never reaches a save.
+      return { ...state, card: action.card ? tidyCard(action.card) : null }
 
     case 'ADD_HABIT': {
       const name = action.name.trim()
@@ -808,6 +815,10 @@ export function useAppState(
     dispatch({ type: 'RENAME_PLAYER', name })
   }, [])
 
+  const setCard = useCallback((card: CardDesign | null) => {
+    dispatch({ type: 'SET_CARD', card })
+  }, [])
+
   const addHabit = useCallback((name: string, color: string) => {
     dispatch({ type: 'ADD_HABIT', name, color })
   }, [])
@@ -961,6 +972,7 @@ export function useAppState(
     deleteTodo,
     clearDoneTodos,
     renamePlayer,
+    setCard,
     addHabit,
     renameHabit,
     recolorHabit,

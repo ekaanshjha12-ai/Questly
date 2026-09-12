@@ -43,6 +43,14 @@ import { meter } from './meter.js'
 import { computeAdminStats, invalidateAdminStats } from './adminstats.js'
 import { fallbackTour, writeTour, isConfigured as tourConfigured } from './tour.js'
 import {
+  checkAvatar,
+  checkBirthdate,
+  normalizeUsername,
+  validateBio,
+  validateDisplayName,
+  validateUsername,
+} from './profile.js'
+import {
   audit,
   countByRole,
   countPhotoProofs,
@@ -52,6 +60,11 @@ import {
   findSetupToken,
   findUserByEmail,
   findUserById,
+  findUserByUsername,
+  avatarVersion,
+  getAvatar,
+  putAvatar,
+  setProfile,
   getState,
   insertSetupToken,
   listAudit,
@@ -163,6 +176,89 @@ app.get('/api/auth/config', (_req, res) => {
   res.json({ inviteRequired: Boolean(INVITE_CODE) })
 })
 
+/**
+ * The account as the client sees it: identity plus profile.
+ *
+ * One shape for sign-up, sign-in and /api/me, so the app never has to guess
+ * which fields a given response carries. `profileComplete` decides whether an
+ * account made before profiles existed is asked to finish one.
+ */
+function publicUser(userId) {
+  const row = findUserById(userId)
+  if (!row) return null
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role ?? 'user',
+    username: row.username ?? null,
+    displayName: row.display_name ?? null,
+    birthdate: row.birthdate ?? null,
+    bio: row.bio ?? null,
+    avatarVersion: avatarVersion(row.id),
+    profileComplete: Boolean(row.username && row.birthdate),
+  }
+}
+
+/**
+ * Validates the profile half of a sign-up or a profile completion.
+ * @returns {{ ok: true, value: object } | { ok: false, status: number, error: string, code?: string }}
+ */
+function checkProfileInput({ name, username, birthdate, bio }, { selfId = null } = {}) {
+  const nameProblem = validateDisplayName(name)
+  if (nameProblem) return { ok: false, status: 400, error: nameProblem, code: 'bad_name' }
+
+  const usernameProblem = validateUsername(username)
+  if (usernameProblem) return { ok: false, status: 400, error: usernameProblem, code: 'bad_username' }
+  const normalized = normalizeUsername(username)
+  const holder = findUserByUsername(normalized)
+  if (holder && holder.id !== selfId) {
+    return { ok: false, status: 409, error: 'That username is taken.', code: 'username_taken' }
+  }
+
+  const born = checkBirthdate(birthdate)
+  if (!born.ok) {
+    return { ok: false, status: born.code === 'underage' ? 403 : 400, error: born.error, code: born.code }
+  }
+
+  const bioProblem = validateBio(bio)
+  if (bioProblem) return { ok: false, status: 400, error: bioProblem, code: 'bad_bio' }
+
+  return {
+    ok: true,
+    value: {
+      displayName: String(name).trim(),
+      username: normalized,
+      birthdate: born.value,
+      bio: String(bio ?? '').trim() || null,
+    },
+  }
+}
+
+/** A unique-index violation means someone claimed the username between the
+ * check and the write. */
+function isUsernameCollision(err) {
+  return /UNIQUE constraint failed: users\.username/i.test(String(err?.message ?? ''))
+}
+
+const throttleUsername = rateLimit({ name: 'username', max: 40, windowMs: 60_000, by: 'ip' })
+
+/**
+ * Whether a username can be had, so the sign-up screen can answer as you type.
+ *
+ * It does reveal that a handle exists — that is what a username check is — but
+ * a handle is chosen to be seen, and nothing else about the account comes back.
+ */
+app.get('/api/auth/username', throttleUsername, (req, res) => {
+  const username = String(req.query.u ?? '')
+  const problem = validateUsername(username)
+  if (problem) {
+    res.json({ available: false, error: problem })
+    return
+  }
+  const taken = Boolean(findUserByUsername(normalizeUsername(username)))
+  res.json({ available: !taken, error: taken ? 'That username is taken.' : null })
+})
+
 app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
   try {
     const { email, password, inviteCode } = req.body ?? {}
@@ -182,18 +278,43 @@ app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
       return
     }
     if (findUserByEmail(email)) {
-      res.status(409).json({ error: 'An account with that email already exists.' })
+      res.status(409).json({ error: 'An account with that email already exists.', code: 'email_taken' })
+      return
+    }
+
+    // The whole profile is checked before anything is written, so a failure
+    // never leaves an account behind with half a profile.
+    const profile = checkProfileInput(req.body ?? {})
+    if (!profile.ok) {
+      if (profile.code === 'underage') {
+        // Logged without the birthdate itself — the refusal is the only fact
+        // worth keeping about someone who was not allowed to sign up.
+        audit({ email, event: 'auth.signup', outcome: 'underage', ip: req.ip })
+      }
+      res.status(profile.status).json({ error: profile.error, code: profile.code })
       return
     }
 
     // No role is passed. Registration cannot mint anything but a plain user,
     // whatever else the request body happens to contain.
     const { user, recoveryCode } = await createUser(email, password)
+    try {
+      setProfile(user.id, profile.value)
+    } catch (err) {
+      // Lost a race for the username after the check above. Undo the account
+      // rather than leave one without a profile.
+      deleteUser(user.id)
+      if (isUsernameCollision(err)) {
+        res.status(409).json({ error: 'That username is taken.', code: 'username_taken' })
+        return
+      }
+      throw err
+    }
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
     audit({ userId: user.id, email: user.email, event: 'auth.signup', outcome: 'success', ip: req.ip })
     // The only time this code is ever readable. It is stored hashed.
-    res.status(201).json({ user, recoveryCode })
+    res.status(201).json({ user: publicUser(user.id), recoveryCode })
   } catch (err) {
     console.error('signup failed', err)
     res.status(500).json({ error: 'Could not create the account.' })
@@ -257,7 +378,7 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
     audit({ userId: user.id, email: user.email, event: 'auth.login', outcome: 'success', ip: req.ip })
-    res.json({ user: { id: user.id, email: user.email, role: user.role } })
+    res.json({ user: publicUser(user.id) })
   } catch (err) {
     console.error('login failed', err)
     res.status(500).json({ error: 'Could not sign in.' })
@@ -296,7 +417,87 @@ app.post('/api/auth/logout', (req, res) => {
 })
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: req.user })
+  res.json({ user: { ...publicUser(req.user.id), mfaEnabled: req.user.mfaEnabled } })
+})
+
+/**
+ * Completes or edits the signed-in account's profile.
+ *
+ * Accounts made before profiles existed come through here once to finish one.
+ * The birthdate can be set once and never changed afterwards: an age check
+ * that can be retaken with a different year is not a check.
+ */
+app.put('/api/me/profile', requireAuth, throttleState, (req, res) => {
+  try {
+    const row = findUserById(req.user.id)
+    const body = req.body ?? {}
+
+    if (row.birthdate && body.birthdate !== undefined && body.birthdate !== row.birthdate) {
+      res.status(400).json({ error: 'Your date of birth cannot be changed.', code: 'birthdate_locked' })
+      return
+    }
+
+    // Fields not sent keep their current value.
+    const merged = {
+      name: body.name ?? row.display_name,
+      username: body.username ?? row.username,
+      birthdate: row.birthdate ?? body.birthdate,
+      bio: body.bio === undefined ? row.bio : body.bio,
+    }
+
+    const profile = checkProfileInput(merged, { selfId: row.id })
+    if (!profile.ok) {
+      if (profile.code === 'underage') {
+        audit({ userId: row.id, email: row.email, event: 'profile.complete', outcome: 'underage', ip: req.ip })
+      }
+      res.status(profile.status).json({ error: profile.error, code: profile.code })
+      return
+    }
+
+    try {
+      setProfile(row.id, profile.value)
+    } catch (err) {
+      if (isUsernameCollision(err)) {
+        res.status(409).json({ error: 'That username is taken.', code: 'username_taken' })
+        return
+      }
+      throw err
+    }
+    res.json({ user: publicUser(row.id) })
+  } catch (err) {
+    console.error('profile update failed', err)
+    res.status(500).json({ error: 'Could not save your profile.' })
+  }
+})
+
+const throttleAvatar = rateLimit({ name: 'avatar', max: 12, windowMs: 10 * 60_000, by: 'user' })
+
+app.put('/api/me/avatar', requireAuth, throttleAvatar, (req, res) => {
+  const { imageBase64, mediaType } = req.body ?? {}
+  const checked = checkAvatar(imageBase64, mediaType)
+  if (!checked.ok) {
+    res.status(400).json({ error: checked.error })
+    return
+  }
+  const version = putAvatar(req.user.id, checked.mime, checked.bytes.toString('base64'))
+  res.json({ avatarVersion: version })
+})
+
+/**
+ * Your own picture, and only your own: there is no id in the path to change.
+ * Served with the type it was checked as, never the one it was uploaded with.
+ */
+app.get('/api/me/avatar', requireAuth, (req, res) => {
+  const row = getAvatar(req.user.id)
+  if (!row) {
+    res.status(404).end()
+    return
+  }
+  res.setHeader('Content-Type', row.mime)
+  // The URL carries the version, so a new picture is a new URL and this one can
+  // be kept — but only by this browser, since it sits behind a session.
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.send(Buffer.from(row.data, 'base64'))
 })
 
 app.get('/api/state', requireAuth, (req, res) => {

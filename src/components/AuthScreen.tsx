@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Swords, Loader2, KeyRound, Copy, Check } from 'lucide-react'
-import { authConfig, login, resetPassword, signup, type AuthUser, ApiError } from '../lib/api'
+import { Swords, Loader2, KeyRound, Copy, Check, Sparkles } from 'lucide-react'
+import { authConfig, login, resetPassword, type AuthUser, ApiError } from '../lib/api'
+import { hydrate } from '../lib/storage'
+import { cardData, defaultCard } from '../lib/card'
+import SignupFlow from './SignupFlow'
+import ProfileCard from './ProfileCard'
 
 interface Props {
   onAuthed: (user: AuthUser) => void
@@ -13,11 +17,12 @@ export default function AuthScreen({ onAuthed }: Props) {
   const [mode, setMode] = useState<Mode>('signup')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
   const [inviteRequired, setInviteRequired] = useState(false)
   const [recoveryInput, setRecoveryInput] = useState('')
   /** Held after signup so the code can be shown once before entering the app. */
   const [issuedCode, setIssuedCode] = useState<{ code: string; user: AuthUser } | null>(null)
+  /** Then the card, before the app itself. */
+  const [revealFor, setRevealFor] = useState<AuthUser | null>(null)
   const [copied, setCopied] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,31 +62,25 @@ export default function AuthScreen({ onAuthed }: Props) {
         setPassword('')
         return
       }
-      if (mode === 'signup') {
-        const { user, recoveryCode } = await signup(email, password, inviteCode)
-        // Held back rather than entering straight away — this is the only
-        // moment the code can ever be read.
-        setIssuedCode({ code: recoveryCode, user })
-        return
-      }
       const { user } = await login(email, password, mfaCode || undefined)
       onAuthed(user)
     } catch (err) {
       // An account with a second factor answers the first attempt with this
       // rather than a failure — the password was right, the form is simply
       // not finished yet. Showing it as an error would read as a rejection.
-      if (err instanceof ApiError && (err as ApiError & { code?: string }).status === 401 && !mfaWanted) {
-        const message = err.message.toLowerCase()
-        if (message.includes('authentication code')) {
-          setMfaWanted(true)
-          setError(null)
-          return
-        }
+      if (err instanceof ApiError && err.code === 'mfa_required' && !mfaWanted) {
+        setMfaWanted(true)
+        setError(null)
+        return
       }
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
       setBusy(false)
     }
+  }
+
+  if (revealFor) {
+    return <CardReveal user={revealFor} onContinue={() => onAuthed(revealFor)} />
   }
 
   if (issuedCode) {
@@ -121,13 +120,28 @@ export default function AuthScreen({ onAuthed }: Props) {
 
           <button
             type="button"
-            onClick={() => onAuthed(issuedCode.user)}
+            onClick={() => setRevealFor(issuedCode.user)}
             className="mt-3 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
           >
             I've saved it — continue
           </button>
         </motion.div>
       </div>
+    )
+  }
+
+  if (mode === 'signup') {
+    return (
+      <SignupFlow
+        mode="signup"
+        inviteRequired={inviteRequired}
+        onSignedUp={(user, code) => setIssuedCode({ user, code })}
+        onSwitchToLogin={() => {
+          setMode('login')
+          setError(null)
+          setNotice(null)
+        }}
+      />
     )
   }
 
@@ -146,11 +160,7 @@ export default function AuthScreen({ onAuthed }: Props) {
           <div>
             <h1 className="font-display text-xl font-bold tracking-wide text-gold-300">Questly</h1>
             <p className="text-xs text-slate-400">
-              {mode === 'signup'
-                ? 'Create an account to save your progress'
-                : mode === 'reset'
-                  ? 'Enter your recovery code to set a new password'
-                  : 'Welcome back, hero'}
+              {mode === 'reset' ? 'Enter your recovery code to set a new password' : 'Welcome back, hero'}
             </p>
           </div>
         </div>
@@ -172,8 +182,8 @@ export default function AuthScreen({ onAuthed }: Props) {
             type="password"
             required
             minLength={8}
-            placeholder={mode === 'reset' ? 'New password (8+ characters)' : 'Password (8+ characters)'}
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            placeholder={mode === 'reset' ? 'New password (8+ characters)' : 'Password'}
+            autoComplete={mode === 'reset' ? 'new-password' : 'current-password'}
             name="password"
             className="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60 focus:ring-1 focus:ring-gold-500/40"
           />
@@ -211,18 +221,6 @@ export default function AuthScreen({ onAuthed }: Props) {
             </div>
           )}
 
-          {mode === 'signup' && inviteRequired && (
-            <input
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-              required
-              placeholder="Invite code"
-              name="inviteCode"
-              autoComplete="off"
-              className="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60 focus:ring-1 focus:ring-gold-500/40"
-            />
-          )}
-
           {notice && (
             <p className="rounded-lg border border-mystic-400/40 bg-mystic-500/10 px-3 py-2 text-xs text-mystic-300">
               {notice}
@@ -241,20 +239,20 @@ export default function AuthScreen({ onAuthed }: Props) {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent transition-opacity disabled:cursor-not-allowed disabled:opacity-60 hover:opacity-90"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Set new password' : 'Sign in'}
+            {mode === 'reset' ? 'Set new password' : 'Sign in'}
           </button>
         </form>
 
         <button
           type="button"
           onClick={() => {
-            setMode((m) => (m === 'signup' ? 'login' : 'signup'))
+            setMode('signup')
             setError(null)
             setNotice(null)
           }}
           className="mt-4 w-full text-center text-xs text-slate-400 transition-colors hover:text-gold-400"
         >
-          {mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'}
+          New here? Create an account
         </button>
 
         <button
@@ -269,6 +267,60 @@ export default function AuthScreen({ onAuthed }: Props) {
           {mode === 'reset' ? 'Back to sign in' : 'Forgot your password?'}
         </button>
       </motion.div>
+    </div>
+  )
+}
+
+/**
+ * The first look at their card, straight after sign-up: everything they just
+ * told us, with the XP and rank they are starting from.
+ */
+function CardReveal({ user, onContinue }: { user: AuthUser; onContinue: () => void }) {
+  const data = useMemo(
+    () =>
+      cardData(
+        hydrate({ player: { name: user.displayName ?? 'Adventurer', character: 'female', xp: 0, coins: 0, createdAt: new Date().toISOString() } }),
+        user,
+      ),
+    [user],
+  )
+  const design = useMemo(() => defaultCard(), [])
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm text-center">
+        <motion.p
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-center gap-1.5 text-xs uppercase tracking-[0.2em] text-gold-400"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Your card
+        </motion.p>
+        <h1 className="mt-1 font-display text-2xl font-bold text-slate-50">Welcome, {data.name}</h1>
+
+        <motion.div
+          initial={{ opacity: 0, rotateY: -80, scale: 0.9 }}
+          animate={{ opacity: 1, rotateY: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 120, damping: 16, delay: 0.15 }}
+          className="mx-auto mt-5 w-full max-w-[18rem]"
+          style={{ perspective: 900 }}
+        >
+          <ProfileCard design={design} data={data} />
+        </motion.div>
+
+        <p className="mt-5 text-sm text-slate-400">
+          It grows with you. Find it in <span className="text-slate-200">Personalise</span> to add stickers, move
+          things around and draw on it.
+        </p>
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-4 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
+        >
+          Let's go
+        </button>
+      </div>
     </div>
   )
 }

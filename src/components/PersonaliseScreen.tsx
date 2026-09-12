@@ -1,9 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
-import { Check, MonitorSmartphone, Moon, MousePointer2, PartyPopper, Sun, UserRound } from 'lucide-react'
-import type { AppState } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Check,
+  IdCard,
+  Loader2,
+  MonitorSmartphone,
+  Moon,
+  MousePointer2,
+  PartyPopper,
+  Sun,
+  UserRound,
+} from 'lucide-react'
+import type { AppState, CardDesign } from '../types'
 import { useTheme, type ThemeChoice } from '../hooks/useTheme'
 import { useCelebrations } from '../lib/prefs'
+import { ApiError, avatarUrl, updateProfile, uploadAvatar, type AuthUser } from '../lib/api'
+import { BIO_MAX, type PreparedAvatar } from '../lib/profile'
+import { cardData } from '../lib/card'
 import CursorPicker from './CursorPicker'
+import CardEditor from './CardEditor'
+import { PicturePicker } from './SignupFlow'
 
 /**
  * How the app looks and feels, in one place.
@@ -15,11 +30,19 @@ import CursorPicker from './CursorPicker'
  */
 export default function PersonaliseScreen({
   state,
+  user,
   onRename,
+  onSetCard,
+  onUserChange,
 }: {
   state: AppState
+  user: AuthUser
   onRename: (name: string) => void
+  onSetCard: (card: CardDesign | null) => void
+  onUserChange: (user: AuthUser) => void
 }) {
+  const data = useMemo(() => cardData(state, user), [state, user])
+
   return (
     <div className="space-y-4">
       <div>
@@ -27,8 +50,12 @@ export default function PersonaliseScreen({
         <p className="mt-0.5 text-xs text-slate-500">Make it yours. Changes apply straight away.</p>
       </div>
 
-      <Section icon={UserRound} title="Your name" note="What the app calls you, and how you appear on the leaderboard.">
-        <NameField name={state.player.name} onRename={onRename} />
+      <Section icon={IdCard} title="Your card" note="Add stickers and text, drag things around, draw on it.">
+        <CardEditor design={state.card} data={data} onChange={onSetCard} />
+      </Section>
+
+      <Section icon={UserRound} title="Profile" note="Your picture, name and bio — they update your card too.">
+        <ProfileFields state={state} user={user} onRename={onRename} onUserChange={onUserChange} />
       </Section>
 
       <Section icon={Sun} title="Theme" note="The day/night switch on the side does the same thing.">
@@ -72,6 +99,147 @@ function Section({
       </div>
       <div className="mt-3">{children}</div>
     </section>
+  )
+}
+
+/**
+ * Picture, name, username and bio.
+ *
+ * The picture and bio live with the account on the server, so they save
+ * through their own requests; the name is part of the game state like before.
+ * The username is shown but not editable here — it is the one handle other
+ * features may come to rely on, so changing it deserves more than a text box.
+ */
+function ProfileFields({
+  state,
+  user,
+  onRename,
+  onUserChange,
+}: {
+  state: AppState
+  user: AuthUser
+  onRename: (name: string) => void
+  onUserChange: (user: AuthUser) => void
+}) {
+  const [picking, setPicking] = useState(false)
+  const [picture, setPicture] = useState<PreparedAvatar | null>(null)
+  const [savingPicture, setSavingPicture] = useState(false)
+  const [bio, setBio] = useState(user.bio ?? '')
+  const [savingBio, setSavingBio] = useState(false)
+  const [bioSaved, setBioSaved] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  useEffect(() => setBio(user.bio ?? ''), [user.bio])
+
+  useEffect(() => {
+    if (!bioSaved) return
+    const t = setTimeout(() => setBioSaved(false), 1600)
+    return () => clearTimeout(t)
+  }, [bioSaved])
+
+  async function savePicture() {
+    if (!picture) return
+    setSavingPicture(true)
+    setProblem(null)
+    try {
+      const { avatarVersion } = await uploadAvatar(picture.base64, picture.mediaType)
+      onUserChange({ ...user, avatarVersion })
+      setPicking(false)
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'Could not save that picture.')
+    } finally {
+      setSavingPicture(false)
+    }
+  }
+
+  async function saveBio() {
+    setSavingBio(true)
+    setProblem(null)
+    try {
+      const { user: updated } = await updateProfile({ bio: bio.trim() })
+      onUserChange({ ...user, ...updated })
+      setBioSaved(true)
+    } catch (err) {
+      setProblem(err instanceof ApiError || err instanceof Error ? err.message : 'Could not save your bio.')
+    } finally {
+      setSavingBio(false)
+    }
+  }
+
+  const current = avatarUrl(user.avatarVersion)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-gold-500/60 bg-ink-800">
+          {current ? (
+            <img src={current} alt="Your profile picture" className="h-full w-full object-cover" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center font-display text-2xl font-bold text-slate-300">
+              {state.player.name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-100">{state.player.name}</p>
+          {user.username && <p className="truncate text-xs text-slate-500">@{user.username}</p>}
+          <button
+            type="button"
+            onClick={() => setPicking((v) => !v)}
+            className="mt-1 text-xs font-medium text-gold-400 hover:text-gold-300"
+          >
+            {picking ? 'Cancel' : 'Change picture'}
+          </button>
+        </div>
+      </div>
+
+      {picking && (
+        <div className="space-y-3 rounded-xl border border-ink-600 bg-ink-800 p-3">
+          <PicturePicker name={state.player.name} value={picture} onChange={setPicture} />
+          <button
+            type="button"
+            onClick={() => void savePicture()}
+            disabled={!picture || savingPicture}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2 text-xs font-semibold text-onAccent disabled:opacity-40"
+          >
+            {savingPicture && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Save picture
+          </button>
+        </div>
+      )}
+
+      <div>
+        <p className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-500">Name</p>
+        <NameField name={state.player.name} onRename={onRename} />
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-500">Bio</p>
+        <textarea
+          value={bio}
+          onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX))}
+          rows={2}
+          placeholder="What are you working on?"
+          className="w-full resize-none rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none"
+        />
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-[11px] tabular-nums text-slate-500">
+            {bio.length}/{BIO_MAX}
+          </span>
+          <button
+            type="button"
+            onClick={() => void saveBio()}
+            disabled={savingBio || bio.trim() === (user.bio ?? '')}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-gold-400 hover:text-gold-300 disabled:text-slate-500"
+          >
+            {savingBio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : bioSaved ? <Check className="h-3.5 w-3.5" /> : null}
+            {bioSaved ? 'Saved' : 'Save bio'}
+          </button>
+        </div>
+      </div>
+
+      {problem && <p className="text-xs text-ember-400">{problem}</p>}
+    </div>
   )
 }
 

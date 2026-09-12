@@ -56,6 +56,13 @@ for (const column of [
   // were reached before proofs were being recorded and are taken as given.
   'level_baseline INTEGER NOT NULL DEFAULT 1',
   'proof_baseline INTEGER NOT NULL DEFAULT 0',
+  // Profile. Stored with the account rather than in the saved state, because
+  // the server has to enforce them: a username must be unique across everyone,
+  // and the age check is worthless if the browser can rewrite the birthdate.
+  'username TEXT',
+  'display_name TEXT',
+  'birthdate TEXT',
+  'bio TEXT',
 ]) {
   try {
     db.run(`ALTER TABLE users ADD COLUMN ${column}`)
@@ -177,6 +184,27 @@ try {
   // Already present.
 }
 
+// Usernames are stored lowercased, so a plain unique index is case-insensitive.
+// SQLite lets any number of rows share NULL, so accounts from before usernames
+// existed do not collide with each other.
+db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+
+/**
+ * Profile pictures, in their own table rather than a column on users.
+ *
+ * Every authenticated request reads the users row, and dragging a picture along
+ * with each of those would be pure waste. Base64 text rather than a BLOB keeps
+ * it clear of the wasm SQLite driver's binary handling.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS avatars (
+    user_id    TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    mime       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`)
+
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
@@ -236,6 +264,58 @@ export function findUserByEmail(email) {
 
 export function findUserById(id) {
   return db.get('SELECT * FROM users WHERE id = ?', [id]) ?? null
+}
+
+/** Expects an already-normalised (lowercased) username. */
+export function findUserByUsername(username) {
+  return db.get('SELECT id FROM users WHERE username = ?', [username]) ?? null
+}
+
+/**
+ * Writes whichever profile fields are given; anything left undefined is not
+ * touched. Throws on a username collision — the unique index is the final word
+ * when two sign-ups race for the same name.
+ */
+export function setProfile(userId, { username, displayName, birthdate, bio }) {
+  const sets = []
+  const values = []
+  if (username !== undefined) {
+    sets.push('username = ?')
+    values.push(username)
+  }
+  if (displayName !== undefined) {
+    sets.push('display_name = ?')
+    values.push(displayName)
+  }
+  if (birthdate !== undefined) {
+    sets.push('birthdate = ?')
+    values.push(birthdate)
+  }
+  if (bio !== undefined) {
+    sets.push('bio = ?')
+    values.push(bio)
+  }
+  if (!sets.length) return
+  db.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, [...values, userId])
+}
+
+export function putAvatar(userId, mime, base64) {
+  const now = new Date().toISOString()
+  db.run(
+    `INSERT INTO avatars (user_id, mime, data, updated_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET mime = excluded.mime, data = excluded.data, updated_at = excluded.updated_at`,
+    [userId, mime, base64, now],
+  )
+  return now
+}
+
+export function getAvatar(userId) {
+  return db.get('SELECT mime, data, updated_at FROM avatars WHERE user_id = ?', [userId]) ?? null
+}
+
+/** Just the timestamp, for cache-busting the picture URL without loading it. */
+export function avatarVersion(userId) {
+  return db.get('SELECT updated_at FROM avatars WHERE user_id = ?', [userId])?.updated_at ?? null
 }
 
 /**

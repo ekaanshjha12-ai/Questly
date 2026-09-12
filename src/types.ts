@@ -250,6 +250,49 @@ export type MoodSlot = 'am' | 'pm'
 /** `YYYY-MM-DD` → the mood recorded for each half of that day. */
 export type MoodLog = Record<string, Partial<Record<MoodSlot, string>>>
 
+/** Which piece of the profile a card element shows. */
+export type CardField =
+  | 'avatar'
+  | 'name'
+  | 'username'
+  | 'bio'
+  | 'rank'
+  | 'level'
+  | 'xp'
+  | 'birthday'
+  | 'joined'
+  | 'email'
+
+interface CardItemBase {
+  id: string
+  /** Centre of the element, as a share of the card's width and height, so a
+   * design looks the same at any size the card is drawn. */
+  x: number
+  y: number
+  scale: number
+  /** Degrees. */
+  rotate: number
+}
+
+export type CardItem =
+  | (CardItemBase & { kind: 'field'; field: CardField })
+  | (CardItemBase & { kind: 'text'; text: string; color: string })
+  | (CardItemBase & { kind: 'sticker'; emoji: string })
+
+/** A freehand line. Points are a flat `[x0, y0, x1, y1, …]` list in a
+ * 1000×1400 space — whole numbers, which keep a drawing a few kilobytes. */
+export interface CardStroke {
+  color: string
+  size: number
+  points: number[]
+}
+
+export interface CardDesign {
+  background: string
+  items: CardItem[]
+  strokes: CardStroke[]
+}
+
 export interface Achievement {
   id: string
   title: string
@@ -277,4 +320,7 @@ export interface AppState {
   habits: Habit[]
   habitMarks: HabitMarks
   moods: MoodLog
+  /** The player's decorated profile card. Null until they first change it —
+   * until then the default layout is drawn. */
+  card: CardDesign | null
 }
