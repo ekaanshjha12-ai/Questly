@@ -45,6 +45,7 @@ import { fallbackTour, writeTour, isConfigured as tourConfigured } from './tour.
 import {
   checkAvatar,
   checkBirthdate,
+  checkImage,
   normalizeUsername,
   validateBio,
   validateDisplayName,
@@ -62,6 +63,8 @@ import {
   validateMessage,
   validateTerms,
 } from './challenges.js'
+import { POST_IMAGE_MAX_BYTES, UNLOCKS, validatePost } from './social.js'
+import { screenImage, isConfigured as imageSafetyConfigured } from './imagesafety.js'
 import { randomUUID } from 'node:crypto'
 import {
   audit,
@@ -99,6 +102,13 @@ import {
   setChallengesOpen,
   spendXpAllowance,
   transitionChallenge,
+  countRecentPosts,
+  getPost,
+  getPostImage,
+  insertPost,
+  insertPostImage,
+  listFeed,
+  softDeletePost,
   getState,
   insertSetupToken,
   listAudit,
@@ -1735,6 +1745,170 @@ app.post('/api/challenges/:id/messages', requireAuth, throttleChat, (req, res) =
   }
   const id = insertChallengeMessage(row.id, req.user.id, message.value)
   res.status(201).json({ message: { id, side: row.creator_id === req.user.id ? 'creator' : 'opponent', mine: true, body: message.value, at: new Date().toISOString() } })
+})
+
+
+// ---------------------------------------------------------------------------
+// The feed
+//
+// Posts are seen within the same age band as everything else social, and never
+// from someone either side has blocked. Photos are checked by the image safety
+// model before they are stored; text goes through the word filter.
+// ---------------------------------------------------------------------------
+
+/** The level a player has actually reached, as far as the server will vouch:
+ * the claimed level, capped by what their XP supports. */
+function levelOf(userId) {
+  const state = stateOf(userId)
+  const xp = Math.max(0, Number(state?.player?.xp) || 0)
+  return Math.max(1, Math.min(Number(state?.progression?.level) || 1, levelFromXp(xp)))
+}
+
+app.get('/api/social/unlocks', requireAuth, throttleSocialRead, (req, res) => {
+  res.json({ level: levelOf(req.user.id), unlocks: UNLOCKS, imagesChecked: imageSafetyConfigured() })
+})
+
+function postView(row, viewerId) {
+  const author = findUserById(row.user_id)
+  return {
+    id: row.id,
+    kind: row.kind,
+    body: row.body,
+    createdAt: row.created_at,
+    image: row.image_id ? `/api/posts/images/${row.image_id}` : null,
+    author: author ? playerSummary(author) : null,
+    mine: row.user_id === viewerId,
+  }
+}
+
+app.get('/api/feed', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  if (!viewer.username || !viewer.birthdate) {
+    res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
+    return
+  }
+  const band = ageBand(viewer.birthdate)
+  const before = typeof req.query.before === 'string' ? req.query.before : null
+  let userId = null
+  if (typeof req.query.user === 'string' && req.query.user) {
+    const target = findUserRowByUsername(req.query.user.toLowerCase())
+    if (!target || (target.id !== viewer.id && interactionBlocker(viewer, target))) {
+      res.json({ posts: [], more: false })
+      return
+    }
+    userId = target.id
+  }
+  const rows = listFeed({ before, limit: 20, userId })
+  const visible = rows
+    .filter((row) => row.user_id === viewer.id || (ageBand(row.author_birthdate) === band && !isBlockedEitherWay(viewer.id, row.user_id)))
+    .slice(0, 20)
+  res.json({ posts: visible.map((row) => postView(row, viewer.id)), more: rows.length >= 20 })
+})
+
+app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => {
+  try {
+    const viewer = findUserById(req.user.id)
+    if (!viewer.username || !viewer.birthdate) {
+      res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
+      return
+    }
+    const level = levelOf(viewer.id)
+    const post = validatePost(req.body ?? {})
+    if (!post.ok) {
+      res.status(400).json({ error: post.error })
+      return
+    }
+    const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
+    if (countRecentPosts(viewer.id, hourAgo) >= 10) {
+      res.status(429).json({ error: 'That is a lot of posting for one hour. Take a breather and try again soon.' })
+      return
+    }
+
+    let imageId = null
+    if (req.body?.imageBase64) {
+      if (level < UNLOCKS.photo) {
+        res.status(403).json({ error: `Photo posts unlock at level ${UNLOCKS.photo}.`, code: 'locked' })
+        return
+      }
+      if (countRecentPosts(viewer.id, hourAgo, true) >= 5) {
+        res.status(429).json({ error: 'You have posted a lot of photos this hour. Try again soon.' })
+        return
+      }
+      const image = checkImage(req.body.imageBase64, req.body.mediaType, POST_IMAGE_MAX_BYTES)
+      if (!image.ok) {
+        res.status(400).json({ error: image.error })
+        return
+      }
+      let verdict
+      try {
+        verdict = await meter({ userId: viewer.id, endpoint: 'feed.image' }, () =>
+          screenImage({ mediaType: image.mime, imageBase64: image.bytes.toString('base64') }),
+        )
+      } catch (err) {
+        if (err?.code === 'not_configured') {
+          res.status(503).json({ error: err.message, code: 'not_configured' })
+          return
+        }
+        throw err
+      }
+      if (!verdict.allowed) {
+        audit({ userId: viewer.id, email: viewer.email, event: 'moderation.image', outcome: 'blocked', ip: req.ip, detail: verdict.category })
+        res.status(422).json({ error: verdict.reason || 'That picture cannot be posted.', code: 'image_blocked' })
+        return
+      }
+      imageId = randomUUID()
+      insertPostImage(imageId, viewer.id, image.mime, image.bytes.toString('base64'))
+    }
+
+    const id = randomUUID()
+    insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId })
+    res.status(201).json({ post: postView(getPost(id), viewer.id) })
+  } catch (err) {
+    console.error('post failed', err)
+    res.status(500).json({ error: 'Could not post that.' })
+  }
+})
+
+app.delete('/api/posts/:id', requireAuth, throttleChallengeWrite, (req, res) => {
+  if (!softDeletePost(String(req.params.id ?? ''), req.user.id)) {
+    res.status(404).json({ error: 'No such post of yours.' })
+    return
+  }
+  res.status(204).end()
+})
+
+app.get('/api/posts/images/:id', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const image = getPostImage(String(req.params.id ?? ''))
+  if (!image || image.deleted_at) {
+    res.status(404).end()
+    return
+  }
+  if (image.user_id !== viewer.id && interactionBlocker(viewer, findUserById(image.user_id))) {
+    res.status(404).end()
+    return
+  }
+  res.setHeader('Content-Type', image.mime)
+  res.setHeader('Cache-Control', 'private, max-age=86400')
+  res.send(Buffer.from(image.data, 'base64'))
+})
+
+app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res) => {
+  const post = getPost(String(req.params.id ?? ''))
+  if (!post) {
+    res.status(404).json({ error: 'That post is gone.' })
+    return
+  }
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+  audit({
+    userId: req.user.id,
+    email: req.user.email,
+    event: 'social.report_post',
+    outcome: 'filed',
+    ip: req.ip,
+    detail: `post ${post.id} by ${post.user_id}: ${reason || 'no reason given'}`,
+  })
+  res.json({ ok: true })
 })
 
 /**

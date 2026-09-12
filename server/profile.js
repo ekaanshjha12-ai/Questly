@@ -130,12 +130,17 @@ const SIGNATURES = {
  * @returns {{ ok: true, bytes: Buffer, mime: string } | { ok: false, error: string }}
  */
 export function checkAvatar(imageBase64, mediaType) {
+  return checkImage(imageBase64, mediaType, AVATAR_MAX_BYTES)
+}
+
+/** The same checks for any picture, with its own size ceiling. */
+export function checkImage(imageBase64, mediaType, maxBytes) {
   if (typeof imageBase64 !== 'string' || !imageBase64) return { ok: false, error: 'A picture is required.' }
   const signature = SIGNATURES[mediaType]
   if (!signature) return { ok: false, error: 'Use a JPEG, PNG or WebP picture.' }
-  if ((imageBase64.length * 3) / 4 > AVATAR_MAX_BYTES) return { ok: false, error: 'That picture is too large.' }
+  if ((imageBase64.length * 3) / 4 > maxBytes) return { ok: false, error: 'That picture is too large.' }
   const bytes = Buffer.from(imageBase64, 'base64')
-  if (!bytes.length || bytes.length > AVATAR_MAX_BYTES) return { ok: false, error: 'That picture is too large.' }
+  if (!bytes.length || bytes.length > maxBytes) return { ok: false, error: 'That picture is too large.' }
   if (!signature(bytes)) return { ok: false, error: 'That file is not the picture it claims to be.' }
   return { ok: true, bytes, mime: mediaType }
 }

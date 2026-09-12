@@ -665,3 +665,46 @@ export function sendChallengeMessage(id: string, body: string) {
     body: JSON.stringify({ body }),
   })
 }
+
+/* --- feed ------------------------------------------------------------------ */
+
+export type PostKind = 'update' | 'learned' | 'achievement' | 'progress'
+
+export interface Post {
+  id: string
+  kind: PostKind
+  body: string
+  createdAt: string
+  image: string | null
+  author: PlayerSummary | null
+  mine: boolean
+}
+
+export function fetchFeed(before?: string, user?: string) {
+  const params = new URLSearchParams()
+  if (before) params.set('before', before)
+  if (user) params.set('user', user)
+  const q = params.toString()
+  return request<{ posts: Post[]; more: boolean }>(`/api/feed${q ? `?${q}` : ''}`)
+}
+
+export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string }) {
+  return request<{ post: Post }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function deletePost(id: string) {
+  return request<void>(`/api/posts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function reportPost(id: string, reason: string) {
+  return request<{ ok: true }>(`/api/posts/${encodeURIComponent(id)}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function fetchUnlocks() {
+  return request<{ level: number; unlocks: Record<'post' | 'message' | 'photo' | 'createClub', number>; imagesChecked: boolean }>(
+    '/api/social/unlocks',
+  )
+}

@@ -29,7 +29,9 @@ import ThemeButton from './components/ThemeButton'
 import PersonaliseScreen from './components/PersonaliseScreen'
 import HabitTracker from './components/HabitTracker'
 import SignupFlow from './components/SignupFlow'
-import ChallengesScreen from './components/ChallengesScreen'
+import ModeSwitch, { ModeWash } from './components/ModeSwitch'
+import SocialHome from './components/social/SocialHome'
+import { useMode, type AppMode } from './hooks/useMode'
 import { useChallenges } from './hooks/useChallenges'
 import { formatClock } from './lib/time'
 import { useCelebrations } from './lib/prefs'
@@ -238,6 +240,9 @@ function AuthedApp({
   // Opens on the hub rather than inside a section, so the first thing on screen
   // is a choice rather than someone else's idea of what matters today.
   const [view, setView] = useState<View>('home')
+  const { mode, setMode } = useMode()
+  /** The wash between modes while it plays: where it opens from and where it goes. */
+  const [wash, setWash] = useState<{ origin: { x: number; y: number }; to: AppMode } | null>(null)
 
   // Polled for the whole session, not just on the Challenges screen: an offer
   // should show on the hub badge wherever you are, and a finished challenge's
@@ -334,11 +339,31 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <InstallButton />
+            <div className="flex items-center gap-2">
+              <span className="hidden text-right text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-500 sm:block">
+                {mode === 'social' ? 'Social' : 'Focus'}
+                <br />
+                <span className="font-normal normal-case tracking-normal">mode</span>
+              </span>
+              <ModeSwitch
+                mode={mode}
+                size={52}
+                badge={mode === 'focus' ? challengeFeed.incomingCount : 0}
+                onToggle={(origin) => {
+                  if (wash) return
+                  setWash({ origin, to: mode === 'social' ? 'focus' : 'social' })
+                }}
+              />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
+        {mode === 'social' ? (
+          <SocialHome state={state} user={user} challenges={challengeFeed} onSetCard={setCard} />
+        ) : (
+          <>
         {view !== 'home' && (
           <button
             type="button"
@@ -350,29 +375,7 @@ function AuthedApp({
           </button>
         )}
 
-        {view === 'home' && (
-          <HomeScreen
-            state={state}
-            onGo={setView}
-            challenges={
-              challengeFeed.challenges
-                ? {
-                    offers: challengeFeed.incomingCount,
-                    running: challengeFeed.challenges.filter((c) => ['accepted', 'active'].includes(c.status)).length,
-                  }
-                : null
-            }
-          />
-        )}
-        {view === 'challenges' && (
-          <ChallengesScreen
-            myName={state.player.name}
-            challenges={challengeFeed.challenges}
-            error={challengeFeed.error}
-            onRefresh={challengeFeed.refresh}
-            onUpsert={challengeFeed.upsert}
-          />
-        )}
+        {view === 'home' && <HomeScreen state={state} onGo={setView} />}
         {view === 'dashboard' && (
           <Dashboard
             state={state}
@@ -448,6 +451,9 @@ function AuthedApp({
           />
         )}
 
+          </>
+        )}
+
         {/* Sign out lives at the foot of the page, not in the header. It is the
             one control here you almost never want and can least afford to hit
             by accident, and it had been sitting a few pixels from the install
@@ -464,6 +470,18 @@ function AuthedApp({
           </button>
         </footer>
       </main>
+
+      {wash && (
+        <ModeWash
+          origin={wash.origin}
+          to={wash.to}
+          onMidpoint={() => {
+            setMode(wash.to)
+            window.scrollTo({ top: 0 })
+          }}
+          onDone={() => setWash(null)}
+        />
+      )}
 
       <VerifyModalHost
         quest={verifyingQuest}

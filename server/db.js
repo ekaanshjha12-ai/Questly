@@ -278,6 +278,39 @@ db.run(`
   )
 `)
 
+/**
+ * The feed.
+ *
+ * A post is soft-deleted so a report made against it can still be looked at
+ * afterwards; nothing reads deleted posts back out to players.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS posts (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind       TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    image_id   TEXT,
+    club_id    TEXT,
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at)')
+db.run('CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)')
+
+/** Feed pictures, apart from the posts so a page of the feed does not drag
+ * every image through the query. */
+db.run(`
+  CREATE TABLE IF NOT EXISTS post_images (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mime       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`)
+
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
@@ -901,4 +934,84 @@ export function addXpAllowance(userId, xp) {
 
 export function spendXpAllowance(userId, xp) {
   db.run('UPDATE users SET xp_allowance = MAX(0, xp_allowance - ?) WHERE id = ?', [Math.max(0, Math.round(xp)), userId])
+}
+
+/* --- feed ----------------------------------------------------------------- */
+
+export function insertPostImage(id, userId, mime, base64) {
+  db.run('INSERT INTO post_images (id, user_id, mime, data, created_at) VALUES (?, ?, ?, ?, ?)', [
+    id,
+    userId,
+    mime,
+    base64,
+    new Date().toISOString(),
+  ])
+}
+
+export function getPostImage(id) {
+  return db.get('SELECT i.id, i.user_id, i.mime, i.data, p.deleted_at FROM post_images i LEFT JOIN posts p ON p.image_id = i.id WHERE i.id = ?', [id]) ?? null
+}
+
+export function insertPost({ id, userId, kind, body, imageId = null, clubId = null }) {
+  db.run('INSERT INTO posts (id, user_id, kind, body, image_id, club_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+    id,
+    userId,
+    kind,
+    body,
+    imageId,
+    clubId,
+    new Date().toISOString(),
+  ])
+}
+
+export function getPost(id) {
+  return db.get('SELECT * FROM posts WHERE id = ? AND deleted_at IS NULL', [id]) ?? null
+}
+
+/**
+ * A page of the feed, newest first, with each author's row alongside so the
+ * caller can apply the age-band and block rules without a query per post.
+ * Over-fetches a little, since some rows will be filtered out.
+ */
+export function listFeed({ before, limit = 20, clubId = null, userId = null }) {
+  const where = ['p.deleted_at IS NULL', 'u.disabled = 0']
+  const args = []
+  if (before) {
+    where.push('p.created_at < ?')
+    args.push(before)
+  }
+  if (clubId) {
+    where.push('p.club_id = ?')
+    args.push(clubId)
+  } else {
+    where.push('p.club_id IS NULL')
+  }
+  if (userId) {
+    where.push('p.user_id = ?')
+    args.push(userId)
+  }
+  return db.all(
+    `SELECT p.*, u.username AS author_username, u.birthdate AS author_birthdate
+     FROM posts p JOIN users u ON u.id = p.user_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY p.created_at DESC LIMIT ?`,
+    [...args, limit * 3],
+  )
+}
+
+export function softDeletePost(id, userId) {
+  const result = db.run('UPDATE posts SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL', [
+    new Date().toISOString(),
+    id,
+    userId,
+  ])
+  return result.changes > 0
+}
+
+/** Posts in the last hour, for the posting rate limit that survives restarts. */
+export function countRecentPosts(userId, sinceIso, withImages = false) {
+  return db.get(
+    `SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND created_at > ?${withImages ? ' AND image_id IS NOT NULL' : ''}`,
+    [userId, sinceIso],
+  )?.n ?? 0
 }
