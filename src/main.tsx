@@ -4,7 +4,11 @@ import './index.css'
 // Imported before the render so its listener is attached when Chrome fires the
 // install offer, which happens well before the signed-in app mounts.
 import './lib/install'
+import { applyCursorPrefs, loadCursorPrefs } from './lib/cursors'
 import App from './App.tsx'
+
+// Before the first render, so the sign-in screen already has the chosen cursor.
+applyCursorPrefs(loadCursorPrefs())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

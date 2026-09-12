@@ -198,38 +198,26 @@ body {
 }
 
 /**
- * The cursor: a drawn sword, tip where the pointer actually is.
+ * The cursor.
  *
- * A real CSS cursor from an inline SVG, not an element chasing the mouse. A
- * JavaScript follower always trails the true pointer by a frame or two, which
- * reads as lag on every single movement, and it has to be undone again for
- * touch. This costs nothing, never lags, and the OS keeps drawing it over
- * everything including the 3D canvases.
+ * The images live in src/lib/cursors.ts, which writes the chosen set into two
+ * variables; this only says where each one applies. Without JavaScript, or
+ * before it runs, both fall back to the system cursor.
  *
- * Drawn at 32px, which is the largest size every platform will still render as
- * a cursor, and built from four heavy shapes rather than fine detail — a thin
- * line at this size disappears into the pixel grid. Blade, guard, grip, pommel,
- * and nothing else.
- *
- * Two states: a pale blade normally, and the accent blade over anything you can
- * press, so the pointer and the hover style say the same thing. Both sit inside
- * the same dark outline, which is why every OS cursor is drawn that way — it is
- * the only way one icon stays legible on both the pale green theme and the
- * near-black one.
+ * It stays a real CSS cursor in every set — never an element chasing the mouse,
+ * which always trails the true pointer by a frame or two. Animation is a
+ * separate layer around it (.fx-* below).
  *
  * Gated on a real pointing device. On a phone there is no cursor to restyle,
  * and `cursor: pointer` on touch has its own side effects.
  */
 @media (hover: hover) and (pointer: fine) {
   body {
-    cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%230a0a0a' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%230a0a0a' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%23ffffff' stroke='%230a0a0a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%234ade80' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%234ade80' stroke='%230a0a0a' stroke-width='1.7'/%3E%3C/svg%3E")
-        3 3,
-      auto;
+    cursor: var(--cursor-default, auto);
   }
 
-  /* Anything you can press draws the blade in the accent, so the cursor itself
-     tells you the thing under it is live. */
+  /* Anything you can press gets the set's "live" image, so the cursor itself
+     tells you the thing under it will respond. */
   a,
   button,
   summary,
@@ -237,13 +225,11 @@ body {
   select,
   [role='button'],
   [role='tab'],
+  [role='switch'],
   input[type='checkbox'],
   input[type='radio'],
   input[type='file'] {
-    cursor:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16.2 16.2 22.8 22.8' fill='none' stroke='%230a0a0a' stroke-width='5.4' stroke-linecap='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%230a0a0a' stroke-width='5.6' stroke-linecap='round'/%3E%3Cpath d='M2.6 2.6 17.6 12.4 12.4 17.6Z' fill='%234ade80' stroke='%230a0a0a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M19.6 11.2 11.2 19.6' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M17.4 17.4 21.6 21.6' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='24.6' cy='24.6' r='3' fill='%23ffffff' stroke='%230a0a0a' stroke-width='1.7'/%3E%3C/svg%3E")
-        3 3,
-      pointer;
+    cursor: var(--cursor-pointer, pointer);
   }
 
   /* A dead control should not claim to be pressable. `:disabled` beats the rule
@@ -255,8 +241,8 @@ body {
     cursor: not-allowed;
   }
 
-  /* Text entry keeps the system caret — a custom arrow over a text field hides
-     where the insertion point actually is. */
+  /* Text entry keeps the system caret in every set — a custom image over a text
+     field hides where the insertion point actually is. */
   input[type='text'],
   input[type='email'],
   input[type='password'],
@@ -269,6 +255,128 @@ body {
   [contenteditable='true'] {
     cursor: text;
   }
+}
+
+/**
+ * Cursor effects, spawned by src/lib/cursorFx.ts.
+ *
+ * Every particle is one span running one keyframe, with its start, end, spin
+ * and colour passed in as variables — so there is a single animation for every
+ * shape and direction, and the browser composites it without touching layout.
+ * Only transform and opacity move.
+ */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.fx-p {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  background: var(--c);
+  will-change: transform, opacity;
+  animation: fx-fly var(--dur, 600ms) cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes fx-fly {
+  from {
+    transform: translate3d(var(--x0), var(--y0), 0) rotate(var(--r0)) scale(var(--s0));
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(var(--x1), var(--y1), 0) rotate(var(--r1)) scale(var(--s1));
+    opacity: 0;
+  }
+}
+
+/* A hairline of shadow on each shape, so a white spark still shows on the
+   white theme and a black pixel on the dark one. */
+.fx-dot {
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.fx-pixel {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.45);
+}
+
+.fx-spark {
+  width: 3px;
+  height: 13px;
+  margin: -6.5px 0 0 -1.5px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.14);
+}
+
+.fx-leaf {
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 0 100% 0 100%;
+  box-shadow: inset -1px -1px 0 rgba(0, 0, 0, 0.28);
+}
+
+.fx-star {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+}
+
+/* The ring that opens under every click. */
+.fx-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 2px solid var(--c);
+  border-radius: 9999px;
+  will-change: transform, opacity;
+  animation: fx-ring 460ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes fx-ring {
+  from {
+    transform: translate3d(var(--x0), var(--y0), 0) scale(0.25);
+    opacity: 0.9;
+  }
+  to {
+    transform: translate3d(var(--x0), var(--y0), 0) scale(1.35);
+    opacity: 0;
+  }
+}
+
+.fx-halo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border: 2px solid var(--c);
+  border-radius: 9999px;
+  opacity: 0;
+  will-change: transform;
+  transition:
+    opacity 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.fx-halo-live {
+  background-color: color-mix(in srgb, var(--c) 16%, transparent);
 }
 
 /**

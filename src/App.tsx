@@ -26,6 +26,7 @@ import Celebration from './components/Celebration'
 import AdminSetup from './components/AdminSetup'
 import AdminConsole from './components/AdminConsole'
 import ThemeButton from './components/ThemeButton'
+import CursorButton from './components/CursorButton'
 import { formatClock } from './lib/time'
 import Nav, { type View } from './components/Nav'
 import { ToastStack, LevelUpModal } from './components/EventToasts'
@@ -411,6 +412,7 @@ function AuthedApp({
 
       {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
 
+      <CursorButton />
       <ThemeButton />
       <NoiseButton noise={noise} />
       <AiPlanner onApplyPlan={applyPlan} />
