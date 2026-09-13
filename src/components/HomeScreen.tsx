@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import {
   QuestIcon, TodoIcon, PlanIcon, FocusIcon, StudyIcon, HabitsIcon, GoalsIcon, HeroIcon, StatsIcon,
-  PersonaliseIcon,
+  PersonaliseIcon, SoundsIcon, AiPlanIcon,
 } from './SectionIcons'
 import type { AppState } from '../types'
 import { dailyKey, periodKey } from '../lib/period'
@@ -19,7 +19,9 @@ export type View =
   | 'dashboard'
   | 'todos'
   | 'schedule'
+  | 'aiplan'
   | 'focus'
+  | 'sounds'
   | 'cards'
   | 'habits'
   | 'goals'
@@ -37,9 +39,12 @@ export type View =
 export default function HomeScreen({
   state,
   onGo,
+  nowPlaying = null,
 }: {
   state: AppState
   onGo: (view: View) => void
+  /** What Sounds is playing, for its card. */
+  nowPlaying?: string | null
 }) {
   const cards = useMemo(() => {
     const stats = computeStats(state)
@@ -81,11 +86,25 @@ export default function HomeScreen({
         tone: 'gold' as const,
       },
       {
+        id: 'aiplan' as View,
+        icon: AiPlanIcon,
+        title: 'AI Plan',
+        stat: 'Turn a goal into a plan',
+        tone: 'mystic' as const,
+      },
+      {
         id: 'focus' as View,
         icon: FocusIcon,
         title: 'Focus',
         stat: stats.focusSessions ? `${hours}h over ${stats.focusSessions}` : 'Start a session',
         tone: 'ember' as const,
+      },
+      {
+        id: 'sounds' as View,
+        icon: SoundsIcon,
+        title: 'Sounds',
+        stat: nowPlaying ? `Playing ${nowPlaying}` : 'Jazz, lo-fi, rain and more',
+        tone: 'gold' as const,
       },
       {
         id: 'cards' as View,
@@ -131,7 +150,7 @@ export default function HomeScreen({
         wide: true,
       },
     ]
-  }, [state])
+  }, [state, nowPlaying])
 
   const TONE = {
     gold: 'text-gold-400',

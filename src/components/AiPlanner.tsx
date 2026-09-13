@@ -1,17 +1,6 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarCheck,
-  CalendarRange,
-  FileText,
-  ListChecks,
-  Loader2,
-  Paperclip,
-  Sparkles,
-  X,
-} from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, ArrowRight, CalendarCheck, FileText, ListChecks, Loader2, Paperclip, RotateCcw, Sparkles, X } from 'lucide-react'
 import type { PlanItemInput, PlanPlacement } from '../types'
 import { ApiError, askPlannerQuestions, generatePlan, type GeneratedPlan, type PlanDocument } from '../lib/api'
 import { shiftDays } from '../lib/planner'
@@ -19,24 +8,17 @@ import { dailyKey } from '../lib/period'
 
 interface Props {
   onApplyPlan: (items: PlanItemInput[]) => void
+  /** Goes to the planner, where an applied plan's dated tasks now sit. */
+  onOpenPlanner: () => void
 }
 
 type Stage = 'goal' | 'questions' | 'review'
 
-/**
- * Bottom corner on phones, side tab from md up.
- *
- * Vertically centred it sits squarely over the content column on a narrow
- * screen and hides whatever is behind it — a stat tile reading "0" because its
- * leading digit was covered is worse than having no button. The content column
- * only clears the side rails once the viewport passes about 760px, and the
- * bottom corner is the easiest place to reach one-handed anyway.
- *
- * Offset with `top` rather than `-translate-y-1/2`: framer writes its own
- * inline transform for the entry animation, which overrides the utility class.
- */
-export const SIDE_BUTTON =
-  'fixed bottom-24 left-0 z-40 flex h-14 w-11 items-center justify-center rounded-r-xl border border-l-0 shadow-lg transition-colors md:bottom-auto md:top-[calc(50%-1.75rem)] border-ink-600 bg-ink-850/90 text-slate-400 hover:text-gold-300'
+const STAGES: { id: Stage; label: string }[] = [
+  { id: 'goal', label: 'Goal' },
+  { id: 'questions', label: 'Questions' },
+  { id: 'review', label: 'Your plan' },
+]
 
 function errorText(err: unknown): string {
   if (err instanceof ApiError && err.status === 503) {
@@ -135,8 +117,11 @@ function PlanRow({ title, date }: { title: string; date?: string }) {
   )
 }
 
-export default function AiPlanner({ onApplyPlan }: Props) {
-  const [open, setOpen] = useState(false)
+/**
+ * The AI planner, as a screen of its own on the hub: describe a goal, answer a
+ * few questions about it, and get a dated plan to add to the planner in one tap.
+ */
+export default function AiPlanner({ onApplyPlan, onOpenPlanner }: Props) {
   const [stage, setStage] = useState<Stage>('goal')
   const [goal, setGoal] = useState('')
   const [detail, setDetail] = useState('')
@@ -191,12 +176,6 @@ export default function AiPlanner({ onApplyPlan }: Props) {
 
   const documents = files.map((f) => f.doc)
 
-  function close() {
-    setOpen(false)
-    // Delay avoids the form visibly clearing while the panel is still animating out.
-    setTimeout(reset, 200)
-  }
-
   async function submitGoal(e: React.FormEvent) {
     e.preventDefault()
     if (!goal.trim() || busy) return
@@ -243,52 +222,42 @@ export default function AiPlanner({ onApplyPlan }: Props) {
 
   const totalTasks = plan ? plan.todos.length + plan.daily.length + plan.weekly.length + plan.monthly.length : 0
 
+  const stageIndex = STAGES.findIndex((st) => st.id === stage)
+
   return (
-    <>
-      <motion.button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open AI planner"
-        initial={{ x: -40, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className={SIDE_BUTTON}
-      >
-        <CalendarRange className="h-5 w-5" />
-      </motion.button>
+    <div className="space-y-4">
+      <div>
+        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-50">
+          <Sparkles className="h-5 w-5 text-gold-400" /> AI Planner
+        </h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Describe a goal and answer a few questions. You get a dated plan that goes straight into your planner.
+        </p>
+      </div>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8 backdrop-blur-sm"
-            onClick={close}
-          >
-            <motion.div
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.94, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label="AI planner"
-              className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-ink-600 bg-ink-900 shadow-2xl"
+      <ol className="flex items-center gap-2" aria-label="Steps">
+        {STAGES.map((st, i) => (
+          <li key={st.id} className="flex flex-1 items-center gap-2">
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                i < stageIndex
+                  ? 'bg-gold-500/20 text-gold-400'
+                  : i === stageIndex
+                    ? 'bg-gradient-to-br from-gold-500 to-ember-500 text-onAccent'
+                    : 'border border-ink-600 bg-ink-800 text-slate-500'
+              }`}
+              aria-current={i === stageIndex ? 'step' : undefined}
             >
-              <div className="flex items-center gap-2 border-b border-ink-700/60 px-5 py-3.5">
-                <Sparkles className="h-4 w-4 text-gold-400" />
-                <p className="flex-1 font-display text-sm font-semibold text-slate-100">AI Planner</p>
-                <button
-                  type="button"
-                  onClick={close}
-                  aria-label="Close"
-                  className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-ink-800 hover:text-slate-200"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              {i + 1}
+            </span>
+            <span className={`truncate text-[11px] font-medium ${i === stageIndex ? 'text-slate-100' : 'text-slate-500'}`}>{st.label}</span>
+            {i < STAGES.length - 1 && <span className="h-px min-w-3 flex-1 bg-ink-600" />}
+          </li>
+        ))}
+      </ol>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <motion.div key={stage} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-ink-600 bg-ink-850 p-4">
+
                 {stage === 'goal' && (
                   <form onSubmit={submitGoal} className="space-y-3">
                     <div>
@@ -441,11 +410,11 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                   <div className="space-y-4">
                     {applied ? (
                       <div className="rounded-xl border border-mystic-400/40 bg-mystic-500/10 px-3 py-2.5 text-xs text-mystic-200">
-                        Added — {totalTasks} tasks are in your To-Do list, already placed on the Schedule tab.
+                        Added: {totalTasks} tasks are in your to-do list, and the dated ones are already placed in the planner.
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400">
-                        Review the plan, then add it. Dated tasks land directly on the Schedule tab.
+                        Review the plan, then add it. Dated tasks land straight in the planner.
                       </p>
                     )}
 
@@ -484,11 +453,22 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={close}
-                        className="rounded-xl border border-ink-600 px-3 py-2.5 text-sm text-slate-300 hover:bg-ink-800"
+                        onClick={reset}
+                        className="flex items-center gap-1.5 rounded-xl border border-ink-600 px-3 py-2.5 text-sm text-slate-300 hover:bg-ink-800"
                       >
-                        {applied ? 'Done' : 'Discard'}
+                        <RotateCcw className="h-4 w-4" />
+                        {applied ? 'Plan another' : 'Start over'}
                       </button>
+                      {applied && (
+                        <button
+                          type="button"
+                          onClick={onOpenPlanner}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent"
+                        >
+                          <CalendarCheck className="h-4 w-4" />
+                          Open the planner
+                        </button>
+                      )}
                       {!applied && (
                         <button
                           type="button"
@@ -502,11 +482,7 @@ export default function AiPlanner({ onApplyPlan }: Props) {
                     </div>
                   </div>
                 )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+      </motion.div>
+    </div>
   )
 }

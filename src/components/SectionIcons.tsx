@@ -146,6 +146,32 @@ export function PersonaliseIcon(props: IconProps) {
   )
 }
 
+/** Sounds — headphones, since this is music and ambience to wear while you
+ * work, not a speaker blaring at a room. */
+export function SoundsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4.4 14.4v-2.6a7.6 7.6 0 0 1 15.2 0v2.6" />
+      <rect x="3.4" y="13.4" width="4.4" height="7" rx="1.7" />
+      <rect x="16.2" y="13.4" width="4.4" height="7" rx="1.7" />
+    </Svg>
+  )
+}
+
+/** AI Planner — a calendar with a spark beside it: a plan that gets written
+ * for you. Narrower than Plan's calendar so the two never read as the same. */
+export function AiPlanIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3.4" y="6.2" width="12.6" height="14.4" rx="2.3" />
+      <path d="M3.4 10.6h12.6" />
+      <path d="M7.2 4.4v3.2M12.2 4.4v3.2" />
+      <path d="M6.8 14.2h5.4M6.8 17.2h3.2" />
+      <path d="M19.2 3.2l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7Z" fill="currentColor" stroke="none" />
+    </Svg>
+  )
+}
+
 /** Challenges — two blades crossed, each with its own guard, because a
  * challenge takes two people. */
 export function ChallengesIcon(props: IconProps) {

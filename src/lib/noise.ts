@@ -12,6 +12,8 @@
  * been a 9MB download for material that is identical every second.
  */
 
+import { startMusic, type MusicId, type MusicSession } from './music'
+
 export type SoundId =
   | 'deep'
   | 'white'
@@ -53,8 +55,11 @@ export interface Recipe {
   pulse?: { rate: number; depth: number }
 }
 
+export type SoundGroup = 'nature' | 'noise' | 'places'
+
 export interface SoundDef {
   id: SoundId
+  group: SoundGroup
   name: string
   blurb: string
   icon: string
@@ -73,7 +78,7 @@ export interface SoundDef {
 
 export const SOUNDS: SoundDef[] = [
   {
-    id: 'deep',
+    id: 'deep', group: 'noise',
     name: 'Deep white noise',
     blurb: 'A soft, warm recording. Easiest to sit with.',
     icon: '🎧',
@@ -81,19 +86,19 @@ export const SOUNDS: SoundDef[] = [
     trim: 1.32,
   },
   {
-    id: 'white', name: 'White noise', blurb: 'Flat, bright hiss. Masks voices well.', icon: '⚪',
+    id: 'white', group: 'noise', name: 'White noise', blurb: 'Flat, bright hiss. Masks voices well.', icon: '⚪',
     recipe: { source: 'white' }, trim: 0.31,
   },
   {
-    id: 'pink', name: 'Pink noise', blurb: 'Softer than white. Easiest on the ears.', icon: '🌸',
+    id: 'pink', group: 'noise', name: 'Pink noise', blurb: 'Softer than white. Easiest on the ears.', icon: '🌸',
     recipe: { source: 'pink' }, trim: 0.93,
   },
   {
-    id: 'brown', name: 'Brown noise', blurb: 'Deep and rumbling, like distant traffic.', icon: '🟤',
+    id: 'brown', group: 'noise', name: 'Brown noise', blurb: 'Deep and rumbling, like distant traffic.', icon: '🟤',
     recipe: { source: 'brown' }, trim: 0.98,
   },
   {
-    id: 'rain', name: 'Rain', blurb: 'Steady rainfall on a window.', icon: '🌧️',
+    id: 'rain', group: 'nature', name: 'Rain', blurb: 'Steady rainfall on a window.', icon: '🌧️',
     recipe: {
       source: 'white',
       filters: [
@@ -104,7 +109,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.45,
   },
   {
-    id: 'downpour', name: 'Heavy rain', blurb: 'A real downpour, close and loud.', icon: '⛈️',
+    id: 'downpour', group: 'nature', name: 'Heavy rain', blurb: 'A real downpour, close and loud.', icon: '⛈️',
     recipe: {
       source: 'white',
       filters: [
@@ -117,7 +122,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.34,
   },
   {
-    id: 'waves', name: 'Ocean', blurb: 'Slow swells rolling in and out.', icon: '🌊',
+    id: 'waves', group: 'nature', name: 'Ocean', blurb: 'Slow swells rolling in and out.', icon: '🌊',
     recipe: {
       source: 'brown',
       filters: [{ type: 'lowpass', freq: 500 }],
@@ -127,7 +132,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 1.19,
   },
   {
-    id: 'stream', name: 'Stream', blurb: 'Water running over stones.', icon: '💧',
+    id: 'stream', group: 'nature', name: 'Stream', blurb: 'Water running over stones.', icon: '💧',
     recipe: {
       source: 'white',
       filters: [
@@ -139,7 +144,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.65,
   },
   {
-    id: 'wind', name: 'Wind', blurb: 'Gusts moving through an open space.', icon: '🌬️',
+    id: 'wind', group: 'nature', name: 'Wind', blurb: 'Gusts moving through an open space.', icon: '🌬️',
     recipe: {
       source: 'pink',
       filters: [{ type: 'bandpass', freq: 420, q: 0.7 }],
@@ -149,7 +154,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 2.92,
   },
   {
-    id: 'forest', name: 'Forest', blurb: 'Leaves stirring high in the canopy.', icon: '🌲',
+    id: 'forest', group: 'nature', name: 'Forest', blurb: 'Leaves stirring high in the canopy.', icon: '🌲',
     recipe: {
       source: 'white',
       filters: [
@@ -162,7 +167,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.42,
   },
   {
-    id: 'fan', name: 'Desk fan', blurb: 'A steady blade hum a metre away.', icon: '🌀',
+    id: 'fan', group: 'places', name: 'Desk fan', blurb: 'A steady blade hum a metre away.', icon: '🌀',
     recipe: {
       source: 'brown',
       filters: [
@@ -174,7 +179,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.84,
   },
   {
-    id: 'aircon', name: 'Air conditioning', blurb: 'The hum of an office that never sleeps.', icon: '❄️',
+    id: 'aircon', group: 'places', name: 'Air conditioning', blurb: 'The hum of an office that never sleeps.', icon: '❄️',
     recipe: {
       source: 'pink',
       filters: [
@@ -186,7 +191,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 1.02,
   },
   {
-    id: 'cabin', name: 'Aeroplane cabin', blurb: 'Cruising at altitude, engines behind you.', icon: '✈️',
+    id: 'cabin', group: 'places', name: 'Aeroplane cabin', blurb: 'Cruising at altitude, engines behind you.', icon: '✈️',
     recipe: {
       source: 'brown',
       filters: [
@@ -198,7 +203,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.72,
   },
   {
-    id: 'train', name: 'Train carriage', blurb: 'Rolling stock and rhythm on the rails.', icon: '🚆',
+    id: 'train', group: 'places', name: 'Train carriage', blurb: 'Rolling stock and rhythm on the rails.', icon: '🚆',
     recipe: {
       source: 'brown',
       filters: [
@@ -210,7 +215,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 1.13,
   },
   {
-    id: 'underwater', name: 'Underwater', blurb: 'Submerged, everything muffled above.', icon: '🫧',
+    id: 'underwater', group: 'places', name: 'Underwater', blurb: 'Submerged, everything muffled above.', icon: '🫧',
     recipe: {
       source: 'brown',
       filters: [
@@ -223,7 +228,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 0.9,
   },
   {
-    id: 'cave', name: 'Deep cave', blurb: 'Vast, low and still. Almost nothing up top.', icon: '🕳️',
+    id: 'cave', group: 'places', name: 'Deep cave', blurb: 'Vast, low and still. Almost nothing up top.', icon: '🕳️',
     recipe: {
       source: 'brown',
       filters: [
@@ -235,7 +240,7 @@ export const SOUNDS: SoundDef[] = [
     trim: 1.08,
   },
   {
-    id: 'night', name: 'Night air', blurb: 'Thin, high and quiet. Late and far from traffic.', icon: '🌙',
+    id: 'night', group: 'nature', name: 'Night air', blurb: 'Thin, high and quiet. Late and far from traffic.', icon: '🌙',
     recipe: {
       source: 'white',
       filters: [
@@ -319,25 +324,44 @@ function gainFor(volume: number): number {
   return volume * volume
 }
 
+export type Layer = 'music' | 'ambience'
+
 export interface NoiseEngine {
-  play(sound: SoundId): Promise<void>
-  stop(): void
-  setVolume(value: number): void
+  /** Starts an ambient sound, replacing any other ambient sound. */
+  playAmbience(sound: SoundId): Promise<void>
+  stopAmbience(): void
+  /** Starts a music style, replacing any other music. Plays over ambience. */
+  playMusic(id: MusicId): Promise<void>
+  stopMusic(): void
+  setVolume(layer: Layer, value: number): void
   /** Current output level, 0–1. Drives the meter and proves audio is flowing. */
   level(): number
   dispose(): void
 }
 
+/**
+ * Two layers into one output: music on one, an ambient sound on the other, so
+ * lo-fi can play with rain behind it. Each layer has its own volume.
+ */
 export function createNoiseEngine(): NoiseEngine {
   let ctx: AudioContext | null = null
   let master: GainNode | null = null
   let analyser: AnalyserNode | null = null
+  const layerGain: Partial<Record<Layer, GainNode>> = {}
+  const volumes: Record<Layer, number> = { music: 0.5, ambience: 0.35 }
+
+  // The ambient voice: its source, filter chain and modulators, and a gain of
+  // its own for fading in and out without touching the layer's volume.
   let chain: AudioNode[] = []
   let source: AudioBufferSourceNode | null = null
   let lfos: OscillatorNode[] = []
+  let voiceGain: GainNode | null = null
   let generation = 0
+
+  let music: MusicSession | null = null
+  let musicGeneration = 0
+
   let meterData: Float32Array | null = null
-  let volume = 0.5
   const buffers = new Map<string, AudioBuffer>()
 
   function ensureContext(): AudioContext {
@@ -346,14 +370,26 @@ export function createNoiseEngine(): NoiseEngine {
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       ctx = new Ctor()
       master = ctx.createGain()
-      master.gain.value = 0
       analyser = ctx.createAnalyser()
       analyser.fftSize = 2048
       meterData = new Float32Array(analyser.fftSize)
       master.connect(analyser)
       analyser.connect(ctx.destination)
+      for (const layer of ['music', 'ambience'] as const) {
+        const gain = ctx.createGain()
+        gain.gain.value = gainFor(volumes[layer])
+        gain.connect(master)
+        layerGain[layer] = gain
+      }
     }
     return ctx
+  }
+
+  async function wake(): Promise<AudioContext> {
+    const context = ensureContext()
+    // Browsers start the context suspended until a user gesture unlocks it.
+    if (context.state === 'suspended') await context.resume()
+    return context
   }
 
   function teardownVoice() {
@@ -377,6 +413,8 @@ export function createNoiseEngine(): NoiseEngine {
     lfos = []
     for (const node of chain) node.disconnect()
     chain = []
+    voiceGain?.disconnect()
+    voiceGain = null
   }
 
   /** Recorded sounds are fetched and decoded once, then cached like the
@@ -467,11 +505,8 @@ export function createNoiseEngine(): NoiseEngine {
   }
 
   return {
-    async play(sound: SoundId) {
-      const context = ensureContext()
-      // Browsers start the context suspended until a user gesture unlocks it.
-      if (context.state === 'suspended') await context.resume()
-
+    async playAmbience(sound: SoundId) {
+      const context = await wake()
       const def = SOUNDS.find((s) => s.id === sound)
       if (!def) return
 
@@ -482,39 +517,55 @@ export function createNoiseEngine(): NoiseEngine {
       if (token !== generation) return
 
       teardownVoice()
-      buildVoice(context, def, buffer, master!)
-
+      voiceGain = context.createGain()
+      voiceGain.gain.value = 0
+      voiceGain.connect(layerGain.ambience!)
+      buildVoice(context, def, buffer, voiceGain)
       const now = context.currentTime
-      master!.gain.cancelScheduledValues(now)
-      master!.gain.setValueAtTime(master!.gain.value, now)
-      master!.gain.linearRampToValueAtTime(gainFor(volume), now + 0.4)
+      voiceGain.gain.setValueAtTime(0, now)
+      voiceGain.gain.linearRampToValueAtTime(1, now + 0.4)
     },
 
-    stop() {
+    stopAmbience() {
       generation++
-      if (!ctx || !master) return
+      if (!ctx || !voiceGain) return
       const now = ctx.currentTime
-      master.gain.cancelScheduledValues(now)
-      master.gain.setValueAtTime(master.gain.value, now)
+      const fading = voiceGain
+      fading.gain.cancelScheduledValues(now)
+      fading.gain.setValueAtTime(fading.gain.value, now)
       // Ramp down before cutting the source, otherwise the stop clicks.
-      master.gain.linearRampToValueAtTime(0, now + 0.3)
-      const dying = source
+      fading.gain.linearRampToValueAtTime(0, now + 0.3)
       window.setTimeout(() => {
-        if (source === dying) teardownVoice()
+        if (voiceGain === fading) teardownVoice()
       }, 350)
     },
 
-    setVolume(value: number) {
-      volume = Math.max(0, Math.min(1, value))
-      if (!ctx || !master || !source) return
+    async playMusic(id: MusicId) {
+      const token = ++musicGeneration
+      const context = await wake()
+      if (token !== musicGeneration) return
+      music?.stop(0.5)
+      music = startMusic(context, layerGain.music!, id)
+    },
+
+    stopMusic() {
+      musicGeneration++
+      music?.stop()
+      music = null
+    },
+
+    setVolume(layer: Layer, value: number) {
+      volumes[layer] = Math.max(0, Math.min(1, value))
+      const gain = layerGain[layer]
+      if (!ctx || !gain) return
       const now = ctx.currentTime
-      master.gain.cancelScheduledValues(now)
-      master.gain.setValueAtTime(master.gain.value, now)
-      master.gain.linearRampToValueAtTime(gainFor(volume), now + 0.08)
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(gain.gain.value, now)
+      gain.gain.linearRampToValueAtTime(gainFor(volumes[layer]), now + 0.08)
     },
 
     level() {
-      if (!analyser || !meterData || !source) return 0
+      if (!analyser || !meterData || (!source && !music)) return 0
       analyser.getFloatTimeDomainData(meterData)
       let sum = 0
       for (let i = 0; i < meterData.length; i++) sum += meterData[i] * meterData[i]
@@ -523,6 +574,8 @@ export function createNoiseEngine(): NoiseEngine {
     },
 
     dispose() {
+      music?.stop(0.05)
+      music = null
       teardownVoice()
       if (ctx) void ctx.close()
       ctx = null

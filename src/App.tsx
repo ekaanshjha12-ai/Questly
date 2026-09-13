@@ -17,7 +17,9 @@ import StudyScreen from './components/StudyScreen'
 import { VerifyModalHost } from './components/VerifyModal'
 import { useFocusClock } from './hooks/useFocusClock'
 import { useNoise } from './hooks/useNoise'
-import NoiseButton from './components/NoiseButton'
+import SoundsScreen, { LevelBars } from './components/SoundsScreen'
+import { MUSIC } from './lib/music'
+import { SOUNDS } from './lib/noise'
 import AiPlanner from './components/AiPlanner'
 import InstallPrompt, { InstallButton } from './components/InstallPrompt'
 import GuideTour, { hasSeenTour } from './components/GuideTour'
@@ -267,9 +269,11 @@ function AuthedApp({
   // switching tabs.
   const clock = useFocusClock({ onSave: saveSession })
 
-  // Lives here rather than in a screen so ambient sound keeps playing while the
-  // user moves between tabs.
+  // Lives here rather than in a screen so sound keeps playing while the user
+  // moves between screens.
   const noise = useNoise()
+  const nowPlaying =
+    [MUSIC.find((m) => m.id === noise.music)?.name, SOUNDS.find((s) => s.id === noise.ambience)?.name].filter(Boolean).join(' + ') || null
 
   // Fires on real forward movement only — a level or a rank, not every tick of
   // XP. Confetti for routine progress stops meaning anything by the third time.
@@ -339,6 +343,21 @@ function AuthedApp({
                 {formatClock(clock.mode === 'timer' ? clock.remainingMs : clock.elapsedMs)}
               </button>
             )}
+            {nowPlaying && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('focus')
+                  setView('sounds')
+                }}
+                title={`Playing ${nowPlaying}`}
+                aria-label={`Sounds: playing ${nowPlaying}`}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-2 transition-colors hover:bg-gold-500/20"
+              >
+                <LevelBars getLevel={noise.getLevel} active className="h-3.5" />
+                <span className="hidden max-w-[7rem] truncate text-[11px] font-semibold text-gold-300 sm:inline">{nowPlaying}</span>
+              </button>
+            )}
             <SyncBadge status={syncStatus} />
             <InstallButton />
             <div className="flex items-center gap-2">
@@ -377,7 +396,9 @@ function AuthedApp({
           </button>
         )}
 
-        {view === 'home' && <HomeScreen state={state} onGo={setView} />}
+        {view === 'home' && <HomeScreen state={state} onGo={setView} nowPlaying={nowPlaying} />}
+        {view === 'sounds' && <SoundsScreen noise={noise} />}
+        {view === 'aiplan' && <AiPlanner onApplyPlan={applyPlan} onOpenPlanner={() => setView('schedule')} />}
         {view === 'dashboard' && (
           <Dashboard
             state={state}
@@ -496,8 +517,6 @@ function AuthedApp({
       {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
 
       <ThemeButton />
-      <NoiseButton noise={noise} />
-      <AiPlanner onApplyPlan={applyPlan} />
       <InstallPrompt />
 
       {celebrate && burst.key > 0 && <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />}
