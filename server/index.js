@@ -1,7 +1,8 @@
 import 'dotenv/config'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import { existsSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isConfigured, verifyPhoto, verifyVoice, MIN_CONFIDENCE } from './verify.js'
@@ -64,7 +65,17 @@ import {
   validateTerms,
 } from './challenges.js'
 import { POST_IMAGE_MAX_BYTES, UNLOCKS, validatePost } from './social.js'
-import { screenImage, isConfigured as imageSafetyConfigured } from './imagesafety.js'
+import { screenImage, screenVideoFrames, isConfigured as imageSafetyConfigured } from './imagesafety.js'
+import {
+  VIDEO_MAX_BYTES,
+  VIDEO_MAX_SECONDS,
+  looksLikeVideo,
+  oneAtATime,
+  probe,
+  sampleFrames,
+  transcode,
+  videoConfigured,
+} from './media.js'
 import { randomUUID } from 'node:crypto'
 import {
   audit,
@@ -109,6 +120,12 @@ import {
   insertPostImage,
   listFeed,
   softDeletePost,
+  MEDIA_DIR,
+  countRecentVideos,
+  deletePostVideo,
+  getPostVideo,
+  insertPostVideo,
+  listOrphanVideos,
   countConversationsStartedSince,
   countMessagesBy,
   createConversation,
@@ -1789,17 +1806,35 @@ function levelOf(userId) {
 }
 
 app.get('/api/social/unlocks', requireAuth, throttleSocialRead, (req, res) => {
-  res.json({ level: levelOf(req.user.id), unlocks: UNLOCKS, imagesChecked: imageSafetyConfigured() })
+  res.json({
+    level: levelOf(req.user.id),
+    unlocks: UNLOCKS,
+    imagesChecked: imageSafetyConfigured(),
+    videosAvailable: imageSafetyConfigured() && videoConfigured(),
+  })
 })
+
+function videoView(video) {
+  return {
+    id: video.id,
+    url: `/api/posts/videos/${video.id}`,
+    poster: `/api/posts/videos/${video.id}/poster`,
+    durationMs: video.duration_ms,
+    width: video.width,
+    height: video.height,
+  }
+}
 
 function postView(row, viewerId) {
   const author = findUserById(row.user_id)
+  const video = row.video_id ? getPostVideo(row.video_id) : null
   return {
     id: row.id,
     kind: row.kind,
     body: row.body,
     createdAt: row.created_at,
     image: row.image_id ? `/api/posts/images/${row.image_id}` : null,
+    video: video ? videoView(video) : null,
     author: author ? playerSummary(author) : null,
     mine: row.user_id === viewerId,
   }
@@ -1836,7 +1871,6 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
       res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
       return
     }
-    const level = levelOf(viewer.id)
     const post = validatePost(req.body ?? {})
     if (!post.ok) {
       res.status(400).json({ error: post.error })
@@ -1848,12 +1882,25 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
       return
     }
 
-    let imageId = null
-    if (req.body?.imageBase64) {
-      if (level < UNLOCKS.photo) {
-        res.status(403).json({ error: `Photo posts unlock at level ${UNLOCKS.photo}.`, code: 'locked' })
+    if (req.body?.imageBase64 && req.body?.videoId) {
+      res.status(400).json({ error: 'A post can have a photo or a video, not both.' })
+      return
+    }
+
+    // The video was uploaded and checked already; it only has to be this
+    // person's, and not already part of another post.
+    let videoId = null
+    if (req.body?.videoId) {
+      const video = typeof req.body.videoId === 'string' ? getPostVideo(req.body.videoId) : null
+      if (!video || video.user_id !== viewer.id || video.post_id) {
+        res.status(400).json({ error: 'That video is not available any more. Add it again.' })
         return
       }
+      videoId = video.id
+    }
+
+    let imageId = null
+    if (req.body?.imageBase64) {
       if (countRecentPosts(viewer.id, hourAgo, true) >= 5) {
         res.status(429).json({ error: 'You have posted a lot of photos this hour. Try again soon.' })
         return
@@ -1885,7 +1932,7 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
     }
 
     const id = randomUUID()
-    insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId })
+    insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId, videoId })
     res.status(201).json({ post: postView(getPost(id), viewer.id) })
   } catch (err) {
     console.error('post failed', err)
@@ -1916,6 +1963,213 @@ app.get('/api/posts/images/:id', requireAuth, throttleSocialRead, (req, res) => 
   res.setHeader('Cache-Control', 'private, max-age=86400')
   res.send(Buffer.from(image.data, 'base64'))
 })
+
+
+// ---------------------------------------------------------------------------
+// Feed videos
+//
+// Uploaded on their own, before the post: the file streams to disk, is checked
+// to be a video no longer than a minute, has frames sampled through it for the
+// image safety check, and is re-encoded to a plain mp4 with its metadata —
+// location included — left behind. Only then does the post that uses it get
+// written. Served only to people who could see that post.
+// ---------------------------------------------------------------------------
+
+const throttleVideoUpload = rateLimit({ name: 'video-upload', max: 8, windowMs: 60 * 60_000, by: 'user' })
+// A playing video fetches itself in ranges, so this allows far more than a
+// page of requests would need.
+const throttleMedia = rateLimit({ name: 'media', max: 600, windowMs: 60_000, by: 'user' })
+const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const VIDEOS_PER_HOUR = 4
+
+/** Streams a request body to a file, giving up past `maxBytes`. */
+function receiveUpload(req, dest, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let bytes = 0
+    let failed = false
+    const out = createWriteStream(dest)
+    const fail = (err) => {
+      if (failed) return
+      failed = true
+      req.unpipe(out)
+      out.destroy()
+      req.resume()
+      reject(err)
+    }
+    req.on('data', (chunk) => {
+      bytes += chunk.length
+      if (bytes > maxBytes) fail(Object.assign(new Error('too large'), { code: 'too_large' }))
+    })
+    req.on('aborted', () => fail(Object.assign(new Error('aborted'), { code: 'aborted' })))
+    req.on('error', fail)
+    out.on('error', fail)
+    out.on('finish', () => !failed && resolve(bytes))
+    req.pipe(out)
+  })
+}
+
+/** How many frames to look at: one every few seconds, within bounds. */
+function framesToCheck(durationMs) {
+  return Math.max(4, Math.min(12, Math.ceil(durationMs / 4000)))
+}
+
+app.post('/api/posts/videos', requireAuth, throttleVideoUpload, async (req, res) => {
+  const viewer = findUserById(req.user.id)
+  if (!viewer.username || !viewer.birthdate) {
+    res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
+    return
+  }
+  if (!videoConfigured() || !imageSafetyConfigured()) {
+    res.status(503).json({ error: 'Video posts are not available on this server.', code: 'not_configured' })
+    return
+  }
+  if (!/^video\//i.test(String(req.headers['content-type'] ?? ''))) {
+    res.status(415).json({ error: 'Choose a video file.' })
+    return
+  }
+  const tooLarge = `Videos can be at most ${Math.round(VIDEO_MAX_BYTES / 1024 / 1024)}MB.`
+  if (Number(req.headers['content-length']) > VIDEO_MAX_BYTES) {
+    res.status(413).json({ error: tooLarge })
+    return
+  }
+  if (countRecentVideos(viewer.id, new Date(Date.now() - 60 * 60_000).toISOString()) >= VIDEOS_PER_HOUR) {
+    res.status(429).json({ error: 'You have added a lot of videos this hour. Try again soon.' })
+    return
+  }
+
+  const id = randomUUID()
+  const tmpDir = join(MEDIA_DIR, 'tmp')
+  mkdirSync(tmpDir, { recursive: true })
+  const upload = join(tmpDir, `${id}.upload`)
+  const output = join(MEDIA_DIR, `${id}.mp4`)
+  const poster = join(MEDIA_DIR, `${id}.jpg`)
+  let kept = false
+
+  try {
+    await receiveUpload(req, upload, VIDEO_MAX_BYTES)
+    if (!(await looksLikeVideo(upload))) {
+      res.status(400).json({ error: 'That file is not a video.' })
+      return
+    }
+    const info = await probe(upload)
+    if (!info) {
+      res.status(400).json({ error: 'That video could not be read. Try an MP4 or MOV file.' })
+      return
+    }
+    if (info.durationMs > (VIDEO_MAX_SECONDS + 0.5) * 1000) {
+      res.status(400).json({ error: `Videos can be at most ${VIDEO_MAX_SECONDS} seconds long.` })
+      return
+    }
+    if (info.durationMs < 300) {
+      res.status(400).json({ error: 'That video is too short.' })
+      return
+    }
+
+    const outcome = await oneAtATime(async () => {
+      const frames = await sampleFrames(upload, info.durationMs, framesToCheck(info.durationMs))
+      const verdict = await meter({ userId: viewer.id, endpoint: 'feed.video' }, () => screenVideoFrames(frames))
+      if (!verdict.allowed) return { verdict }
+      await transcode(upload, output)
+      await writeFile(poster, frames[0])
+      return { verdict }
+    })
+
+    if (!outcome.verdict.allowed) {
+      audit({ userId: viewer.id, email: viewer.email, event: 'moderation.video', outcome: 'blocked', ip: req.ip, detail: outcome.verdict.category })
+      res.status(422).json({ error: outcome.verdict.reason || 'That video cannot be posted.', code: 'video_blocked' })
+      return
+    }
+
+    const final = (await probe(output)) ?? info
+    insertPostVideo({
+      id,
+      userId: viewer.id,
+      durationMs: final.durationMs,
+      width: final.width,
+      height: final.height,
+      bytes: statSync(output).size,
+    })
+    kept = true
+    res.status(201).json({ video: videoView(getPostVideo(id)) })
+  } catch (err) {
+    if (res.headersSent) return
+    if (err?.code === 'too_large') res.status(413).json({ error: tooLarge })
+    else if (err?.code === 'aborted') res.status(400).end()
+    else if (err?.code === 'not_configured') res.status(503).json({ error: err.message, code: 'not_configured' })
+    else if (err?.code === 'unreadable') res.status(400).json({ error: err.message })
+    else if (err?.code === 'timeout') res.status(400).json({ error: 'That video took too long to process. Try a shorter one.' })
+    else {
+      console.error('video upload failed', err)
+      res.status(500).json({ error: 'Could not add that video.' })
+    }
+  } finally {
+    await rm(upload, { force: true }).catch(() => {})
+    if (!kept) {
+      await rm(output, { force: true }).catch(() => {})
+      await rm(poster, { force: true }).catch(() => {})
+    }
+  }
+})
+
+/** The video if this viewer may see it: their own, or part of a post they
+ * could see. Everything else is a plain 404. */
+function videoFor(req, res) {
+  const id = String(req.params.id ?? '')
+  const video = MEDIA_ID.test(id) ? getPostVideo(id) : null
+  const viewer = findUserById(req.user.id)
+  const visible =
+    video &&
+    !video.deleted_at &&
+    (video.user_id === viewer.id || (video.post_id && !interactionBlocker(viewer, findUserById(video.user_id))))
+  if (!visible) {
+    res.status(404).end()
+    return null
+  }
+  return video
+}
+
+app.get('/api/posts/videos/:id', requireAuth, throttleMedia, (req, res) => {
+  const video = videoFor(req, res)
+  if (!video) return
+  res.sendFile(
+    join(MEDIA_DIR, `${video.id}.mp4`),
+    { headers: { 'Content-Type': 'video/mp4', 'Cache-Control': 'private, max-age=86400' } },
+    (err) => err && !res.headersSent && res.status(404).end(),
+  )
+})
+
+app.get('/api/posts/videos/:id/poster', requireAuth, throttleMedia, (req, res) => {
+  const video = videoFor(req, res)
+  if (!video) return
+  res.sendFile(
+    join(MEDIA_DIR, `${video.id}.jpg`),
+    { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400' } },
+    (err) => err && !res.headersSent && res.status(404).end(),
+  )
+})
+
+/** Videos uploaded but never posted, and uploads a crash left half-written. */
+function sweepVideos() {
+  try {
+    const cutoff = new Date(Date.now() - 6 * 60 * 60_000).toISOString()
+    for (const { id } of listOrphanVideos(cutoff)) {
+      rmSync(join(MEDIA_DIR, `${id}.mp4`), { force: true })
+      rmSync(join(MEDIA_DIR, `${id}.jpg`), { force: true })
+      deletePostVideo(id)
+    }
+    const tmpDir = join(MEDIA_DIR, 'tmp')
+    if (existsSync(tmpDir)) {
+      for (const name of readdirSync(tmpDir)) {
+        const path = join(tmpDir, name)
+        if (Date.now() - statSync(path).mtimeMs > 60 * 60_000) rmSync(path, { force: true })
+      }
+    }
+  } catch (err) {
+    console.error('video sweep failed', err)
+  }
+}
+setInterval(sweepVideos, 60 * 60_000).unref()
+setTimeout(sweepVideos, 60_000).unref()
 
 app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res) => {
   const post = getPost(String(req.params.id ?? ''))

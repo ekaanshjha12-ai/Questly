@@ -16,6 +16,10 @@ const dataDir = process.env.DATA_DIR
   : join(here, 'data')
 mkdirSync(dataDir, { recursive: true })
 
+/** Where files too big for the database live — feed videos — beside it on the
+ * same volume. */
+export const MEDIA_DIR = join(dataDir, 'media')
+
 export const db = new Database(join(dataDir, 'questly.db'))
 
 db.run('PRAGMA journal_mode = WAL')
@@ -310,6 +314,30 @@ db.run(`
     created_at TEXT NOT NULL
   )
 `)
+
+/**
+ * Feed videos. The files themselves are on disk in MEDIA_DIR, named by id: an
+ * mp4 and a poster frame. A video is uploaded and checked before the post it
+ * belongs to is written, so for a short while it exists attached to nothing;
+ * ones never attached are swept away.
+ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS post_videos (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    duration_ms INTEGER NOT NULL,
+    width       INTEGER NOT NULL,
+    height      INTEGER NOT NULL,
+    bytes       INTEGER NOT NULL,
+    created_at  TEXT NOT NULL
+  )
+`)
+db.run('CREATE INDEX IF NOT EXISTS idx_post_videos_user ON post_videos(user_id, created_at)')
+try {
+  db.run('ALTER TABLE posts ADD COLUMN video_id TEXT')
+} catch {
+  // Already present.
+}
 
 /**
  * Direct messages.
@@ -1023,16 +1051,56 @@ export function getPostImage(id) {
   return db.get('SELECT i.id, i.user_id, i.mime, i.data, p.deleted_at FROM post_images i LEFT JOIN posts p ON p.image_id = i.id WHERE i.id = ?', [id]) ?? null
 }
 
-export function insertPost({ id, userId, kind, body, imageId = null, clubId = null }) {
-  db.run('INSERT INTO posts (id, user_id, kind, body, image_id, club_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+export function insertPost({ id, userId, kind, body, imageId = null, videoId = null, clubId = null }) {
+  db.run('INSERT INTO posts (id, user_id, kind, body, image_id, video_id, club_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
     id,
     userId,
     kind,
     body,
     imageId,
+    videoId,
     clubId,
     new Date().toISOString(),
   ])
+}
+
+export function insertPostVideo({ id, userId, durationMs, width, height, bytes }) {
+  db.run('INSERT INTO post_videos (id, user_id, duration_ms, width, height, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+    id,
+    userId,
+    durationMs,
+    width,
+    height,
+    bytes,
+    new Date().toISOString(),
+  ])
+}
+
+/** A video with the post it belongs to, if any: `post_id` is null until it is
+ * attached, and `deleted_at` is set once that post is deleted. */
+export function getPostVideo(id) {
+  return (
+    db.get(
+      `SELECT v.*, p.id AS post_id, p.deleted_at FROM post_videos v LEFT JOIN posts p ON p.video_id = v.id WHERE v.id = ?`,
+      [id],
+    ) ?? null
+  )
+}
+
+export function countRecentVideos(userId, sinceIso) {
+  return db.get('SELECT COUNT(*) AS n FROM post_videos WHERE user_id = ? AND created_at > ?', [userId, sinceIso])?.n ?? 0
+}
+
+/** Videos uploaded before `beforeIso` that no post ever used. */
+export function listOrphanVideos(beforeIso) {
+  return db.all(
+    `SELECT v.id FROM post_videos v WHERE v.created_at < ? AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.video_id = v.id)`,
+    [beforeIso],
+  )
+}
+
+export function deletePostVideo(id) {
+  db.run('DELETE FROM post_videos WHERE id = ?', [id])
 }
 
 export function getPost(id) {

@@ -20,14 +20,59 @@ export function kindMeta(kind: PostKind) {
 }
 
 /** Mirrors UNLOCKS in server/social.js, which is the copy that is enforced. */
-export const UNLOCKS = { post: 1, message: 2, photo: 3, createClub: 10 } as const
+export const UNLOCKS = { post: 1, message: 2, createClub: 10 } as const
 
-export const UNLOCK_LIST: { key: 'post' | 'message' | 'photo' | 'createClub'; label: string }[] = [
-  { key: 'post', label: 'Post to the feed' },
+export const UNLOCK_LIST: { key: 'post' | 'message' | 'createClub'; label: string }[] = [
+  { key: 'post', label: 'Post to the feed, with photos and videos' },
   { key: 'message', label: 'Message other players' },
-  { key: 'photo', label: 'Post photos' },
   { key: 'createClub', label: 'Create a club' },
 ]
+
+/** Mirrors the limits in server/media.js. */
+export const VIDEO_MAX_BYTES = 50 * 1024 * 1024
+export const VIDEO_MAX_SECONDS = 60
+
+/**
+ * A chosen video's length and a local preview of it, read before anything is
+ * uploaded, so one that is too long is turned away at once rather than after
+ * a 50MB upload. The browser may not be able to decode every format a phone
+ * records — the server can — so a file the browser cannot read is let through
+ * with an unknown length and the server has the final say.
+ */
+export async function readVideoFile(file: File): Promise<{ previewUrl: string; durationMs: number | null }> {
+  if (!file.type.startsWith('video/') && !/\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(file.name)) {
+    throw new Error('Choose a video file.')
+  }
+  if (file.size > VIDEO_MAX_BYTES) throw new Error(`That video is over ${VIDEO_MAX_BYTES / 1024 / 1024}MB. Trim it or choose a shorter one.`)
+  const previewUrl = URL.createObjectURL(file)
+  const durationMs = await new Promise<number | null>((resolve) => {
+    const el = document.createElement('video')
+    el.preload = 'metadata'
+    el.muted = true
+    let settled = false
+    const done = (value: number | null) => {
+      if (settled) return
+      settled = true
+      el.removeAttribute('src')
+      el.load()
+      resolve(value)
+    }
+    el.onloadedmetadata = () => done(Number.isFinite(el.duration) ? Math.round(el.duration * 1000) : null)
+    el.onerror = () => done(null)
+    setTimeout(() => done(null), 8000)
+    el.src = previewUrl
+  })
+  if (durationMs !== null && durationMs > (VIDEO_MAX_SECONDS + 0.5) * 1000) {
+    URL.revokeObjectURL(previewUrl)
+    throw new Error(`Videos can be at most ${VIDEO_MAX_SECONDS} seconds. That one is ${Math.round(durationMs / 1000)}.`)
+  }
+  return { previewUrl, durationMs }
+}
+
+export function formatDuration(ms: number): string {
+  const total = Math.round(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
 
 export interface ShareMoment {
   id: string

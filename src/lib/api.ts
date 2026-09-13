@@ -674,12 +674,23 @@ export function sendChallengeMessage(id: string, body: string) {
 
 export type PostKind = 'update' | 'learned' | 'achievement' | 'progress'
 
+/** A video that has been uploaded, checked and converted. */
+export interface PostVideo {
+  id: string
+  url: string
+  poster: string
+  durationMs: number
+  width: number
+  height: number
+}
+
 export interface Post {
   id: string
   kind: PostKind
   body: string
   createdAt: string
   image: string | null
+  video: PostVideo | null
   author: PlayerSummary | null
   mine: boolean
 }
@@ -692,8 +703,43 @@ export function fetchFeed(before?: string, user?: string) {
   return request<{ posts: Post[]; more: boolean }>(`/api/feed${q ? `?${q}` : ''}`)
 }
 
-export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string }) {
+export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string; videoId?: string }) {
   return request<{ post: Post }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
+}
+
+/**
+ * Sends a video to be checked and converted, reporting upload progress as it
+ * goes — which fetch cannot do, hence XMLHttpRequest. The file goes up as raw
+ * bytes rather than inside JSON, since base64 would add a third to a file that
+ * can be 50MB. `onUploaded` fires once the bytes are all sent and the server
+ * has started checking.
+ */
+export function uploadPostVideo(
+  file: File,
+  { onProgress, onUploaded, signal }: { onProgress?: (share: number) => void; onUploaded?: () => void; signal?: AbortSignal } = {},
+): Promise<{ video: PostVideo }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/posts/videos')
+    xhr.withCredentials = true
+    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+    xhr.upload.onload = () => onUploaded?.()
+    xhr.onload = () => {
+      let payload: { video?: PostVideo; error?: string; code?: string } = {}
+      try {
+        payload = JSON.parse(xhr.responseText || '{}')
+      } catch {
+        // Not JSON — a proxy error page, say. Handled below by status.
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && payload.video) resolve({ video: payload.video })
+      else reject(new ApiError(payload.error ?? `Upload failed (${xhr.status})`, xhr.status, payload.code ?? null))
+    }
+    xhr.onerror = () => reject(new ApiError('The upload was interrupted. Check your connection and try again.', 0))
+    xhr.onabort = () => reject(new ApiError('Upload cancelled.', 0, 'aborted'))
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true })
+    xhr.send(file)
+  })
 }
 
 export function deletePost(id: string) {
@@ -708,9 +754,13 @@ export function reportPost(id: string, reason: string) {
 }
 
 export function fetchUnlocks() {
-  return request<{ level: number; unlocks: Record<'post' | 'message' | 'photo' | 'createClub', number>; imagesChecked: boolean }>(
-    '/api/social/unlocks',
-  )
+  return request<{
+    level: number
+    unlocks: Record<'post' | 'message' | 'createClub', number>
+    /** Whether photos can be checked, and so posted, on this server. */
+    imagesChecked: boolean
+    videosAvailable: boolean
+  }>('/api/social/unlocks')
 }
 
 /* --- messages ---------------------------------------------------------------- */

@@ -8,14 +8,13 @@ import { screenInput } from './moderation.js'
  * Features that open up as a player levels.
  *
  * Mirrored in src/lib/social.ts for display; this copy is the one enforced.
- * Photos and messaging wait a few levels because a brand-new account is the
- * cheapest thing for a spammer to make, and those are the two features that
- * reach other people most directly.
+ * Photos and videos are open to everyone from the start: every one still goes
+ * through the safety check and the hourly caps, which is what stands between
+ * a throwaway account and the feed. Starting conversations waits a level.
  */
 export const UNLOCKS = {
   post: 1,
   message: 2,
-  photo: 3,
   createClub: 10,
 }
 

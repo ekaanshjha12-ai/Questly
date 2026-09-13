@@ -49,6 +49,10 @@ Do not allow:
 
 Judge what is actually in the image. A gym selfie in sportswear is fine; a mirror photo in underwear is not. When something is borderline and a teenager could see it, do not allow it.`
 
+const VIDEO_SYSTEM = `${SYSTEM.replace('You review a single image', 'You review frames taken at even intervals from one short video')}
+
+The frames stand in for the whole video: if any one of them shows something not allowed, the video is not allowed.`
+
 let cached = null
 function client() {
   if (!process.env.ANTHROPIC_API_KEY) return null
@@ -62,9 +66,37 @@ export function isConfigured() {
 
 /** @returns {Promise<{ allowed: boolean, category: string, reason: string }>} */
 export async function screenImage({ mediaType, imageBase64 }) {
+  return review({
+    system: SYSTEM,
+    images: [{ mediaType, imageBase64 }],
+    question: 'May this image be posted?',
+    what: 'Photo posts',
+    refusal: 'This image cannot be posted.',
+  })
+}
+
+/**
+ * Checks a video by frames sampled through it, all in one request. Sound is
+ * not checked — there is nothing here to listen with — which is one reason
+ * posts can be reported.
+ *
+ * @param {Buffer[]} frames JPEG frames
+ * @returns {Promise<{ allowed: boolean, category: string, reason: string }>}
+ */
+export async function screenVideoFrames(frames) {
+  return review({
+    system: VIDEO_SYSTEM,
+    images: frames.map((bytes) => ({ mediaType: 'image/jpeg', imageBase64: bytes.toString('base64') })),
+    question: `These are ${frames.length} frames from one video, in order. May this video be posted?`,
+    what: 'Video posts',
+    refusal: 'This video cannot be posted.',
+  })
+}
+
+async function review({ system, images, question, what, refusal }) {
   const anthropic = client()
   if (!anthropic) {
-    const err = new Error('Photo posts need the image safety check, which is not set up on this server.')
+    const err = new Error(`${what} need the image safety check, which is not set up on this server.`)
     err.code = 'not_configured'
     throw err
   }
@@ -72,14 +104,14 @@ export async function screenImage({ mediaType, imageBase64 }) {
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    system: SYSTEM,
+    system,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
     messages: [
       {
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
-          { type: 'text', text: 'May this image be posted?' },
+          ...images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.imageBase64 } })),
+          { type: 'text', text: question },
         ],
       },
     ],
@@ -87,10 +119,10 @@ export async function screenImage({ mediaType, imageBase64 }) {
 
   noteUsage(response.usage)
 
-  // A refusal to look is treated as a no. An image the model will not describe
-  // is not one to publish.
+  // A refusal to look is treated as a no. Something the model will not describe
+  // is not something to publish.
   if (response.stop_reason === 'refusal') {
-    return { allowed: false, category: 'other', reason: 'This image cannot be posted.' }
+    return { allowed: false, category: 'other', reason: refusal }
   }
 
   const block = response.content.find((b) => b.type === 'text')

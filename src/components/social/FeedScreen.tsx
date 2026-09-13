@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Flag, ImagePlus, Loader2, Lock, MoreHorizontal, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, Film, Flag, ImagePlus, Loader2, MoreHorizontal, RotateCcw, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
 import type { AppState } from '../../types'
 import {
   ApiError,
@@ -9,10 +9,21 @@ import {
   fetchFeed,
   fetchUnlocks,
   reportPost,
+  uploadPostVideo,
   type Post,
   type PostKind,
+  type PostVideo,
 } from '../../lib/api'
-import { POST_KINDS, kindMeta, preparePostImage, shareMoments, timeAgo, type ShareMoment } from '../../lib/social'
+import {
+  POST_KINDS,
+  formatDuration,
+  kindMeta,
+  preparePostImage,
+  readVideoFile,
+  shareMoments,
+  timeAgo,
+  type ShareMoment,
+} from '../../lib/social'
 import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
 
@@ -43,7 +54,7 @@ export default function FeedScreen({
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<string | null>(null)
   const [composing, setComposing] = useState<ShareMoment | 'blank' | null>(startSharing ? 'blank' : null)
-  const [unlocks, setUnlocks] = useState<{ level: number; photo: number; imagesChecked: boolean } | null>(null)
+  const [media, setMedia] = useState<MediaAvailability | null>(null)
 
   const moments = useMemo(() => (username ? [] : shareMoments(state)), [state, username])
 
@@ -61,8 +72,8 @@ export default function FeedScreen({
   useEffect(() => {
     void load()
     fetchUnlocks()
-      .then((u) => setUnlocks({ level: u.level, photo: u.unlocks.photo, imagesChecked: u.imagesChecked }))
-      .catch(() => setUnlocks(null))
+      .then((u) => setMedia({ photos: u.imagesChecked, videos: u.videosAvailable }))
+      .catch(() => setMedia(null))
   }, [load])
 
   async function loadMore() {
@@ -106,7 +117,7 @@ export default function FeedScreen({
               key={typeof composing === 'string' ? 'blank' : composing.id}
               seed={typeof composing === 'string' ? null : composing}
               myName={myName}
-              unlocks={unlocks}
+              media={media}
               onCancel={() => setComposing(null)}
               onPosted={(post) => {
                 setPosts((p) => [post, ...(p ?? [])])
@@ -173,49 +184,128 @@ export default function FeedScreen({
 
 /* --- composing ------------------------------------------------------------- */
 
+/** Whether this server can check, and so accept, pictures and videos. */
+interface MediaAvailability {
+  photos: boolean
+  videos: boolean
+}
+
+type Attachment =
+  | { type: 'photo'; base64: string; mediaType: string; dataUrl: string }
+  | {
+      type: 'video'
+      file: File
+      previewUrl: string
+      durationMs: number | null
+      stage: 'uploading' | 'checking' | 'ready' | 'failed'
+      progress: number
+      video: PostVideo | null
+      error: string | null
+    }
+
 function Composer({
   seed,
   myName,
-  unlocks,
+  media,
   onCancel,
   onPosted,
 }: {
   seed: ShareMoment | null
   myName: string
-  unlocks: { level: number; photo: number; imagesChecked: boolean } | null
+  media: MediaAvailability | null
   onCancel: () => void
   onPosted: (post: Post) => void
 }) {
   const [kind, setKind] = useState<PostKind>(seed?.kind ?? 'update')
   const [body, setBody] = useState(seed?.text ?? '')
-  const [image, setImage] = useState<{ base64: string; mediaType: string; dataUrl: string } | null>(null)
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLInputElement>(null)
+  const uploadRef = useRef<AbortController | null>(null)
+  const previewRef = useRef<string | null>(null)
 
-  const photoLocked = unlocks ? unlocks.level < unlocks.photo : false
-  const photoUnavailable = unlocks ? !unlocks.imagesChecked : false
+  // Whatever is still uploading when the composer closes is abandoned, and the
+  // local preview's memory handed back.
+  useEffect(
+    () => () => {
+      uploadRef.current?.abort()
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current)
+    },
+    [],
+  )
 
-  async function pick(file: File | undefined) {
+  function clearAttachment() {
+    uploadRef.current?.abort()
+    uploadRef.current = null
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current)
+    previewRef.current = null
+    setAttachment(null)
+  }
+
+  async function pickPhoto(file: File | undefined) {
     if (!file) return
     setError(null)
     try {
-      setImage(await preparePostImage(file))
+      const image = await preparePostImage(file)
+      clearAttachment()
+      setAttachment({ type: 'photo', ...image })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That picture could not be used.')
     }
   }
 
+  /** Uploads straight away, so the video is checked while the words are still
+   * being written and Post is ready the moment they are. */
+  function startUpload(file: File, previewUrl: string, durationMs: number | null) {
+    uploadRef.current?.abort()
+    const controller = new AbortController()
+    uploadRef.current = controller
+    const update = (patch: Partial<Extract<Attachment, { type: 'video' }>>) =>
+      setAttachment((a) => (a?.type === 'video' && a.previewUrl === previewUrl ? { ...a, ...patch } : a))
+    setAttachment({ type: 'video', file, previewUrl, durationMs, stage: 'uploading', progress: 0, video: null, error: null })
+    uploadPostVideo(file, {
+      signal: controller.signal,
+      onProgress: (progress) => update({ progress }),
+      onUploaded: () => update({ stage: 'checking', progress: 1 }),
+    })
+      .then(({ video }) => update({ stage: 'ready', video, durationMs: video.durationMs }))
+      .catch((err) => {
+        if (err instanceof ApiError && err.code === 'aborted') return
+        update({ stage: 'failed', error: err instanceof Error ? err.message : 'That video could not be added.' })
+      })
+  }
+
+  async function pickVideo(file: File | undefined) {
+    if (!file) return
+    setError(null)
+    try {
+      const { previewUrl, durationMs } = await readVideoFile(file)
+      clearAttachment()
+      previewRef.current = previewUrl
+      startUpload(file, previewUrl, durationMs)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That video could not be used.')
+    }
+  }
+
+  const video = attachment?.type === 'video' ? attachment : null
+  const videoPending = Boolean(video && video.stage !== 'ready')
+
   async function post() {
-    if (!body.trim() || busy) return
+    if (!body.trim() || busy || videoPending) return
     setBusy(true)
     setError(null)
     try {
       const { post: created } = await createPost({
         kind,
         body: body.trim(),
-        ...(image ? { imageBase64: image.base64, mediaType: image.mediaType } : {}),
+        ...(attachment?.type === 'photo' ? { imageBase64: attachment.base64, mediaType: attachment.mediaType } : {}),
+        ...(attachment?.type === 'video' && attachment.video ? { videoId: attachment.video.id } : {}),
       })
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current)
+      previewRef.current = null
       onPosted(created)
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : 'Could not post that.')
@@ -223,6 +313,15 @@ function Composer({
       setBusy(false)
     }
   }
+
+  const postLabel =
+    busy && attachment?.type === 'photo'
+      ? 'Checking photo…'
+      : video?.stage === 'uploading'
+        ? `${Math.round(video.progress * 100)}%`
+        : video?.stage === 'checking'
+          ? 'Checking…'
+          : 'Post'
 
   return (
     <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-ink-600 bg-ink-850 p-3">
@@ -258,64 +357,142 @@ function Composer({
         className="mt-2 w-full resize-none rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none"
       />
 
-      {image && (
+      {attachment?.type === 'photo' && (
         <div className="relative mt-2 overflow-hidden rounded-xl border border-ink-600">
-          <img src={image.dataUrl} alt="Your photo" className="max-h-72 w-full object-cover" />
-          <button
-            type="button"
-            onClick={() => setImage(null)}
-            aria-label="Remove photo"
-            className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <img src={attachment.dataUrl} alt="Your photo" className="max-h-72 w-full object-cover" />
+          <RemoveButton label="Remove photo" onClick={clearAttachment} />
+        </div>
+      )}
+
+      {video && (
+        <div className="relative mt-2 overflow-hidden rounded-xl border border-ink-600 bg-black">
+          <video
+            src={video.previewUrl}
+            poster={video.video?.poster}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            className="max-h-72 w-full object-contain"
+          />
+          <RemoveButton label="Remove video" onClick={clearAttachment} />
+          <div className="border-t border-ink-600 bg-ink-850 px-3 py-2">
+            {video.stage === 'uploading' && (
+              <>
+                <div className="flex items-center justify-between text-[11px] text-slate-300">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading
+                  </span>
+                  <span className="tabular-nums">{Math.round(video.progress * 100)}%</span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-700">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-gold-500 to-ember-500 transition-[width] duration-200"
+                    style={{ width: `${Math.round(video.progress * 100)}%` }}
+                  />
+                </div>
+              </>
+            )}
+            {video.stage === 'checking' && (
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-300">
+                <ShieldCheck className="h-3.5 w-3.5 animate-pulse text-gold-400" /> Checking it's OK to share and preparing it to play everywhere…
+              </p>
+            )}
+            {video.stage === 'ready' && (
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-300">
+                <Check className="h-3.5 w-3.5 text-gold-400" /> Ready to post
+                {video.durationMs !== null && <span className="text-slate-500">· {formatDuration(video.durationMs)}</span>}
+              </p>
+            )}
+            {video.stage === 'failed' && (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-ember-400">{video.error}</p>
+                {!/cannot be posted|at most|not a video/i.test(video.error ?? '') && (
+                  <button
+                    type="button"
+                    onClick={() => startUpload(video.file, video.previewUrl, video.durationMs)}
+                    className="flex shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2 py-1 text-[11px] text-slate-200 hover:border-ink-500"
+                  >
+                    <RotateCcw className="h-3 w-3" /> Try again
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {error && <p className="mt-2 rounded-lg border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-xs text-ember-400">{error}</p>}
 
-      <div className="mt-2 flex items-center justify-between gap-2">
-        {photoLocked ? (
-          <span className="flex items-center gap-1 text-[11px] text-slate-500">
-            <Lock className="h-3.5 w-3.5" /> Photos unlock at level {unlocks?.photo}
-          </span>
-        ) : photoUnavailable ? (
-          <span className="text-[11px] text-slate-500">Photo posts are not available on this server.</span>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-300 hover:bg-ink-800"
-            >
-              <ImagePlus className="h-4 w-4" /> {image ? 'Change photo' : 'Add photo'}
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                void pick(e.target.files?.[0])
-                e.target.value = ''
-              }}
-            />
-          </>
-        )}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] tabular-nums text-slate-500">{body.length}/1000</span>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => photoRef.current?.click()}
+            disabled={media?.photos === false}
+            title={media?.photos === false ? 'Photo posts are not available on this server.' : undefined}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-300 hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ImagePlus className="h-4 w-4" /> Photo
+          </button>
+          <button
+            type="button"
+            onClick={() => videoRef.current?.click()}
+            disabled={media?.videos === false}
+            title={media?.videos === false ? 'Video posts are not available on this server.' : 'Up to 60 seconds'}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-300 hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Film className="h-4 w-4" /> Video
+          </button>
+          <input
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void pickPhoto(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={videoRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => {
+              void pickVideo(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden text-[10px] tabular-nums text-slate-500 min-[420px]:inline">{body.length}/1000</span>
           <button
             type="button"
             onClick={() => void post()}
-            disabled={!body.trim() || busy}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2 text-xs font-bold uppercase tracking-wider text-onAccent disabled:opacity-40"
+            disabled={!body.trim() || busy || videoPending}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-4 py-2 text-xs font-bold uppercase tracking-wider text-onAccent disabled:opacity-40"
           >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {busy && image ? 'Checking photo…' : 'Post'}
+            {(busy || (videoPending && video?.stage !== 'failed')) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {postLabel}
           </button>
         </div>
       </div>
+      {(media?.photos === false || media?.videos === false) && (
+        <p className="mt-1 text-[10px] text-slate-500">
+          {media.photos === false ? 'Photos and videos are' : 'Videos are'} not available on this server: there is no safety check set up to look
+          at them.
+        </p>
+      )}
     </motion.div>
+  )
+}
+
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white">
+      <X className="h-3.5 w-3.5" />
+    </button>
   )
 }
 
@@ -388,6 +565,21 @@ function PostCard({ post, onOpenAuthor, onDeleted }: { post: Post; onOpenAuthor:
 
       {post.image && (
         <img src={post.image} alt="" loading="lazy" className="mt-2.5 max-h-[28rem] w-full rounded-xl border border-ink-600 object-cover" />
+      )}
+
+      {post.video && (
+        <div className="mt-2.5 overflow-hidden rounded-xl border border-ink-600 bg-black">
+          {/* Nothing downloads until play is pressed: the poster frame stands in. */}
+          <video
+            src={post.video.url}
+            poster={post.video.poster}
+            controls
+            playsInline
+            preload="none"
+            className="mx-auto block max-h-[28rem] w-full object-contain"
+            style={{ aspectRatio: `${post.video.width} / ${post.video.height}` }}
+          />
+        </div>
       )}
 
       {reported && <p className="mt-2 text-[11px] text-slate-500">Thanks — this was sent to the admins.</p>}
