@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw, ArrowLeft } from 'lucide-react'
 import { useAppState, type SyncStatus } from './hooks/useAppState'
 import type { AppState } from './types'
@@ -31,7 +32,7 @@ import ThemeButton from './components/ThemeButton'
 import PersonaliseScreen from './components/PersonaliseScreen'
 import HabitTracker from './components/HabitTracker'
 import SignupFlow from './components/SignupFlow'
-import ModeSwitch, { ModeWash } from './components/ModeSwitch'
+import ModeToggle from './components/ModeToggle'
 import SocialHome from './components/social/SocialHome'
 import { useMode, type AppMode } from './hooks/useMode'
 import { useChallenges } from './hooks/useChallenges'
@@ -60,6 +61,22 @@ function SyncBadge({ status }: { status: SyncStatus }) {
       <span className="hidden sm:inline">{text}</span>
     </span>
   )
+}
+
+/**
+ * Switching modes slides the screen the way the switch moved: Social comes in
+ * from the right, Focus from the left, so the change has a direction you can
+ * feel rather than a flash. With reduced motion it is a plain crossfade.
+ */
+const MODE_SLIDE = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 40 }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.26, ease: [0.22, 1, 0.36, 1] } },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -40, transition: { duration: 0.14, ease: 'easeIn' } }),
+}
+const MODE_FADE = {
+  enter: { opacity: 0 },
+  center: { opacity: 1, transition: { duration: 0.15 } },
+  exit: { opacity: 0, transition: { duration: 0.1 } },
 }
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
@@ -244,8 +261,15 @@ function AuthedApp({
   // is a choice rather than someone else's idea of what matters today.
   const [view, setView] = useState<View>('home')
   const { mode, setMode } = useMode()
-  /** The wash between modes while it plays: where it opens from and where it goes. */
-  const [wash, setWash] = useState<{ origin: { x: number; y: number }; to: AppMode } | null>(null)
+  const reduceMotion = useReducedMotion()
+  const switchMode = useCallback(
+    (next: AppMode) => {
+      if (next === mode) return
+      setMode(next)
+      window.scrollTo({ top: 0 })
+    },
+    [mode, setMode],
+  )
 
   // Polled for the whole session, not just on the Challenges screen: an offer
   // should show on the hub badge wherever you are, and a finished challenge's
@@ -347,7 +371,7 @@ function AuthedApp({
               <button
                 type="button"
                 onClick={() => {
-                  setMode('focus')
+                  switchMode('focus')
                   setView('sounds')
                 }}
                 title={`Playing ${nowPlaying}`}
@@ -360,27 +384,26 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <InstallButton />
-            <div className="flex items-center gap-2">
-              <span className="hidden text-right text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-500 sm:block">
-                {mode === 'social' ? 'Social' : 'Focus'}
-                <br />
-                <span className="font-normal normal-case tracking-normal">mode</span>
-              </span>
-              <ModeSwitch
-                mode={mode}
-                size={52}
-                badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
-                onToggle={(origin) => {
-                  if (wash) return
-                  setWash({ origin, to: mode === 'social' ? 'focus' : 'social' })
-                }}
-              />
-            </div>
+            <ModeToggle
+              mode={mode}
+              onChange={switchMode}
+              badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
+            />
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
+        <AnimatePresence mode="wait" initial={false} custom={mode === 'social' ? 1 : -1}>
+          <motion.div
+            key={mode}
+            custom={mode === 'social' ? 1 : -1}
+            variants={reduceMotion ? MODE_FADE : MODE_SLIDE}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            className="space-y-5"
+          >
         {mode === 'social' ? (
           <SocialHome state={state} user={user} challenges={challengeFeed} inbox={inbox} onSetCard={setCard} />
         ) : (
@@ -476,6 +499,8 @@ function AuthedApp({
 
           </>
         )}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Sign out lives at the foot of the page, not in the header. It is the
             one control here you almost never want and can least afford to hit
@@ -493,18 +518,6 @@ function AuthedApp({
           </button>
         </footer>
       </main>
-
-      {wash && (
-        <ModeWash
-          origin={wash.origin}
-          to={wash.to}
-          onMidpoint={() => {
-            setMode(wash.to)
-            window.scrollTo({ top: 0 })
-          }}
-          onDone={() => setWash(null)}
-        />
-      )}
 
       <VerifyModalHost
         quest={verifyingQuest}
