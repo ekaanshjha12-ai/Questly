@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronLeft, ChevronRight, Plus, X, CalendarDays, GripVertical } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Plus, X, CalendarDays, GripVertical, Search } from 'lucide-react'
 import type { AppState, PlannerView, ScheduleEntry } from '../types'
 import { periodKey as questPeriodKey, dailyKey } from '../lib/period'
 import {
@@ -31,6 +31,161 @@ interface ResolvedTask {
 type DragPayload =
   | { kind: 'new'; refType: 'todo' | 'quest'; refId: string }
   | { kind: 'move'; entryId: string }
+
+/** Something not placed on any day yet. */
+interface BacklogItem {
+  refType: 'todo' | 'quest'
+  refId: string
+  title: string
+  tag: string
+  /** "Daily · 20 XP" for a quest; empty for a to-do. */
+  detail: string
+}
+
+type BacklogFilter = 'all' | 'quest' | 'todo'
+
+const FILTERS: { id: BacklogFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'quest', label: 'Quests' },
+  { id: 'todo', label: 'To-dos' },
+]
+
+const PERIOD_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' } as const
+
+/**
+ * The tasks still waiting for a place, as a searchable list that scrolls in a
+ * box of its own — rather than every quest laid across the page at once, which
+ * with a few goals' worth of quests was a wall to hunt through.
+ *
+ * `drag` rows are dragged onto the planner; `pick` rows place themselves on
+ * tap, for the add sheet.
+ */
+function BacklogPicker({
+  items,
+  mode,
+  onPick,
+  autoFocus = false,
+  maxHeight,
+}: {
+  items: BacklogItem[]
+  mode: 'drag' | 'pick'
+  onPick?: (item: BacklogItem) => void
+  autoFocus?: boolean
+  maxHeight: string
+}) {
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<BacklogFilter>('all')
+
+  const counts = {
+    all: items.length,
+    quest: items.filter((i) => i.refType === 'quest').length,
+    todo: items.filter((i) => i.refType === 'todo').length,
+  }
+  const q = query.trim().toLowerCase()
+  const shown = items.filter((i) => (filter === 'all' || i.refType === filter) && (!q || i.title.toLowerCase().includes(q)))
+
+  const row = (item: BacklogItem) => (
+    <>
+      {mode === 'drag' && <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-600" />}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-slate-200" title={item.title}>
+          {item.title}
+        </span>
+        {item.detail && <span className="block text-[10px] text-slate-500">{item.detail}</span>}
+      </span>
+      <span
+        className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${
+          item.tag === 'Quest' ? 'bg-gold-500/15 text-gold-400' : 'bg-mystic-500/15 text-mystic-400'
+        }`}
+      >
+        {item.tag}
+      </span>
+      {mode === 'pick' && <Plus className="h-3.5 w-3.5 shrink-0 text-slate-500" />}
+    </>
+  )
+
+  return (
+    <div>
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value.slice(0, 80))}
+            placeholder="Search quests and to-dos"
+            aria-label="Search unscheduled tasks"
+            autoFocus={autoFocus}
+            autoComplete="off"
+            className="w-full rounded-lg border border-ink-600 bg-ink-950 py-1.5 pl-8 pr-7 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-gold-500/60"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 hover:text-slate-200"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        <div className="inline-flex gap-0.5 rounded-lg border border-ink-600 bg-ink-800 p-0.5" role="group" aria-label="Show">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              aria-pressed={filter === f.id}
+              className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                filter === f.id ? 'bg-ink-600 text-slate-50' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {f.label} <span className="tabular-nums text-slate-500">{counts[f.id]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ul className="mt-2 space-y-1 overflow-y-auto overscroll-contain pr-1" style={{ maxHeight }}>
+        {shown.map((item) => (
+          <li key={`${item.refType}:${item.refId}`}>
+            {mode === 'drag' ? (
+              <div
+                draggable
+                onDragStart={(e) => {
+                  const payload: DragPayload = { kind: 'new', refType: item.refType, refId: item.refId }
+                  e.dataTransfer.setData('text/plain', JSON.stringify(payload))
+                }}
+                className="flex cursor-grab items-center gap-2 rounded-lg border border-ink-600 bg-ink-800 px-2.5 py-1.5 active:cursor-grabbing hover:border-ink-500"
+              >
+                {row(item)}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onPick?.(item)}
+                className="flex w-full items-center gap-2 rounded-lg border border-ink-700 bg-ink-850 px-2.5 py-1.5 text-left transition-colors hover:border-ink-500"
+              >
+                {row(item)}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {shown.length === 0 && (
+        <p className="py-3 text-center text-xs text-slate-500">
+          {q ? `Nothing matches "${query.trim()}".` : filter === 'quest' ? 'No quests waiting.' : 'No to-dos waiting.'}
+        </p>
+      )}
+      {shown.length > 0 && (q || filter !== 'all') && (
+        <p className="mt-1 text-right text-[10px] text-slate-500">
+          Showing {shown.length} of {items.length}
+        </p>
+      )}
+    </div>
+  )
+}
 
 const VIEW_TABS: { id: PlannerView; label: string }[] = [
   { id: 'daily', label: 'Daily' },
@@ -247,18 +402,24 @@ export default function Planner({
       weekly: questPeriodKey('weekly'),
       monthly: questPeriodKey('monthly'),
     }
-    const items: { refType: 'todo' | 'quest'; refId: string; title: string; tag: string }[] = []
+    const items: BacklogItem[] = []
 
     for (const todo of state.todos) {
       if (todo.done) continue
       if (scheduledRefIds.has(`todo:${todo.id}`)) continue
-      items.push({ refType: 'todo', refId: todo.id, title: todo.title, tag: 'To-do' })
+      items.push({ refType: 'todo', refId: todo.id, title: todo.title, tag: 'To-do', detail: '' })
     }
     for (const quest of state.quests) {
       if (quest.completed) continue
       if (quest.periodKey !== currentQuestKeys[quest.period]) continue
       if (scheduledRefIds.has(`quest:${quest.id}`)) continue
-      items.push({ refType: 'quest', refId: quest.id, title: quest.title, tag: 'Quest' })
+      items.push({
+        refType: 'quest',
+        refId: quest.id,
+        title: quest.title,
+        tag: 'Quest',
+        detail: `${PERIOD_LABEL[quest.period]} · ${quest.xp} XP`,
+      })
     }
     return items
   }, [state.todos, state.quests, scheduledRefIds])
@@ -366,38 +527,17 @@ export default function Planner({
       </div>
 
       <div className="rounded-2xl border border-ink-600 bg-ink-850/70 p-3">
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-slate-500">
-          <span className="hidden sm:inline">Unscheduled — drag into the planner, or use ＋ on any slot</span>
-          <span className="sm:hidden">Unscheduled — tap ＋ on any slot to place one</span>
+        <p className="mb-2 flex items-baseline justify-between gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+          <span>Unscheduled</span>
+          <span className="normal-case tracking-normal text-slate-500">
+            <span className="hidden sm:inline">Drag onto the planner, or use ＋ on any slot</span>
+            <span className="sm:hidden">Tap ＋ on any slot to place one</span>
+          </span>
         </p>
         {backlog.length === 0 ? (
           <p className="py-2 text-xs text-slate-500">Everything here is placed. Nice.</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {backlog.map((item) => (
-              <div
-                key={`${item.refType}:${item.refId}`}
-                draggable
-                onDragStart={(e) => {
-                  const payload: DragPayload = { kind: 'new', refType: item.refType, refId: item.refId }
-                  e.dataTransfer.setData('text/plain', JSON.stringify(payload))
-                }}
-                className="flex max-w-[15rem] cursor-grab items-center gap-1.5 rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 active:cursor-grabbing hover:border-ink-500"
-              >
-                <GripVertical className="h-3 w-3 shrink-0 text-slate-600" />
-                <span className="truncate text-[11px] text-slate-200" title={item.title}>
-                  {item.title}
-                </span>
-                <span
-                  className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${
-                    item.tag === 'Quest' ? 'bg-gold-500/15 text-gold-400' : 'bg-mystic-500/15 text-mystic-400'
-                  }`}
-                >
-                  {item.tag}
-                </span>
-              </div>
-            ))}
-          </div>
+          <BacklogPicker items={backlog} mode="drag" maxHeight="13rem" />
         )}
       </div>
 
@@ -513,25 +653,7 @@ export default function Planner({
               {backlog.length > 0 && (
                 <>
                   <p className="mb-2 mt-4 text-[11px] uppercase tracking-wide text-slate-500">Or pick an existing one</p>
-                  <div className="max-h-52 space-y-1 overflow-y-auto">
-                    {backlog.map((item) => (
-                      <button
-                        key={`${item.refType}:${item.refId}`}
-                        type="button"
-                        onClick={() => pickForSlot(item.refType, item.refId)}
-                        className="flex w-full items-center gap-2 rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-left transition-colors hover:border-ink-500"
-                      >
-                        <span className="flex-1 truncate text-xs text-slate-200">{item.title}</span>
-                        <span
-                          className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${
-                            item.tag === 'Quest' ? 'bg-gold-500/15 text-gold-400' : 'bg-mystic-500/15 text-mystic-400'
-                          }`}
-                        >
-                          {item.tag}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <BacklogPicker items={backlog} mode="pick" onPick={(item) => pickForSlot(item.refType, item.refId)} maxHeight="15rem" />
                 </>
               )}
 
