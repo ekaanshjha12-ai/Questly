@@ -805,15 +805,31 @@ export function findUserRowByUsername(username) {
   return db.get('SELECT * FROM users WHERE username = ?', [username]) ?? null
 }
 
-/** Username prefix search, for finding someone to challenge. The caller filters
- * the rows for age band and blocks before anything leaves the server. */
-export function searchUsernames(prefix, limit = 40) {
-  const escaped = prefix.replace(/[\\%_]/g, (c) => `\\${c}`)
+/**
+ * Players to show when someone is looking for people: those whose username or
+ * name contains the search — best matches first — or, with no search, whoever
+ * was active most recently. Only finished profiles. The caller filters the rows
+ * for age band and blocks before anything leaves the server, so this fetches
+ * generously.
+ */
+export function findPlayers(q, limit = 200) {
+  const finished = 'u.disabled = 0 AND u.username IS NOT NULL AND u.birthdate IS NOT NULL'
+  if (!q) {
+    return db.all(
+      `SELECT u.* FROM users u LEFT JOIN states s ON s.user_id = u.id
+       WHERE ${finished}
+       ORDER BY COALESCE(s.updated_at, u.created_at) DESC LIMIT ?`,
+      [limit],
+    )
+  }
+  const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`)
   return db.all(
-    `SELECT * FROM users
-     WHERE username LIKE ? ESCAPE '\\' AND disabled = 0 AND username IS NOT NULL AND birthdate IS NOT NULL
-     ORDER BY LENGTH(username), username LIMIT ?`,
-    [`${escaped}%`, limit],
+    `SELECT u.* FROM users u
+     WHERE ${finished} AND (u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\')
+     ORDER BY CASE WHEN u.username = ? THEN 0 WHEN u.username LIKE ? ESCAPE '\\' THEN 1 WHEN u.username LIKE ? ESCAPE '\\' THEN 2 ELSE 3 END,
+       LENGTH(u.username), u.username
+     LIMIT ?`,
+    [`%${escaped}%`, `%${escaped}%`, q, `${escaped}%`, `%${escaped}%`, limit],
   )
 }
 

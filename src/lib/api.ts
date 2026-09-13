@@ -593,8 +593,12 @@ export interface ChallengeMessage {
   at: string
 }
 
+/** A search result. `you` marks your own account, shown when you search for
+ * yourself but not something you can message or challenge. */
+export type FoundPlayer = PlayerSummary & { you?: boolean }
+
 export function searchPlayers(q: string) {
-  return request<{ results: PlayerSummary[] }>(`/api/users/search?q=${encodeURIComponent(q)}`)
+  return request<{ results: FoundPlayer[] }>(`/api/users/search?q=${encodeURIComponent(q)}`)
 }
 
 export function fetchPlayer(username: string) {

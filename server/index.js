@@ -98,7 +98,7 @@ import {
   listChallengesFor,
   listCheckins,
   rankName,
-  searchUsernames,
+  findPlayers,
   setChallengesOpen,
   spendXpAllowance,
   transitionChallenge,
@@ -1382,17 +1382,31 @@ function publicCard(state) {
   }
 }
 
+/**
+ * Finding people. With a search, players whose username or name contains it;
+ * without one, the most recently active — so there is someone to see before
+ * you know who to look for. Only people you could actually interact with are
+ * returned. You show up too when you search your own name, marked as you, so
+ * searching for yourself does not look like search is broken.
+ */
 app.get('/api/users/search', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
-  const q = String(req.query.q ?? '').trim().replace(/^@+/, '').toLowerCase()
-  if (q.length < 2 || !/^[a-z0-9_.]+$/.test(q)) {
+  const q = String(req.query.q ?? '').trim().replace(/^@+/, '').toLowerCase().slice(0, 40)
+  if (q && !/^[\p{L}\p{N}_. '-]+$/u.test(q)) {
     res.json({ results: [] })
     return
   }
-  const results = searchUsernames(q)
-    .filter((row) => !interactionBlocker(viewer, row))
-    .slice(0, 10)
-    .map(playerSummary)
+  const max = q ? 20 : 30
+  const results = []
+  for (const row of findPlayers(q)) {
+    if (row.id === viewer.id) {
+      if (q) results.push({ ...playerSummary(row), you: true })
+      continue
+    }
+    if (interactionBlocker(viewer, row)) continue
+    results.push(playerSummary(row))
+    if (results.length >= max) break
+  }
   res.json({ results })
 })
 

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { ChevronRight, Loader2, Search, Swords } from 'lucide-react'
-import { searchPlayers, type Challenge, type PlayerSummary } from '../lib/api'
+import { Loader2, Swords } from 'lucide-react'
+import type { Challenge } from '../lib/api'
 import { PlayerAvatar, StatusPill, formatWhen, timeLeft } from './ChallengeParts'
 import PlayerCardSheet from './PlayerCardSheet'
+import PlayerSearch from './PlayerSearch'
 import ChallengeRoom from './ChallengeRoom'
 
 /**
@@ -26,9 +27,6 @@ export default function ChallengesScreen({
   onRefresh: () => Promise<void>
   onUpsert: (challenge: Challenge) => void
 }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<PlayerSummary[] | null>(null)
-  const [searching, setSearching] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -36,26 +34,6 @@ export default function ChallengesScreen({
     void onRefresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Search a beat after typing stops; ignore any answer that is no longer the
-  // latest question.
-  const latest = useRef('')
-  useEffect(() => {
-    const q = query.trim().replace(/^@+/, '')
-    latest.current = q
-    if (q.length < 2) {
-      setResults(null)
-      return
-    }
-    setSearching(true)
-    const t = setTimeout(() => {
-      searchPlayers(q)
-        .then((r) => latest.current === q && setResults(r.results))
-        .catch(() => latest.current === q && setResults([]))
-        .finally(() => latest.current === q && setSearching(false))
-    }, 300)
-    return () => clearTimeout(t)
-  }, [query])
 
   const list = challenges ?? []
   const offers = list.filter((c) => c.role === 'opponent' && c.status === 'pending')
@@ -76,41 +54,7 @@ export default function ChallengesScreen({
 
       {/* --- find people ---------------------------------------------------- */}
       <div className="rounded-2xl border border-ink-600 bg-ink-850 p-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value.slice(0, 21))}
-            placeholder="Find a player by @username"
-            autoCapitalize="none"
-            spellCheck={false}
-            className="w-full rounded-xl border border-ink-600 bg-ink-800 py-2.5 pl-9 pr-9 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none"
-          />
-          {searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />}
-        </div>
-        {results && (
-          <ul className="mt-2 space-y-1">
-            {results.length === 0 && !searching && <li className="px-1 py-2 text-xs text-slate-500">Nobody found with that username.</li>}
-            {results.map((p) => (
-              <li key={p.username}>
-                <button
-                  type="button"
-                  onClick={() => setViewing(p.username)}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left hover:bg-ink-800"
-                >
-                  <PlayerAvatar player={p} size={34} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-100">{p.name}</span>
-                    <span className="block truncate text-[11px] text-slate-500">
-                      @{p.username} · {p.rank} · Level {p.level}
-                    </span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-slate-500" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <PlayerSearch onPick={(p) => setViewing(p.username)} placeholder="Find someone to challenge" maxHeight="16rem" />
         <p className="mt-2 px-1 text-[10px] text-slate-500">You can also tap a name on the leaderboard in Hero → Ranking.</p>
       </div>
 
