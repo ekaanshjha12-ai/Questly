@@ -1,22 +1,12 @@
 import { screenInput } from './moderation.js'
 
 /**
- * Rules shared by the social side: what a level unlocks, and what a post is.
- */
-
-/**
- * Features that open up as a player levels.
+ * Rules shared by the social side: what a post is.
  *
- * Mirrored in src/lib/social.ts for display; this copy is the one enforced.
- * Photos and videos are open to everyone from the start: every one still goes
- * through the safety check and the hourly caps, which is what stands between
- * a throwaway account and the feed. Starting conversations waits a level.
+ * Nothing social is gated by level: posting, photos, videos and messages are
+ * open from the first day. What stands between a throwaway account and other
+ * people is the word filter, the image safety check, and the hourly caps.
  */
-export const UNLOCKS = {
-  post: 1,
-  message: 2,
-  createClub: 10,
-}
 
 export const POST_KINDS = ['update', 'learned', 'achievement', 'progress']
 export const POST_MAX = 1000

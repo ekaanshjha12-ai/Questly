@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Loader2, Search, X } from 'lucide-react'
-import { searchPlayers, type FoundPlayer, type SearchPurpose } from '../lib/api'
+import { searchPlayers, type FoundPlayer } from '../lib/api'
 import { PlayerAvatar } from './ChallengeParts'
 
 /**
@@ -10,18 +10,13 @@ import { PlayerAvatar } from './ChallengeParts'
  * is always someone to scroll through rather than an empty box. Typing matches
  * any part of a username or name. When nobody turns up it says why someone
  * might be missing instead of just "no results".
- *
- * Looking for someone to message reaches every age group; looking for someone
- * to challenge stays within your own.
  */
 export default function PlayerSearch({
   onPick,
   placeholder = 'Search players by name or @username',
   autoFocus = false,
   maxHeight = '20rem',
-  purpose = 'challenges',
 }: {
-  purpose?: SearchPurpose
   onPick: (player: FoundPlayer) => void
   placeholder?: string
   autoFocus?: boolean
@@ -41,7 +36,7 @@ export default function PlayerSearch({
     setSearching(true)
     const t = setTimeout(
       () => {
-        searchPlayers(q, purpose)
+        searchPlayers(q)
           .then((r) => {
             if (latest.current !== q) return
             setResults(r.results)
@@ -57,7 +52,7 @@ export default function PlayerSearch({
       q ? 250 : 0,
     )
     return () => clearTimeout(t)
-  }, [query, purpose])
+  }, [query])
 
   const typed = query.trim().replace(/^@+/, '')
   const others = (results ?? []).filter((p) => !p.you)
@@ -136,18 +131,9 @@ export default function PlayerSearch({
           {error ? (
             error
           ) : typed ? (
-            purpose === 'messages' ? (
-              <>Nobody else matches "{typed}". People show up here once they have finished their profile.</>
-            ) : (
-              <>
-                Nobody else matches "{typed}". People show up here once they have finished their profile, and challenges are only
-                between players in the same age group: under 18 or 18+.
-              </>
-            )
-          ) : purpose === 'messages' ? (
-            <>No other players yet. When friends join Questly and finish their profile, they will show up here.</>
+            <>Nobody else matches "{typed}". People show up here once they have finished their profile.</>
           ) : (
-            <>No other players in your age group yet. When friends join Questly and finish their profile, they will show up here.</>
+            <>No other players yet. When friends join Questly and finish their profile, they will show up here.</>
           )}
         </div>
       )}

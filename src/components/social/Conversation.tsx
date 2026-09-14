@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Ban, Check, Ellipsis, Flag, IdCard, Loader2, Lock, Send, ShieldAlert, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, Ban, Check, Ellipsis, Flag, IdCard, Loader2, Send, ShieldAlert, ShieldCheck, X } from 'lucide-react'
 import {
   ApiError,
   acceptConversation,
@@ -51,7 +51,6 @@ export default function ConversationView({
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [canSend, setCanSend] = useState(true)
-  const [start, setStart] = useState<{ canStart: boolean; unlockLevel: number }>({ canStart: true, unlockLevel: 2 })
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +71,6 @@ export default function ConversationView({
       .then((res) => {
         if (cancelled) return
         setPlayer(res.player)
-        setStart({ canStart: res.canStart, unlockLevel: res.unlockLevel })
         if (res.conversationId) setConversationId(res.conversationId)
         else setLoaded(true)
       })
@@ -144,7 +142,6 @@ export default function ConversationView({
       announceMessagesChanged()
     } catch (err) {
       if (err instanceof ApiError && err.code === 'awaiting_accept') setCanSend(false)
-      if (err instanceof ApiError && err.code === 'locked') setStart((s) => ({ ...s, canStart: false }))
       setError(err instanceof Error ? err.message : 'Could not send.')
     } finally {
       setSending(false)
@@ -369,15 +366,7 @@ export default function ConversationView({
             </div>
           )}
 
-          {fresh && !start.canStart ? (
-            <p className="flex items-start gap-2 rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5 text-xs text-slate-400">
-              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                Starting a conversation unlocks at level {start.unlockLevel}. Earn XP in Focus mode. Anyone can still message you, and you can
-                always reply.
-              </span>
-            </p>
-          ) : waiting ? (
+          {waiting ? (
             <p className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5 text-center text-xs text-slate-400">
               Request sent. You can write again once {name} replies or accepts.
             </p>

@@ -66,7 +66,7 @@ import {
   validateMessage,
   validateTerms,
 } from './challenges.js'
-import { POST_IMAGE_MAX_BYTES, UNLOCKS, validatePost } from './social.js'
+import { POST_IMAGE_MAX_BYTES, validatePost } from './social.js'
 import { screenImage, screenVideoFrames, isConfigured as imageSafetyConfigured } from './imagesafety.js'
 import { contactDetails, riskyAcrossAges } from './chatsafety.js'
 import {
@@ -1342,10 +1342,12 @@ app.delete('/api/admin/users/:id', requireAuth, requireSuperadmin, throttleAdmin
 // ---------------------------------------------------------------------------
 // Players and challenges
 //
-// The one part of the app where accounts meet. Every route re-checks, on every
-// request, that the two people involved may interact: both have finished a
-// profile, they are in the same age band, neither has blocked the other, and
-// the other account is not disabled. Nothing is trusted from an earlier screen.
+// The part of the app where accounts meet. Social is open across every age
+// group and every level. Every route re-checks, on every request, that the two
+// people involved may still reach each other: both have finished a profile,
+// neither has blocked the other, the other account is not disabled, and an
+// under-18 has not turned off contact from adults. Nothing is trusted from an
+// earlier screen.
 // ---------------------------------------------------------------------------
 
 const throttleChallengeWrite = rateLimit({ name: 'challenge-write', max: 20, windowMs: 60 * 60_000, by: 'user' })
@@ -1353,15 +1355,14 @@ const throttleChat = rateLimit({ name: 'challenge-chat', max: 30, windowMs: 60_0
 const throttleSocialRead = rateLimit({ name: 'social-read', max: 120, windowMs: 60_000, by: 'user' })
 
 /**
- * Whether two people may message each other. Unlike everything else social,
- * messages cross age groups — with the protections in the messages section
- * below. What still stops them: a missing or disabled account, an unfinished
- * profile, a block either way, and an under-18 player who has turned off
- * messages from adults.
+ * Whether two people may reach each other directly: message, challenge, open
+ * each other's card. Any age, any level. What stops it: a missing or disabled
+ * account, an unfinished profile, a block either way, and an under-18 who has
+ * turned off contact from adults.
  *
- * @returns {string | null} why these two may not message, or null if they may
+ * @returns {string | null} why these two may not, or null if they may
  */
-function messageBlocker(viewer, target) {
+function contactBlocker(viewer, target) {
   if (!target || target.disabled) return 'That player is not available.'
   if (viewer.id === target.id) return 'That is you.'
   if (!viewer.username || !viewer.birthdate) return 'Finish your profile first.'
@@ -1371,28 +1372,25 @@ function messageBlocker(viewer, target) {
     const young = ageBand(viewer.birthdate) === 'under18' ? viewer : target
     if (!young.adult_messages) {
       // Said plainly to the young person; to the adult it is the same answer
-      // as a block, so it gives nothing away about the other person's age.
+      // as a block.
       return young.id === viewer.id
-        ? 'You have turned off messages with adults. You can turn them back on in Personalise.'
+        ? 'You have turned off contact with adults. You can turn it back on in Personalise.'
         : 'That player is not available.'
     }
   }
   return null
 }
 
-function acrossAges(a, b) {
-  return ageBand(a.birthdate) !== ageBand(b.birthdate)
+/** Whether one person may see another's posts, photos and videos. Only a
+ * block either way, or a disabled account, hides them. */
+function visibilityBlocker(viewer, target) {
+  if (!target || target.disabled) return 'That player is not available.'
+  if (viewer.id !== target.id && isBlockedEitherWay(viewer.id, target.id)) return 'That player is not available.'
+  return null
 }
 
-/** @returns {string | null} why these two may not interact, or null if they may */
-function interactionBlocker(viewer, target) {
-  if (!target || target.disabled) return 'That player is not available.'
-  if (viewer.id === target.id) return 'That is you.'
-  if (!viewer.username || !viewer.birthdate) return 'Finish your profile first.'
-  if (!target.username || !target.birthdate) return 'That player is not available.'
-  if (ageBand(viewer.birthdate) !== ageBand(target.birthdate)) return 'That player is not available.'
-  if (isBlockedEitherWay(viewer.id, target.id)) return 'That player is not available.'
-  return null
+function acrossAges(a, b) {
+  return ageBand(a.birthdate) !== ageBand(b.birthdate)
 }
 
 function stateOf(userId) {
@@ -1446,9 +1444,7 @@ function publicCard(state) {
  */
 app.get('/api/users/search', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
-  // Looking for someone to message reaches every age group; looking for
-  // someone to challenge stays within your own.
-  const blocker = req.query.for === 'messages' ? messageBlocker : interactionBlocker
+  const blocker = contactBlocker
   const q = String(req.query.q ?? '').trim().replace(/^@+/, '').toLowerCase().slice(0, 40)
   if (q && !/^[\p{L}\p{N}_. '-]+$/u.test(q)) {
     res.json({ results: [] })
@@ -1471,8 +1467,8 @@ app.get('/api/users/search', requireAuth, throttleSocialRead, (req, res) => {
 app.get('/api/users/:username', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
   const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
-  if (messageBlocker(viewer, target)) {
-    // The same answer for "does not exist", "blocked" and "not taking messages
+  if (contactBlocker(viewer, target)) {
+    // The same answer for "does not exist", "blocked" and "not taking contact
     // from adults", so this cannot be used to find out which one it is.
     res.status(404).json({ error: 'That player is not available.' })
     return
@@ -1482,11 +1478,7 @@ app.get('/api/users/:username', requireAuth, throttleSocialRead, (req, res) => {
   const bio = target.bio && screenInput(target.bio, { allowLength: 160 }).ok ? target.bio : null
   let canChallenge = true
   let challengeNote = null
-  if (interactionBlocker(viewer, target)) {
-    // Challenges stay within an age group. Worded so it does not say which.
-    canChallenge = false
-    challengeNote = "Challenges aren't available with this player, but you can message them."
-  } else if (!target.challenges_open) {
+  if (!target.challenges_open) {
     canChallenge = false
     challengeNote = 'Not taking challenges right now.'
   } else if (findOpenBetween(viewer.id, target.id, now)) {
@@ -1512,7 +1504,7 @@ app.get('/api/users/:username', requireAuth, throttleSocialRead, (req, res) => {
 app.get('/api/users/:username/avatar', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
   const target = findUserRowByUsername(String(req.params.username ?? '').toLowerCase())
-  if (messageBlocker(viewer, target)) {
+  if (contactBlocker(viewer, target)) {
     res.status(404).end()
     return
   }
@@ -1625,6 +1617,12 @@ function challengeView(row, viewerId, { detail = false } = {}) {
     completedAt: settled.completed_at,
     creator: creator ? playerSummary(creator) : null,
     opponent: opponent ? playerSummary(opponent) : null,
+    // The other side's age group when it differs, for the chat's safety note.
+    otherAge: (() => {
+      const me = settled.creator_id === viewerId ? creator : opponent
+      const them = settled.creator_id === viewerId ? opponent : creator
+      return me?.birthdate && them?.birthdate && acrossAges(me, them) ? ageBand(them.birthdate) : null
+    })(),
     today: dayIndex(settled, now),
     rewards:
       settled.status === 'completed'
@@ -1660,7 +1658,7 @@ app.post('/api/challenges', requireAuth, throttleChallengeWrite, (req, res) => {
   try {
     const viewer = findUserById(req.user.id)
     const target = findUserRowByUsername(String(req.body?.opponent ?? '').replace(/^@+/, '').toLowerCase())
-    const blocker = interactionBlocker(viewer, target)
+    const blocker = contactBlocker(viewer, target)
     if (blocker) {
       res.status(404).json({ error: blocker })
       return
@@ -1730,7 +1728,7 @@ app.post('/api/challenges/:id/respond', requireAuth, throttleChallengeWrite, (re
   // the other, closed challenges, or filled their slots since it was sent.
   const viewer = findUserById(req.user.id)
   const creator = findUserById(row.creator_id)
-  if (interactionBlocker(viewer, creator)) {
+  if (contactBlocker(viewer, creator)) {
     res.status(409).json({ error: 'This challenge can no longer be accepted.', code: 'unavailable' })
     return
   }
@@ -1792,8 +1790,10 @@ app.post('/api/challenges/:id/checkin', requireAuth, throttleChallengeWrite, (re
  *
  * Opens when the offer is accepted and belongs to that challenge alone. Writing
  * is allowed while it is accepted or running; afterwards it stays readable.
- * Every message goes through the content filter and a per-person rate limit,
- * and a block ends the challenge and with it the chat.
+ * Every message goes through the same checks as private messages — the word
+ * filter, no contact details, and the stricter rules between an adult and an
+ * under-18 — and a per-person rate limit. A block ends the challenge and with
+ * it the chat.
  */
 app.get('/api/challenges/:id/messages', requireAuth, throttleSocialRead, (req, res) => {
   const row = loadParticipantChallenge(req, res)
@@ -1821,46 +1821,33 @@ app.post('/api/challenges/:id/messages', requireAuth, throttleChat, (req, res) =
     return
   }
   const otherId = row.creator_id === req.user.id ? row.opponent_id : row.creator_id
-  // The full interaction check, not just blocks: if either account has been
-  // disabled or someone has since crossed into a different age band, the chat
-  // closes rather than carrying on under rules that no longer allow it.
-  if (interactionBlocker(findUserById(req.user.id), findUserById(otherId))) {
+  const viewer = findUserById(req.user.id)
+  const target = findUserById(otherId)
+  // The full contact check, not just blocks: if either account has been
+  // disabled or contact has been turned off since, the chat closes.
+  if (contactBlocker(viewer, target)) {
     res.status(409).json({ error: 'This chat is closed.' })
     return
   }
-  const message = validateMessage(req.body?.body)
-  if (!message.ok) {
-    if (/content filter/.test(message.error)) {
-      audit({ userId: req.user.id, email: req.user.email, event: 'moderation.chat', outcome: 'blocked', ip: req.ip, detail: row.id })
-    }
-    res.status(400).json({ error: message.error })
-    return
-  }
-  const id = insertChallengeMessage(row.id, req.user.id, message.value)
-  res.status(201).json({ message: { id, side: row.creator_id === req.user.id ? 'creator' : 'opponent', mine: true, body: message.value, at: new Date().toISOString() } })
+  const body = readMessage(req, res, `challenge ${row.id}`, { viewer, target })
+  if (body === null) return
+  const id = insertChallengeMessage(row.id, req.user.id, body)
+  res.status(201).json({ message: { id, side: row.creator_id === req.user.id ? 'creator' : 'opponent', mine: true, body, at: new Date().toISOString() } })
 })
 
 
 // ---------------------------------------------------------------------------
 // The feed
 //
-// Posts are seen within the same age band as everything else social, and never
-// from someone either side has blocked. Photos are checked by the image safety
-// model before they are stored; text goes through the word filter.
+// One feed for everyone, of every age, from the first day. Posts are never
+// shown from someone either side has blocked. Photos and videos are checked by
+// the image safety model before they are stored; text goes through the word
+// filter.
 // ---------------------------------------------------------------------------
 
-/** The level a player has actually reached, as far as the server will vouch:
- * the claimed level, capped by what their XP supports. */
-function levelOf(userId) {
-  const state = stateOf(userId)
-  const xp = Math.max(0, Number(state?.player?.xp) || 0)
-  return Math.max(1, Math.min(Number(state?.progression?.level) || 1, levelFromXp(xp)))
-}
-
-app.get('/api/social/unlocks', requireAuth, throttleSocialRead, (req, res) => {
+/** Whether this server can check pictures and videos, and so accept them. */
+app.get('/api/social/media', requireAuth, throttleSocialRead, (req, res) => {
   res.json({
-    level: levelOf(req.user.id),
-    unlocks: UNLOCKS,
     imagesChecked: imageSafetyConfigured(),
     videosAvailable: imageSafetyConfigured() && videoConfigured(),
   })
@@ -1898,12 +1885,11 @@ app.get('/api/feed', requireAuth, throttleSocialRead, (req, res) => {
     res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
     return
   }
-  const band = ageBand(viewer.birthdate)
   const before = typeof req.query.before === 'string' ? req.query.before : null
   let userId = null
   if (typeof req.query.user === 'string' && req.query.user) {
     const target = findUserRowByUsername(req.query.user.toLowerCase())
-    if (!target || (target.id !== viewer.id && interactionBlocker(viewer, target))) {
+    if (visibilityBlocker(viewer, target)) {
       res.json({ posts: [], more: false })
       return
     }
@@ -1911,7 +1897,7 @@ app.get('/api/feed', requireAuth, throttleSocialRead, (req, res) => {
   }
   const rows = listFeed({ before, limit: 20, userId })
   const visible = rows
-    .filter((row) => row.user_id === viewer.id || (ageBand(row.author_birthdate) === band && !isBlockedEitherWay(viewer.id, row.user_id)))
+    .filter((row) => row.user_id === viewer.id || !isBlockedEitherWay(viewer.id, row.user_id))
     .slice(0, 20)
   res.json({ posts: visible.map((row) => postView(row, viewer.id)), more: rows.length >= 20 })
 })
@@ -2007,7 +1993,7 @@ app.get('/api/posts/images/:id', requireAuth, throttleSocialRead, (req, res) => 
     res.status(404).end()
     return
   }
-  if (image.user_id !== viewer.id && interactionBlocker(viewer, findUserById(image.user_id))) {
+  if (visibilityBlocker(viewer, findUserById(image.user_id))) {
     res.status(404).end()
     return
   }
@@ -2172,7 +2158,7 @@ function videoFor(req, res) {
   const visible =
     video &&
     !video.deleted_at &&
-    (video.user_id === viewer.id || (video.post_id && !interactionBlocker(viewer, findUserById(video.user_id))))
+    (video.user_id === viewer.id || (video.post_id && !visibilityBlocker(viewer, findUserById(video.user_id))))
   if (!visible) {
     res.status(404).end()
     return null
@@ -2255,8 +2241,9 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
 // down, so declining never invites a "why?". The person who declined can still
 // change their mind: writing back opens the chat.
 //
-// Messages cross age groups, so an adult can write to someone of 15. What
-// stands in the way of that going wrong:
+// Messages and challenges cross age groups, so an adult can write to someone
+// of 15. What stands in the way of that going wrong (the message rules apply
+// to challenge chats too):
 // - a first message is only a request, and nothing more can be sent until the
 //   young person accepts or replies;
 // - no chat can carry contact details, links or other apps, so nobody can be
@@ -2267,7 +2254,7 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
 // - in a chat across age groups, the young person is reminded they are
 //   talking to an adult and what never to share, and the adult is reminded
 //   the other person is under 18 and that the chat is held to stricter rules;
-// - an under-18 can turn off messages from adults altogether.
+// - an under-18 can turn off contact from adults altogether.
 // ---------------------------------------------------------------------------
 
 /** How many conversations one person may open with new people in a day. */
@@ -2310,7 +2297,7 @@ function loadConversation(req, res) {
     return null
   }
   const otherId = row.user_a === req.user.id ? row.user_b : row.user_a
-  if (messageBlocker(findUserById(req.user.id), findUserById(otherId))) {
+  if (contactBlocker(findUserById(req.user.id), findUserById(otherId))) {
     res.status(404).json({ error: 'This conversation is no longer available.' })
     return null
   }
@@ -2367,7 +2354,7 @@ app.get('/api/messages', requireAuth, throttleSocialRead, (req, res) => {
   const conversations = listConversationsFor(viewer.id)
     .filter((row) => {
       if (row.status === 'declined' && row.created_by !== viewer.id) return false
-      return !messageBlocker(viewer, findUserById(row.user_a === viewer.id ? row.user_b : row.user_a))
+      return !contactBlocker(viewer, findUserById(row.user_a === viewer.id ? row.user_b : row.user_a))
     })
     .map((row) => conversationView(row, viewer.id, { unread: row.unread, lastBody: row.last_body, lastUser: row.last_user }))
   res.json({
@@ -2377,29 +2364,24 @@ app.get('/api/messages', requireAuth, throttleSocialRead, (req, res) => {
   })
 })
 
-/** Whether there is already a conversation with this player, and whether you
- * could start one — what a card's Message button needs to know. */
+/** Whether there is already a conversation with this player — what a card's
+ * Message button needs to know. */
 app.get('/api/messages/with/:username', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
   const target = findUserRowByUsername(String(req.params.username ?? '').replace(/^@+/, '').toLowerCase())
-  const blocker = messageBlocker(viewer, target)
+  const blocker = contactBlocker(viewer, target)
   if (blocker) {
     res.status(404).json({ error: blocker })
     return
   }
   const row = findConversationBetween(viewer.id, target.id)
-  res.json({
-    conversationId: row?.id ?? null,
-    player: playerSummary(target),
-    canStart: levelOf(viewer.id) >= UNLOCKS.message,
-    unlockLevel: UNLOCKS.message,
-  })
+  res.json({ conversationId: row?.id ?? null, player: playerSummary(target) })
 })
 
 app.post('/api/messages/start', requireAuth, throttleChat, (req, res) => {
   const viewer = findUserById(req.user.id)
   const target = findUserRowByUsername(String(req.body?.username ?? '').replace(/^@+/, '').toLowerCase())
-  const blocker = messageBlocker(viewer, target)
+  const blocker = contactBlocker(viewer, target)
   if (blocker) {
     res.status(404).json({ error: blocker })
     return
@@ -2414,10 +2396,6 @@ app.post('/api/messages/start', requireAuth, throttleChat, (req, res) => {
   if (body === null) return
 
   if (!row) {
-    if (levelOf(viewer.id) < UNLOCKS.message) {
-      res.status(403).json({ error: `Messaging unlocks at level ${UNLOCKS.message}.`, code: 'locked' })
-      return
-    }
     const dayAgo = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
     // One answer for both caps, so hitting the smaller one says nothing about
     // who was being written to.
@@ -2512,14 +2490,10 @@ app.get('/api/leaderboard', requireAuth, rateLimit({ name: 'board', max: 30, win
   const mineIndex = full.findIndex((r) => r.id === req.user.id)
   const me = mineIndex >= 0 ? full[mineIndex] : null
   const stored = findUserById(req.user.id)
-  const band = ageBand(stored?.birthdate)
 
   // A row carries its username only when the viewer is allowed to open that
-  // card — same age band, not blocked. Everyone else stays a name and a number.
-  const handleFor = (r) =>
-    r.id !== req.user.id && r.username && band && ageBand(r.birthdate) === band && !isBlockedEitherWay(req.user.id, r.id)
-      ? r.username
-      : null
+  // card. Everyone else stays a name and a number.
+  const handleFor = (r) => (r.id !== req.user.id && r.username && !contactBlocker(stored, findUserById(r.id)) ? r.username : null)
 
   res.json({
     top: full.slice(0, 50).map((r) => ({

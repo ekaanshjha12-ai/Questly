@@ -7,7 +7,7 @@ import {
   createPost,
   deletePost,
   fetchFeed,
-  fetchUnlocks,
+  fetchMediaAvailability,
   reportPost,
   uploadPostVideo,
   type Post,
@@ -71,7 +71,7 @@ export default function FeedScreen({
 
   useEffect(() => {
     void load()
-    fetchUnlocks()
+    fetchMediaAvailability()
       .then((u) => setMedia({ photos: u.imagesChecked, videos: u.videosAvailable }))
       .catch(() => setMedia(null))
   }, [load])

@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { IdCard, Lock, MessageCircle, Newspaper, Swords, Unlock } from 'lucide-react'
+import { IdCard, MessageCircle, Newspaper, Swords } from 'lucide-react'
 import type { AppState, CardDesign } from '../../types'
 import type { AuthUser, Challenge } from '../../lib/api'
 import { cardData } from '../../lib/card'
-import { UNLOCKS, UNLOCK_LIST } from '../../lib/social'
 import type { Inbox } from '../../hooks/useMessages'
 import FeedScreen from './FeedScreen'
 import MessagesScreen from './MessagesScreen'
@@ -52,7 +51,6 @@ export default function SocialHome({
 }) {
   const [tab, setTab] = useState<SocialTab>('feed')
   const data = useMemo(() => cardData(state, user), [state, user])
-  const level = state.progression.level
 
   return (
     <div className="space-y-4">
@@ -104,7 +102,7 @@ export default function SocialHome({
         />
       )}
 
-      {tab === 'messages' && <MessagesScreen inbox={inbox} level={level} myName={state.player.name} />}
+      {tab === 'messages' && <MessagesScreen inbox={inbox} myName={state.player.name} />}
 
       {tab === 'card' && (
         <div className="space-y-4">
@@ -114,24 +112,6 @@ export default function SocialHome({
             <div className="mt-3">
               <CardEditor design={state.card} data={data} onChange={onSetCard} />
             </div>
-          </section>
-
-          <section className="rounded-2xl border border-ink-600 bg-ink-850 p-4">
-            <p className="font-display text-sm font-semibold text-slate-100">What your level unlocks</p>
-            <p className="text-[11px] text-slate-500">You are level {level}. Earn XP in Focus mode to open more.</p>
-            <ul className="mt-3 space-y-1.5">
-              {UNLOCK_LIST.map((u) => {
-                const need = UNLOCKS[u.key]
-                const open = level >= need
-                return (
-                  <li key={u.key} className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-800 px-3 py-2">
-                    {open ? <Unlock className="h-4 w-4 text-gold-400" /> : <Lock className="h-4 w-4 text-slate-500" />}
-                    <span className={`flex-1 text-xs ${open ? 'text-slate-100' : 'text-slate-400'}`}>{u.label}</span>
-                    <span className={`text-[11px] ${open ? 'text-gold-400' : 'text-slate-500'}`}>{open ? 'Unlocked' : `Level ${need}`}</span>
-                  </li>
-                )
-              })}
-            </ul>
           </section>
 
           {user.username && (

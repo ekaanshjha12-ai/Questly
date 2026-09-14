@@ -73,7 +73,7 @@ export default function PersonaliseScreen({
       </Section>
 
       {user.birthdate && (ageFromBirthdate(user.birthdate) ?? 18) < 18 && (
-        <Section icon={MessageCircle} title="Messages from adults" note="Whether players who are 18 or older can send you message requests.">
+        <Section icon={MessageCircle} title="Contact from adults" note="Whether players who are 18 or older can message you or send you challenges.">
           <AdultMessagesToggle user={user} onUserChange={onUserChange} />
         </Section>
       )}
@@ -398,10 +398,10 @@ function ThemePicker() {
 }
 
 /**
- * For under-18 accounts: whether adults can write to them at all. On by
- * default, since messages are open across age groups; turning it off hides the
- * account from adults looking for someone to message, and closes any chats
- * with adults already going.
+ * For under-18 accounts: whether adults can reach them at all. On by default,
+ * since social is open across age groups; turning it off hides the account
+ * from adults looking for people, stops their messages and challenges, and
+ * closes any chats with adults already going.
  */
 function AdultMessagesToggle({ user, onUserChange }: { user: AuthUser; onUserChange: (user: AuthUser) => void }) {
   const on = user.adultMessages !== false
@@ -427,10 +427,10 @@ function AdultMessagesToggle({ user, onUserChange }: { user: AuthUser; onUserCha
         on={on}
         busy={busy}
         onToggle={() => void toggle()}
-        label={on ? 'On — adults can send you message requests' : 'Off — only players under 18 can message you'}
+        label={on ? 'On — adults can message and challenge you' : 'Off — only players under 18 can reach you'}
       />
       <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
-        Nothing opens until you accept, chats with adults can't include contact details or links, and you can block or report anyone.
+        Nothing starts until you accept, chats with adults can't include contact details or links, and you can block or report anyone.
       </p>
       {problem && <p className="mt-1.5 text-xs text-ember-400">{problem}</p>}
     </>
@@ -463,7 +463,7 @@ function ChallengesToggle({ user, onUserChange }: { user: AuthUser; onUserChange
         on={on}
         busy={busy}
         onToggle={() => void toggle()}
-        label={on ? 'Open — anyone your age can challenge you' : 'Closed — nobody can send you offers'}
+        label={on ? 'Open — anyone can challenge you' : 'Closed — nobody can send you offers'}
       />
       {problem && <p className="mt-1.5 text-xs text-ember-400">{problem}</p>}
     </>

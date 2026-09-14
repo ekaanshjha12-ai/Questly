@@ -15,7 +15,7 @@ export interface AuthUser {
   avatarVersion?: string | null
   profileComplete?: boolean
   challengesOpen?: boolean
-  /** Under-18 accounts only: whether adults may message them. */
+  /** Under-18 accounts only: whether adults may message and challenge them. */
   adultMessages?: boolean
 }
 
@@ -575,6 +575,8 @@ export interface Challenge {
   today: number | null
   rewards: { creator: number; opponent: number } | null
   checkins?: ChallengeCheckin[]
+  /** The other side's age group when it differs from yours, for the chat's safety note. */
+  otherAge?: 'adult' | 'under18' | null
 }
 
 export interface ChallengeTermsInput {
@@ -601,13 +603,8 @@ export interface ChallengeMessage {
  * yourself but not something you can message or challenge. */
 export type FoundPlayer = PlayerSummary & { you?: boolean }
 
-/** `messages` reaches every age group; `challenges` stays within your own. */
-export type SearchPurpose = 'messages' | 'challenges'
-
-export function searchPlayers(q: string, purpose: SearchPurpose = 'challenges') {
-  return request<{ results: FoundPlayer[] }>(
-    `/api/users/search?q=${encodeURIComponent(q)}${purpose === 'messages' ? '&for=messages' : ''}`,
-  )
+export function searchPlayers(q: string) {
+  return request<{ results: FoundPlayer[] }>(`/api/users/search?q=${encodeURIComponent(q)}`)
 }
 
 export function fetchPlayer(username: string) {
@@ -762,14 +759,9 @@ export function reportPost(id: string, reason: string) {
   })
 }
 
-export function fetchUnlocks() {
-  return request<{
-    level: number
-    unlocks: Record<'post' | 'message' | 'createClub', number>
-    /** Whether photos can be checked, and so posted, on this server. */
-    imagesChecked: boolean
-    videosAvailable: boolean
-  }>('/api/social/unlocks')
+/** Whether this server can check, and so accept, photos and videos. */
+export function fetchMediaAvailability() {
+  return request<{ imagesChecked: boolean; videosAvailable: boolean }>('/api/social/media')
 }
 
 /* --- messages ---------------------------------------------------------------- */
@@ -800,10 +792,9 @@ export function fetchConversations() {
   return request<{ conversations: Conversation[]; unread: number; requests: number }>('/api/messages')
 }
 
-/** Whether you already have a conversation with this player, and whether you
- * could start one. */
+/** Whether you already have a conversation with this player. */
 export function lookupConversation(username: string) {
-  return request<{ conversationId: string | null; player: PlayerSummary; canStart: boolean; unlockLevel: number }>(
+  return request<{ conversationId: string | null; player: PlayerSummary }>(
     `/api/messages/with/${encodeURIComponent(username)}`,
   )
 }

@@ -4,8 +4,8 @@ import { dailyKey } from './period'
 import { ACHIEVEMENTS } from './achievements'
 
 /**
- * The social side's shared pieces: post kinds, what a level unlocks, and the
- * things from today worth sharing.
+ * The social side's shared pieces: post kinds, and the things from today worth
+ * sharing.
  */
 
 export const POST_KINDS: { id: PostKind; label: string; emoji: string; prompt: string }[] = [
@@ -18,15 +18,6 @@ export const POST_KINDS: { id: PostKind; label: string; emoji: string; prompt: s
 export function kindMeta(kind: PostKind) {
   return POST_KINDS.find((k) => k.id === kind) ?? POST_KINDS[3]
 }
-
-/** Mirrors UNLOCKS in server/social.js, which is the copy that is enforced. */
-export const UNLOCKS = { post: 1, message: 2, createClub: 10 } as const
-
-export const UNLOCK_LIST: { key: 'post' | 'message' | 'createClub'; label: string }[] = [
-  { key: 'post', label: 'Post to the feed, with photos and videos' },
-  { key: 'message', label: 'Message other players' },
-  { key: 'createClub', label: 'Create a club' },
-]
 
 /** Mirrors the limits in server/media.js. */
 export const VIDEO_MAX_BYTES = 50 * 1024 * 1024

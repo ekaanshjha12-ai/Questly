@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Loader2, Lock, MessageCircle, SquarePen, X } from 'lucide-react'
+import { Loader2, MessageCircle, SquarePen, X } from 'lucide-react'
 import type { Conversation, FoundPlayer } from '../../lib/api'
 import type { Inbox } from '../../hooks/useMessages'
-import { UNLOCKS, timeAgo } from '../../lib/social'
+import { timeAgo } from '../../lib/social'
 import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
 import PlayerSearch from '../PlayerSearch'
@@ -17,7 +17,7 @@ import ConversationView, { type ConversationTarget } from './Conversation'
  * first message from someone new waits under Requests rather than landing
  * among your chats, and they cannot send another until you answer.
  */
-export default function MessagesScreen({ inbox, level, myName }: { inbox: Inbox; level: number; myName: string }) {
+export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName: string }) {
   const [open, setOpen] = useState<ConversationTarget | null>(null)
   const [finding, setFinding] = useState(false)
   const [card, setCard] = useState<string | null>(null)
@@ -56,7 +56,6 @@ export default function MessagesScreen({ inbox, level, myName }: { inbox: Inbox;
   const list = inbox.conversations ?? []
   const requests = list.filter((c) => c.requestForMe)
   const chats = list.filter((c) => !c.requestForMe)
-  const canStart = level >= UNLOCKS.message
 
   return (
     <div className="space-y-5">
@@ -84,7 +83,6 @@ export default function MessagesScreen({ inbox, level, myName }: { inbox: Inbox;
           // the overflow clip needed for the open animation would cut off.
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden pb-2">
             <FindPlayer
-              canStart={canStart}
               onPick={(p) => {
                 setFinding(false)
                 setOpen({ username: p.username, player: p })
@@ -181,16 +179,10 @@ function Row({ c, onOpen, highlight = false }: { c: Conversation; onOpen: () => 
 }
 
 /** Pick who to write to: recently active players, or search. */
-function FindPlayer({ canStart, onPick }: { canStart: boolean; onPick: (p: FoundPlayer) => void }) {
+function FindPlayer({ onPick }: { onPick: (p: FoundPlayer) => void }) {
   return (
     <div className="rounded-2xl border border-ink-600 bg-ink-850 p-3">
-      {!canStart && (
-        <p className="mb-2.5 flex items-start gap-2 rounded-xl bg-ink-800 px-3 py-2 text-[11px] text-slate-400">
-          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Starting a conversation unlocks at level {UNLOCKS.message}. You can still open chats people have started with you.
-        </p>
-      )}
-      <PlayerSearch onPick={onPick} purpose="messages" placeholder="Who do you want to message?" autoFocus maxHeight="18rem" />
+      <PlayerSearch onPick={onPick} placeholder="Who do you want to message?" autoFocus maxHeight="18rem" />
     </div>
   )
 }

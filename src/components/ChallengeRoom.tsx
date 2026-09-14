@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Flag, Loader2, MessageCircle, ScrollText, Send, Swords, TrendingUp, X, XCircle } from 'lucide-react'
+import { Check, Flag, Loader2, MessageCircle, ScrollText, Send, ShieldAlert, Swords, TrendingUp, X, XCircle } from 'lucide-react'
 import {
   ApiError,
   checkInChallenge,
@@ -621,6 +621,25 @@ function ChatView({ challenge, them }: { challenge: Challenge; them: PlayerSumma
 
   return (
     <>
+      {/* Across age groups, both sides are reminded who they are talking to. */}
+      {challenge.otherAge === 'adult' && (
+        <div className="flex gap-2 border-b border-ink-700 bg-gold-500/10 px-4 py-2.5 text-[11px] leading-relaxed text-slate-200">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
+          <p>
+            <span className="font-semibold">{them.name} is an adult.</span> Never share where you live, your school, your phone or photos of
+            yourself, and never agree to meet. If anything feels wrong, report them and tell an adult you trust.
+          </p>
+        </div>
+      )}
+      {challenge.otherAge === 'under18' && (
+        <div className="flex gap-2 border-b border-ink-700 bg-ink-850 px-4 py-2.5 text-[11px] leading-relaxed text-slate-300">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
+          <p>
+            <span className="font-semibold">{them.name} is under 18.</span> Keep it about the challenge. Messages asking to meet, for photos or
+            for personal details are blocked and reviewed.
+          </p>
+        </div>
+      )}
       <div ref={listRef} className="min-h-[16rem] flex-1 space-y-2 overflow-y-auto p-4">
         {!messages.length && (
           <p className="py-8 text-center text-xs text-slate-500">
