@@ -11,7 +11,9 @@ import { CARD_H, CARD_W, findBackground, type CardBackground, type CardData } fr
  * card, and text scales with it.
  *
  * Layer order: background, then the elements, then the drawing on top — a
- * doodle is drawn on the card, the way you would draw on a printed one.
+ * doodle is drawn on the card, the way you would draw on a printed one. The
+ * age badge sits above all of it: it is on every card, and no sticker, text
+ * or scribble can cover it.
  */
 
 interface Props {
@@ -104,6 +106,29 @@ const ProfileCard = forwardRef<HTMLDivElement, Props>(function ProfileCard(
           />
         ))}
       </svg>
+
+      {data.age !== null && (
+        <div
+          className="pointer-events-none absolute flex items-baseline whitespace-nowrap font-display font-bold"
+          style={{
+            top: '4.2cqw',
+            right: '4.2cqw',
+            gap: '1.2cqw',
+            padding: '1cqw 2.8cqw',
+            borderRadius: '99cqw',
+            background: plate(bg),
+            border: `0.5cqw solid ${data.rankColor}`,
+            boxShadow: '0 0.8cqw 2cqw rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+          }}
+          aria-label={`Age ${data.age}`}
+        >
+          <span className="uppercase" style={{ fontSize: '2.4cqw', letterSpacing: '0.14em', color: bg.soft }}>
+            Age
+          </span>
+          <span style={{ fontSize: '4.6cqw', lineHeight: 1 }}>{data.age}</span>
+        </div>
+      )}
     </div>
   )
 })

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Ban, Check, Ellipsis, Flag, IdCard, Loader2, Lock, Send, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, Ban, Check, Ellipsis, Flag, IdCard, Loader2, Lock, Send, ShieldAlert, ShieldCheck, X } from 'lucide-react'
 import {
   ApiError,
   acceptConversation,
@@ -270,6 +270,26 @@ export default function ConversationView({
         </AnimatePresence>
       </div>
 
+      {/* Across age groups, both sides are reminded who they are talking to. */}
+      {!loadError && !blocked && conversation?.otherAge === 'adult' && (
+        <div className="flex gap-2 border-b border-ink-700 bg-gold-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-slate-200">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
+          <p>
+            <span className="font-semibold">{name} is an adult.</span> Never share where you live, your school, your phone or photos of
+            yourself, and never agree to meet. If anything feels wrong, block and report them, and tell an adult you trust.
+          </p>
+        </div>
+      )}
+      {!loadError && !blocked && conversation?.otherAge === 'under18' && (
+        <div className="flex gap-2 border-b border-ink-700 bg-ink-850 px-3 py-2.5 text-[11px] leading-relaxed text-slate-300">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
+          <p>
+            <span className="font-semibold">{name} is under 18.</span> Keep it about goals and progress. This chat is held to stricter rules:
+            messages asking to meet, for photos or for personal details are blocked and reviewed.
+          </p>
+        </div>
+      )}
+
       {/* --- messages ------------------------------------------------------- */}
       <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4">
         {loadError ? (
@@ -394,7 +414,7 @@ export default function ConversationView({
             ) : (
               <span className="flex items-center gap-1 text-[10px] text-slate-600">
                 <ShieldCheck className="h-3 w-3" />
-                Checked for abuse. Keep your address, school and passwords to yourself.
+                Checked for safety. No phone numbers, emails, links or other apps.
               </span>
             )}
             {draft.length > 400 && <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{500 - draft.length}</span>}

@@ -2,7 +2,7 @@ import type { AppState, CardDesign, CardField, CardItem, CardStroke } from '../t
 import type { AuthUser, PublicPlayer } from './api'
 import { avatarUrl, playerAvatarUrl } from './api'
 import { rankForLevel } from '../data/ranks'
-import { birthdayLabel } from './profile'
+import { ageFromBirthdate, birthdayLabel } from './profile'
 
 /**
  * The profile card: its backgrounds, its default layout, and the limits that
@@ -151,6 +151,8 @@ export function tidyCard(design: CardDesign): CardDesign {
 
 export interface CardData {
   name: string
+  /** Shown on every card, whatever its design, and not removable. */
+  age: number | null
   username: string | null
   bio: string | null
   birthday: string | null
@@ -168,6 +170,7 @@ export function cardData(state: AppState, user: AuthUser, avatarOverride?: strin
   const rank = rankForLevel(state.progression.level)
   return {
     name: state.player.name || user.displayName || 'Adventurer',
+    age: user.birthdate ? ageFromBirthdate(user.birthdate) : null,
     username: user.username ?? null,
     bio: user.bio ?? null,
     birthday: birthdayLabel(user.birthdate),
@@ -189,6 +192,7 @@ export function publicCardData(player: PublicPlayer): CardData {
   const rank = rankForLevel(player.level)
   return {
     name: player.name,
+    age: player.age ?? null,
     username: player.username,
     bio: player.bio,
     birthday: null,

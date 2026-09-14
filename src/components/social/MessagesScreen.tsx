@@ -13,9 +13,9 @@ import ConversationView, { type ConversationTarget } from './Conversation'
  * Messages: requests waiting on you, then your conversations, most recent
  * first.
  *
- * With no follow list, anyone in your age band can write to you, so a first
- * message from someone new waits under Requests rather than landing among
- * your chats, and they cannot send another until you answer.
+ * With no follow list, anyone on Questly can write to you — of any age — so a
+ * first message from someone new waits under Requests rather than landing
+ * among your chats, and they cannot send another until you answer.
  */
 export default function MessagesScreen({ inbox, level, myName }: { inbox: Inbox; level: number; myName: string }) {
   const [open, setOpen] = useState<ConversationTarget | null>(null)
@@ -163,6 +163,11 @@ function Row({ c, onOpen, highlight = false }: { c: Conversation; onOpen: () => 
           <span className={`min-w-0 flex-1 truncate text-[12px] ${c.unread > 0 ? 'text-slate-200' : 'text-slate-500'}`}>
             {c.lastMessage ? `${c.lastMessage.mine ? 'You: ' : ''}${c.lastMessage.body}` : `@${them?.username ?? ''}`}
           </span>
+          {c.otherAge === 'adult' && (
+            <span className="shrink-0 rounded-full border border-ink-500 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-400" title="This person is 18 or older">
+              18+
+            </span>
+          )}
           {waiting && <span className="shrink-0 rounded-full border border-ink-500 px-1.5 py-px text-[9px] uppercase tracking-wide text-slate-400">Request sent</span>}
           {c.unread > 0 && !c.requestForMe && (
             <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-gold-500 px-1 text-[9px] font-bold text-onAccent">
@@ -185,7 +190,7 @@ function FindPlayer({ canStart, onPick }: { canStart: boolean; onPick: (p: Found
           Starting a conversation unlocks at level {UNLOCKS.message}. You can still open chats people have started with you.
         </p>
       )}
-      <PlayerSearch onPick={onPick} placeholder="Who do you want to message?" autoFocus maxHeight="18rem" />
+      <PlayerSearch onPick={onPick} purpose="messages" placeholder="Who do you want to message?" autoFocus maxHeight="18rem" />
     </div>
   )
 }

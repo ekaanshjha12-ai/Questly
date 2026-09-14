@@ -72,6 +72,9 @@ for (const column of [
   // XP the server has awarded (challenge rewards) that the account's next state
   // save may add on top of the normal rate ceiling. Spent as it is used.
   'xp_allowance INTEGER NOT NULL DEFAULT 0',
+  // Whether an under-18 account accepts messages from adults. Meaningless for
+  // adults. On by default, since messages are open across age groups.
+  'adult_messages INTEGER NOT NULL DEFAULT 1',
 ]) {
   try {
     db.run(`ALTER TABLE users ADD COLUMN ${column}`)
@@ -865,6 +868,10 @@ export function setChallengesOpen(userId, open) {
   db.run('UPDATE users SET challenges_open = ? WHERE id = ?', [open ? 1 : 0, userId])
 }
 
+export function setAdultMessages(userId, on) {
+  db.run('UPDATE users SET adult_messages = ? WHERE id = ?', [on ? 1 : 0, userId])
+}
+
 export function isBlockedEitherWay(a, b) {
   return Boolean(
     db.get('SELECT 1 AS x FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', [
@@ -1242,4 +1249,17 @@ export function markConversationRead(conversationId, userId, lastId) {
 /** Requests someone has started in the last day, for the cap on cold messages. */
 export function countConversationsStartedSince(userId, sinceIso) {
   return db.get('SELECT COUNT(*) AS n FROM conversations WHERE created_by = ? AND created_at > ?', [userId, sinceIso])?.n ?? 0
+}
+
+/** The birthdates of everyone this person has started a conversation with
+ * since then — for the tighter daily cap on adults writing to under-18s. */
+export function birthdatesMessagedSince(userId, sinceIso) {
+  return db
+    .all(
+      `SELECT u.birthdate FROM conversations c
+       JOIN users u ON u.id = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
+       WHERE c.created_by = ? AND c.created_at > ?`,
+      [userId, userId, sinceIso],
+    )
+    .map((row) => row.birthdate)
 }

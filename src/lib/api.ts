@@ -15,6 +15,8 @@ export interface AuthUser {
   avatarVersion?: string | null
   profileComplete?: boolean
   challengesOpen?: boolean
+  /** Under-18 accounts only: whether adults may message them. */
+  adultMessages?: boolean
 }
 
 export class ApiError extends Error {
@@ -517,6 +519,8 @@ export interface PlayerSummary {
 }
 
 export interface PublicPlayer extends PlayerSummary {
+  /** Always shown on the card. */
+  age: number | null
   bio: string | null
   joined: string
   card: import('../types').CardDesign | null
@@ -597,8 +601,13 @@ export interface ChallengeMessage {
  * yourself but not something you can message or challenge. */
 export type FoundPlayer = PlayerSummary & { you?: boolean }
 
-export function searchPlayers(q: string) {
-  return request<{ results: FoundPlayer[] }>(`/api/users/search?q=${encodeURIComponent(q)}`)
+/** `messages` reaches every age group; `challenges` stays within your own. */
+export type SearchPurpose = 'messages' | 'challenges'
+
+export function searchPlayers(q: string, purpose: SearchPurpose = 'challenges') {
+  return request<{ results: FoundPlayer[] }>(
+    `/api/users/search?q=${encodeURIComponent(q)}${purpose === 'messages' ? '&for=messages' : ''}`,
+  )
 }
 
 export function fetchPlayer(username: string) {
@@ -620,7 +629,7 @@ export function reportPlayer(username: string, reason: string, challengeId?: str
   })
 }
 
-export function updateSettings(settings: { challengesOpen?: boolean }) {
+export function updateSettings(settings: { challengesOpen?: boolean; adultMessages?: boolean }) {
   return request<{ user: AuthUser }>('/api/me/settings', { method: 'PUT', body: JSON.stringify(settings) })
 }
 
@@ -775,6 +784,9 @@ export interface Conversation {
   lastMessage: { body: string; mine: boolean } | null
   lastMessageAt: string
   unread: number
+  /** Set when the two are in different age groups: the other person's group,
+   * which decides the safety note shown in the chat. */
+  otherAge: 'adult' | 'under18' | null
 }
 
 export interface DirectMessage {

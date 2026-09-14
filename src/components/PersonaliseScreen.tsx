@@ -3,6 +3,7 @@ import {
   Check,
   IdCard,
   Loader2,
+  MessageCircle,
   MonitorSmartphone,
   Moon,
   MousePointer2,
@@ -15,7 +16,7 @@ import type { AppState, CardDesign } from '../types'
 import { useTheme, type ThemeChoice } from '../hooks/useTheme'
 import { useCelebrations } from '../lib/prefs'
 import { ApiError, avatarUrl, updateProfile, updateSettings, uploadAvatar, type AuthUser } from '../lib/api'
-import { BIO_MAX, type PreparedAvatar } from '../lib/profile'
+import { BIO_MAX, ageFromBirthdate, type PreparedAvatar } from '../lib/profile'
 import { cardData } from '../lib/card'
 import CursorPicker from './CursorPicker'
 import CardEditor from './CardEditor'
@@ -51,7 +52,7 @@ export default function PersonaliseScreen({
         <p className="mt-0.5 text-xs text-slate-500">Make it yours. Changes apply straight away.</p>
       </div>
 
-      <Section icon={IdCard} title="Your card" note="Add stickers and text, drag things around, draw on it.">
+      <Section icon={IdCard} title="Your card" note="Add stickers and text, drag things around, draw on it. Your age always shows in the corner.">
         <CardEditor design={state.card} data={data} onChange={onSetCard} />
       </Section>
 
@@ -70,6 +71,12 @@ export default function PersonaliseScreen({
       <Section icon={Swords} title="Challenges" note="Whether other players can send you challenge offers.">
         <ChallengesToggle user={user} onUserChange={onUserChange} />
       </Section>
+
+      {user.birthdate && (ageFromBirthdate(user.birthdate) ?? 18) < 18 && (
+        <Section icon={MessageCircle} title="Messages from adults" note="Whether players who are 18 or older can send you message requests.">
+          <AdultMessagesToggle user={user} onUserChange={onUserChange} />
+        </Section>
+      )}
 
       <Section icon={PartyPopper} title="Celebrations" note="Confetti when you level up or reach a new rank.">
         <CelebrationToggle />
@@ -387,6 +394,46 @@ function ThemePicker() {
         )
       })}
     </div>
+  )
+}
+
+/**
+ * For under-18 accounts: whether adults can write to them at all. On by
+ * default, since messages are open across age groups; turning it off hides the
+ * account from adults looking for someone to message, and closes any chats
+ * with adults already going.
+ */
+function AdultMessagesToggle({ user, onUserChange }: { user: AuthUser; onUserChange: (user: AuthUser) => void }) {
+  const on = user.adultMessages !== false
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function toggle() {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const { user: updated } = await updateSettings({ adultMessages: !on })
+      onUserChange({ ...user, ...updated })
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'Could not save that.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <SwitchRow
+        on={on}
+        busy={busy}
+        onToggle={() => void toggle()}
+        label={on ? 'On — adults can send you message requests' : 'Off — only players under 18 can message you'}
+      />
+      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+        Nothing opens until you accept, chats with adults can't include contact details or links, and you can block or report anyone.
+      </p>
+      {problem && <p className="mt-1.5 text-xs text-ember-400">{problem}</p>}
+    </>
   )
 }
 
