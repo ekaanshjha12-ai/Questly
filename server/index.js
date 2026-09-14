@@ -38,7 +38,15 @@ import {
 import { generateSecret, otpauthUrl } from './totp.js'
 import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
-import { checkStateWrite, requiredMaxXp, levelFromXp } from './statecheck.js'
+import { levelFromXp } from './game/levels.js'
+import { gameRoutes } from './routes/game.js'
+import { ensureGame, stripServerOwned } from './game/migrate.js'
+import { rewardProof } from './game/quests.js'
+import { getProgressRow, startRewards, transaction } from './game/rewards.js'
+import { notify } from './game/notify.js'
+import { track } from './game/analytics.js'
+import { publicLook } from './game/inventory.js'
+import { GameError } from './game/errors.js'
 import { validateDocuments } from './documents.js'
 import { meter } from './meter.js'
 import { computeAdminStats, invalidateAdminStats } from './adminstats.js'
@@ -81,6 +89,7 @@ import {
 } from './media.js'
 import { randomUUID } from 'node:crypto'
 import {
+  db,
   audit,
   countByRole,
   countPhotoProofs,
@@ -95,7 +104,6 @@ import {
   getAvatar,
   putAvatar,
   setProfile,
-  addXpAllowance,
   blockUser,
   cancelOpenBetween,
   challengeRecord,
@@ -114,7 +122,6 @@ import {
   rankName,
   findPlayers,
   setChallengesOpen,
-  spendXpAllowance,
   transitionChallenge,
   countRecentPosts,
   getPost,
@@ -151,7 +158,6 @@ import {
   putState,
   recordPhotoHash,
   recordVerification,
-  setMaxXp,
   setSuspendedUntil,
   setUserDisabled,
   setUserRole,
@@ -173,9 +179,34 @@ if (IS_PRODUCTION) app.set('trust proxy', 1)
 
 app.use(securityHeaders(IS_PRODUCTION))
 
-// Photos arrive base64-encoded in the JSON body, so this needs headroom above
-// the state payloads. The client downscales before sending.
-app.use(express.json({ limit: '12mb' }))
+// Most requests are a few hundred bytes of JSON. Only the routes that carry a
+// photo, attached documents or the notebook document get room for megabytes,
+// so nothing else can be made to parse a 12 MB body.
+const jsonSmall = express.json({ limit: '256kb' })
+const jsonLarge = express.json({ limit: '12mb' })
+const LARGE_JSON_ROUTES = [
+  /^\/api\/state$/,
+  /^\/api\/verify$/,
+  /^\/api\/posts$/,
+  /^\/api\/me\/avatar$/,
+  /^\/api\/planner\//,
+  /^\/api\/explain\//,
+  /^\/api\/flashcards\//,
+]
+app.use((req, res, next) => (LARGE_JSON_ROUTES.some((re) => re.test(req.path)) ? jsonLarge : jsonSmall)(req, res, next))
+// A body that is too big or not JSON gets a JSON answer, not Express's HTML page.
+app.use((err, req, res, next) => {
+  if (!err || !req.path.startsWith('/api/')) return next(err)
+  if (err.type === 'entity.too.large') {
+    res.status(413).json({ error: 'That request is too large.' })
+    return
+  }
+  if (err.type === 'entity.parse.failed') {
+    res.status(400).json({ error: 'That request could not be read.' })
+    return
+  }
+  next(err)
+})
 app.use(cookieParser())
 app.use(sameOriginOnly(IS_PRODUCTION))
 
@@ -390,6 +421,14 @@ app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
     audit({ userId: user.id, email: user.email, event: 'auth.signup', outcome: 'success', ip: req.ip })
+    try {
+      ensureGame(user.id, req.get('x-timezone'))
+    } catch (err) {
+      // The game rows are created on first use anyway; a failure here must not
+      // fail a sign-up that has already succeeded.
+      console.error('game setup at signup failed', err)
+    }
+    track(user.id, 'signup')
     // The only time this code is ever readable. It is stored hashed.
     res.status(201).json({ user: publicUser(user.id), recoveryCode })
   } catch (err) {
@@ -578,27 +617,31 @@ app.get('/api/me/avatar', requireAuth, (req, res) => {
 })
 
 app.get('/api/state', requireAuth, (req, res) => {
+  try {
+    ensureGame(req.user.id, req.get('x-timezone'))
+  } catch (err) {
+    console.error('game setup failed', err)
+  }
   const row = getState(req.user.id)
   if (!row) {
     res.json({ state: null, version: 0 })
     return
   }
   try {
-    res.json({ state: JSON.parse(row.data), version: row.version, updatedAt: row.updated_at })
+    res.json({ state: stripServerOwned(JSON.parse(row.data)), version: row.version, updatedAt: row.updated_at })
   } catch {
     res.status(500).json({ error: 'Stored state is corrupt.' })
   }
 })
 
 /**
- * Saves progress, after checking the client is not claiming more than it could
- * have earned.
+ * Saves the player's notebook: goals, habits, moods, schedule, decks, reports,
+ * outlook and card design.
  *
- * The whole document is authored in the browser, so this endpoint treats it as a
- * claim rather than a fact. `checkStateWrite` re-derives level from XP, bounds
- * the rate XP can arrive at, requires coins to have been minted and unlocks to
- * have been paid for and rank-earned, and caps proofs at the number of photo
- * verifications the server itself recorded.
+ * Progress is not part of it any more. XP, coins, level, streak, achievements,
+ * unlocks, quests and focus sessions are kept by the server (see game/), so
+ * any of those a save still carries — an older cached copy of the app — are
+ * dropped before storing, and nothing in the document can move a reward.
  */
 app.put('/api/state', requireAuth, throttleState, (req, res) => {
   const { state } = req.body ?? {}
@@ -608,53 +651,24 @@ app.put('/api/state', requireAuth, throttleState, (req, res) => {
   }
 
   try {
-    const row = getState(req.user.id)
-    let previous = null
-    if (row) {
-      try {
-        previous = JSON.parse(row.data)
-      } catch {
-        // Corrupt stored state: treat as a first write rather than refusing to
-        // let the user save ever again.
+    ensureGame(req.user.id, req.get('x-timezone'))
+    const notebook = stripServerOwned(state)
+    for (const [key, cap] of [['goals', 200], ['schedule', 20000], ['decks', 500], ['reports', 200], ['habits', 500]]) {
+      const value = notebook[key]
+      if (value !== undefined && !Array.isArray(value)) {
+        res.status(400).json({ error: `${key} must be a list.` })
+        return
+      }
+      if (Array.isArray(value) && value.length > cap) {
+        res.status(413).json({ error: `Too many ${key} to save.` })
+        return
       }
     }
 
-    const stored = findUserById(req.user.id)
-    const elapsedMs = row?.updated_at ? Date.now() - new Date(row.updated_at).getTime() : Number.MAX_SAFE_INTEGER
-    const verdict = checkStateWrite({
-      previous,
-      next: state,
-      maxXpSeen: stored?.max_xp ?? 0,
-      elapsedMs,
-      verifiedProofs: countPhotoProofs(req.user.id),
-      levelBaseline: stored?.level_baseline ?? 1,
-      proofBaseline: stored?.proof_baseline ?? 0,
-      xpAllowance: stored?.xp_allowance ?? 0,
-    })
-
-    if (!verdict.ok) {
-      audit({
-        userId: req.user.id,
-        email: req.user.email,
-        event: `anticheat.${verdict.reason}`,
-        outcome: 'blocked',
-        ip: req.ip,
-        detail: verdict.detail,
-      })
-      res.status(409).json({
-        error: 'That save was rejected because the progress in it could not have been earned.',
-        code: `rejected_${verdict.reason}`,
-      })
-      return
-    }
-
-    if (verdict.maxXp > (stored?.max_xp ?? 0)) setMaxXp(req.user.id, verdict.maxXp)
-    // A challenge reward just landed: spend the allowance it used so it cannot
-    // be claimed again.
-    if (verdict.allowanceUsed > 0) spendXpAllowance(req.user.id, verdict.allowanceUsed)
-
-    const { version, updatedAt } = putState(req.user.id, JSON.stringify(state))
-    res.json({ version, updatedAt })
+    const { version, updatedAt } = putState(req.user.id, JSON.stringify(notebook))
+    // A first goal or a designed card can unlock an achievement.
+    const summary = transaction(() => startRewards(req.user.id).finish())
+    res.json({ version, updatedAt, rewards: summary.achievements.length || summary.items.length ? summary : null })
   } catch (err) {
     console.error('state save failed', err)
     res.status(500).json({ error: 'Could not save state.' })
@@ -687,6 +701,25 @@ app.get('/api/verify/status', requireAuth, (req, res) => {
     remaining: Math.max(0, VERIFY_DAILY_LIMIT - used),
   })
 })
+
+/**
+ * With a `questId`, accepted proof completes that quest on the server and pays
+ * its bonus there. The verdict is the same either way.
+ */
+function withQuestReward(req, verdict) {
+  const questId = typeof req.body?.questId === 'string' ? req.body.questId : null
+  if (!verdict?.verified || !questId) return verdict
+  try {
+    ensureGame(req.user.id, req.get('x-timezone'))
+    const kind = req.body?.kind === 'voice' ? 'voice' : 'photo'
+    const result = rewardProof(req.user.id, questId, kind, verdict.reason)
+    return { ...verdict, quest: result.quest, rewards: result.rewards }
+  } catch (err) {
+    if (err instanceof GameError) return { ...verdict, questError: err.message }
+    console.error('proof reward failed', err)
+    return { ...verdict, questError: 'The proof was accepted, but the quest could not be updated. Try again.' }
+  }
+}
 
 app.post('/api/verify', requireAuth, async (req, res) => {
   const { kind, taskTitle, imageBase64, mediaType, transcript, capturedAt } = req.body ?? {}
@@ -775,12 +808,14 @@ app.post('/api/verify', requireAuth, async (req, res) => {
         // a photo this account has used before, and it was taken recently. That
         // is a real bar, so accept rather than blocking progress entirely.
         recordPhotoHash(req.user.id, hash, 'photo')
-        res.json({
-          verified: true,
-          confidence: 1,
-          reason: 'Photo accepted. This server does not check what is in the picture.',
-          unchecked: true,
-        })
+        res.json(
+          withQuestReward(req, {
+            verified: true,
+            confidence: 1,
+            reason: 'Photo accepted. This server does not check what is in the picture.',
+            unchecked: true,
+          }),
+        )
         return
       }
 
@@ -826,7 +861,7 @@ app.post('/api/verify', requireAuth, async (req, res) => {
       return
     }
 
-    res.json(verdict)
+    res.json(withQuestReward(req, verdict))
   } catch (err) {
     if (err?.code === 'not_configured') {
       res.status(503).json({ error: 'Verification is not set up on this server yet.', code: 'not_configured' })
@@ -1221,14 +1256,9 @@ app.post('/api/admin/users/:id/suspend', requireAuth, requireAdmin, throttleAdmi
 })
 
 /**
- * Adjusts a player's XP.
- *
- * The interesting part is not the arithmetic. Progress is bounded by the
- * anti-cheat check, which compares each save against a high-water XP mark, a
- * level floor and the count of recorded photo proofs. Writing XP into the state
- * document alone would leave those bounds behind, and the player's very next
- * save would be rejected as unearned — a grant that quietly bricks the account
- * it was meant to reward. So the bounds move with the grant.
+ * Adjusts a player's XP, as a ledger entry like any other reward — so it is on
+ * the record, shows in the player's history, and moves level and coins the
+ * same way earned XP does.
  */
 app.post('/api/admin/users/:id/xp', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
   const target = findUserById(req.params.id)
@@ -1242,47 +1272,20 @@ app.post('/api/admin/users/:id/xp', requireAuth, requireAdmin, throttleAdmin, (r
     return
   }
 
-  const row = getState(target.id)
-  if (!row) {
-    res.status(400).json({ error: 'That account has no saved progress yet.' })
-    return
-  }
-
-  let state
-  try {
-    state = JSON.parse(row.data)
-  } catch {
-    res.status(500).json({ error: 'The saved progress on that account is unreadable.' })
-    return
-  }
-
-  const before = Number(state.player?.xp) || 0
-  const after = Math.max(0, before + delta)
-  state.player = { ...state.player, xp: after }
-
-  // Coins mint alongside XP at the same rate the app uses, so a grant does not
-  // leave the two out of step.
-  const coinDelta = Math.round(delta / 3)
-  state.player.coins = Math.max(0, (Number(state.player.coins) || 0) + coinDelta)
-
-  // Keep the claimed level within what the new XP supports. Granting XP may open
-  // levels, but claiming them still costs photo proof, so the level itself is
-  // left for the client to advance through the normal gate.
-  const xpLevel = levelFromXp(after)
-  if ((Number(state.progression?.level) || 1) > xpLevel) {
-    state.progression = { ...state.progression, level: xpLevel }
-  }
-
-  putState(target.id, JSON.stringify(state))
-  // Raise the ceiling so the next save from this account validates.
-  setMaxXp(target.id, Math.max(target.max_xp ?? 0, requiredMaxXp(state)))
+  ensureGame(target.id)
+  const before = getProgressRow(target.id)?.xp ?? 0
+  const summary = transaction(() => {
+    const rewards = startRewards(target.id, { quiet: true })
+    rewards.pay({ source: 'admin', sourceId: randomUUID(), xp: delta, coins: Math.round(delta / 3), label: 'Adjusted by the Questly team' })
+    return rewards.finish()
+  })
   invalidateAdminStats()
 
   audit({
     userId: req.user.id, email: req.user.email, event: 'admin.grant_xp', outcome: 'success', ip: req.ip,
-    detail: `${target.email} ${delta > 0 ? '+' : ''}${delta} XP (${before} -> ${after})`,
+    detail: `${target.email} ${delta > 0 ? '+' : ''}${delta} XP (${before} -> ${summary.progress.xp})`,
   })
-  res.json({ ok: true, xp: after, coins: state.player.coins })
+  res.json({ ok: true, xp: summary.progress.xp, coins: summary.progress.coins })
 })
 
 /**
@@ -1403,14 +1406,16 @@ function stateOf(userId) {
   }
 }
 
-/** Name, rank and level as other players see them — the name screened exactly
- * as the leaderboard screens it. */
+/**
+ * Name, rank, level and look as other players see them. The name is the one
+ * held on the account, screened exactly as the leaderboard screens it; XP and
+ * level are the server's own figures.
+ */
 function playerSummary(row) {
-  const state = stateOf(row.id)
-  let name = String(state?.player?.name ?? row.display_name ?? '').trim().slice(0, 40)
+  let name = String(row.display_name ?? row.username ?? '').trim().slice(0, 40)
   if (!name || !screenInput(name, { allowLength: 40 }).ok) name = 'Adventurer'
-  const xp = Math.max(0, Math.round(Number(state?.player?.xp) || 0))
-  const level = Math.max(1, Math.min(Number(state?.progression?.level) || 1, levelFromXp(xp)))
+  const xp = getProgressRow(row.id)?.xp ?? 0
+  const level = levelFromXp(xp)
   return {
     username: row.username,
     name,
@@ -1418,6 +1423,7 @@ function playerSummary(row) {
     level,
     rank: rankName(level),
     avatarVersion: avatarVersion(row.id),
+    look: publicLook(row.id),
   }
 }
 
@@ -1584,8 +1590,29 @@ function settleIfDue(row, now = Date.now()) {
     opponent_reward: opponentReward,
   })
   if (settled) {
-    if (creatorReward) addXpAllowance(row.creator_id, creatorReward)
-    if (opponentReward) addXpAllowance(row.opponent_id, opponentReward)
+    for (const [userId, xp] of [
+      [row.creator_id, creatorReward],
+      [row.opponent_id, opponentReward],
+    ]) {
+      try {
+        ensureGame(userId)
+        transaction(() => {
+          const rewards = startRewards(userId)
+          if (xp) rewards.pay({ source: 'challenge', sourceId: row.id, xp, label: `Duel: ${row.name}` })
+          rewards.finish()
+        })
+        notify(userId, {
+          kind: 'challenge_completed',
+          title: xp ? `Duel complete: ${row.name}` : `Duel over: ${row.name}`,
+          body: xp ? `You met the objective. +${xp} XP` : 'The objective was not met this time.',
+          link: `/challenges/${row.id}`,
+          data: { challengeId: row.id },
+        })
+        track(userId, 'challenge_completed', { met: Boolean(xp) })
+      } catch (err) {
+        console.error('challenge reward failed', err)
+      }
+    }
   }
   return getChallenge(row.id)
 }
@@ -1692,6 +1719,14 @@ app.post('/api/challenges', requireAuth, throttleChallengeWrite, (req, res) => {
     const id = randomUUID()
     insertChallenge({ id, creatorId: viewer.id, opponentId: target.id, createdAt: nowIso, ...terms.value })
     audit({ userId: viewer.id, email: viewer.email, event: 'challenge.create', outcome: 'success', ip: req.ip, detail: `${id} -> ${target.id}` })
+    notify(target.id, {
+      kind: 'challenge_received',
+      title: `${playerSummary(viewer).name} challenged you`,
+      body: `${terms.value.name} · ${terms.value.durationDays} days · +${terms.value.rewardXp} XP`,
+      link: `/challenges/${id}`,
+      data: { challengeId: id },
+    })
+    track(viewer.id, 'challenge_created', { days: terms.value.durationDays })
     res.status(201).json({ challenge: challengeView(getChallenge(id), viewer.id, { detail: true }) })
   } catch (err) {
     console.error('challenge create failed', err)
@@ -1720,7 +1755,15 @@ app.post('/api/challenges/:id/respond', requireAuth, throttleChallengeWrite, (re
   }
 
   if (req.body?.accept !== true) {
-    transitionChallenge(row.id, 'pending', { status: 'rejected', responded_at: nowIso })
+    if (transitionChallenge(row.id, 'pending', { status: 'rejected', responded_at: nowIso })) {
+      notify(row.creator_id, {
+        kind: 'challenge_rejected',
+        title: `Challenge declined: ${row.name}`,
+        body: 'No duel was started and no XP is at stake.',
+        link: `/challenges/${row.id}`,
+        data: { challengeId: row.id },
+      })
+    }
     res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
     return
   }
@@ -1751,6 +1794,14 @@ app.post('/api/challenges/:id/respond', requireAuth, throttleChallengeWrite, (re
     return
   }
   audit({ userId: viewer.id, email: viewer.email, event: 'challenge.accept', outcome: 'success', ip: req.ip, detail: row.id })
+  notify(row.creator_id, {
+    kind: 'challenge_accepted',
+    title: `${playerSummary(viewer).name} accepted your challenge`,
+    body: `${row.name} is on.`,
+    link: `/challenges/${row.id}`,
+    data: { challengeId: row.id },
+  })
+  track(viewer.id, 'challenge_accepted')
   res.json({ challenge: challengeView(getChallenge(row.id), req.user.id, { detail: true }) })
 })
 
@@ -1972,7 +2023,16 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
 
     const id = randomUUID()
     insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId, videoId })
-    res.status(201).json({ post: postView(getPost(id), viewer.id) })
+    track(viewer.id, 'post_created', { kind: post.value.kind, media: imageId ? 'image' : videoId ? 'video' : 'none' })
+    let rewards = null
+    try {
+      ensureGame(viewer.id)
+      const summary = transaction(() => startRewards(viewer.id).finish())
+      if (summary.achievements.length || summary.items.length) rewards = summary
+    } catch (err) {
+      console.error('post achievement check failed', err)
+    }
+    res.status(201).json({ post: postView(getPost(id), viewer.id), rewards })
   } catch (err) {
     console.error('post failed', err)
     res.status(500).json({ error: 'Could not post that.' })
@@ -2343,6 +2403,25 @@ function readMessage(req, res, conversationId, { viewer, target }) {
   return message.value
 }
 
+/**
+ * Tells the other person about a message — folded into one unread line per
+ * conversation. A declined request stays silent, as it does everywhere else.
+ */
+function notifyMessage(row, sender, recipient, body) {
+  if (!row || !recipient) return
+  if (row.status === 'declined' && row.created_by === sender.id) return
+  const request = row.status !== 'open' && row.created_by === sender.id
+  const name = playerSummary(sender).name
+  notify(recipient.id, {
+    kind: 'message',
+    title: request ? `Message request from ${name}` : `New message from ${name}`,
+    body: body.length > 90 ? `${body.slice(0, 90)}…` : body,
+    link: `/social/messages/${row.id}`,
+    data: { conversationId: row.id },
+    dedupeKey: `conversation:${row.id}`,
+  })
+}
+
 app.get('/api/messages', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
   const conversations = listConversationsFor(viewer.id)
@@ -2408,6 +2487,7 @@ app.post('/api/messages/start', requireAuth, throttleChat, (req, res) => {
 
   const messageId = insertDirectMessage(row.id, viewer.id, body)
   markConversationRead(row.id, viewer.id, messageId)
+  notifyMessage(getConversation(row.id), viewer, target, body)
   res.status(201).json({ conversation: conversationView(getConversation(row.id), viewer.id, { lastBody: body, lastUser: viewer.id }) })
 })
 
@@ -2436,6 +2516,7 @@ app.post('/api/messages/:id', requireAuth, throttleChat, (req, res) => {
   if (isAnswering(row, req.user.id)) setConversationStatus(row.id, 'open')
   const id = insertDirectMessage(row.id, req.user.id, body)
   markConversationRead(row.id, req.user.id, id)
+  notifyMessage(getConversation(row.id), viewer, target, body)
   res.status(201).json({ message: { id, mine: true, body, at: new Date().toISOString() } })
 })
 
@@ -2685,10 +2766,29 @@ app.get('/api/account/export', requireAuth, rateLimit({ name: 'export', max: 5, 
   const stored = findUserById(req.user.id)
   audit({ userId: req.user.id, email: req.user.email, event: 'account.export', outcome: 'success', ip: req.ip })
   res.setHeader('Content-Disposition', 'attachment; filename="questly-export.json"')
+  const mine = (sql, limit = 10000) => db.all(`${sql} LIMIT ${limit}`, [req.user.id])
   res.json({
     exportedAt: new Date().toISOString(),
-    account: { email: stored.email, createdAt: stored.created_at, role: stored.role },
-    state,
+    account: {
+      email: stored.email,
+      createdAt: stored.created_at,
+      role: stored.role,
+      username: stored.username,
+      displayName: stored.display_name,
+      birthdate: stored.birthdate,
+      bio: stored.bio,
+    },
+    notebook: state ? stripServerOwned(state) : null,
+    progress: getProgressRow(req.user.id),
+    xpHistory: mine('SELECT source, source_id, xp, coins, label, day, created_at FROM xp_ledger WHERE user_id = ? ORDER BY id'),
+    quests: mine('SELECT * FROM quests WHERE user_id = ? ORDER BY created_at'),
+    focusSessions: mine('SELECT * FROM focus_sessions WHERE user_id = ? ORDER BY started_at'),
+    achievements: mine('SELECT achievement_id, unlocked_at FROM user_achievements WHERE user_id = ?'),
+    items: mine('SELECT item_id, source, acquired_at FROM user_items WHERE user_id = ?'),
+    equipment: mine('SELECT slot, item_id FROM user_equipment WHERE user_id = ?'),
+    posts: mine('SELECT id, kind, body, created_at, deleted_at FROM posts WHERE user_id = ? ORDER BY created_at'),
+    challenges: db.all('SELECT * FROM challenges WHERE creator_id = ? OR opponent_id = ? ORDER BY created_at LIMIT 5000', [req.user.id, req.user.id]),
+    notifications: mine('SELECT kind, title, body, created_at, read_at FROM notifications WHERE user_id = ? ORDER BY id DESC', 500),
   })
 })
 
@@ -2758,6 +2858,9 @@ app.post('/api/tour', requireAuth, throttleAi, async (req, res) => {
     res.json({ tour: fallbackTour(name, goals) })
   }
 })
+
+// Progress, quests, focus sessions, inventory and the Chronicle Log.
+app.use('/api', gameRoutes({ requireAuth, rateLimit }))
 
 // Unmatched API routes must answer in JSON — the client parses every response
 // body as JSON, and Express's default HTML error page would blow up there.

@@ -11,7 +11,8 @@
     "start": "node server/index.js",
     "preview": "vite preview",
     "cleanup": "node scripts/cleanup.js",
-    "admin": "node scripts/admin.js"
+    "admin": "node scripts/admin.js",
+    "test": "node --test tests/"
   },
   "engines": {
     "node": ">=20"

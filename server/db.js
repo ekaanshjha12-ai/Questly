@@ -1,6 +1,8 @@
 // node-sqlite3-wasm ships CommonJS, so it has no named ESM exports.
 import sqlite3Wasm from 'node-sqlite3-wasm'
-import { requiredMaxXp, levelFromXp } from './statecheck.js'
+import { requiredMaxXp } from './statecheck.js'
+import { createGameSchema } from './game/schema.js'
+import { levelFromXp, rankName as rankNameForLevel } from './game/levels.js'
 import { screenInput } from './moderation.js'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -386,6 +388,10 @@ db.run(`
   )
 `)
 
+// Everything a player earns: progress, ledger, quests, focus sessions,
+// achievements, items, notifications, analytics. See game/schema.js.
+createGameSchema(db)
+
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
@@ -544,60 +550,42 @@ export function setRecovery(userId, recoveryHash, recoverySalt) {
 }
 
 /**
- * The leaderboard, built from stored state.
+ * The leaderboard, from server-kept progress.
  *
- * Returns a name, an XP figure and the rank that figure earns — nothing else.
- * It is the only place in the app where one account can see another, so it
- * hands back exactly the fields the ranking needs rather than anything the
- * caller might filter client-side; email, streak and goals never leave the
- * server here.
- *
- * Rank is derived from XP rather than read from the stored state, for two
- * reasons: the stored level is client-written and so not trustworthy, and a
- * rank computed from a number already on screen discloses nothing further.
+ * Returns a name, an XP figure and the rank that figure earns — nothing else;
+ * email, streak and goals never leave the server here. XP is the ledger's
+ * running total, which only the server moves, so the order cannot be bought
+ * with a crafted save. The name is the display name held on the account,
+ * screened on the way out as well as on the way in.
  */
-const BOARD_RANKS = [
-  ['Heisenberg', 40], ['God', 30], ['Celestial', 24], ['King', 18],
-  ['Monarch', 14], ['Champion', 10], ['Knight', 6], ['Soldier', 3], ['Recruit', 1],
-]
-
 export function rankName(level) {
-  for (const [name, min] of BOARD_RANKS) if (level >= min) return name
-  return 'Recruit'
+  return rankNameForLevel(level)
 }
 
 export function leaderboard(limit = 50) {
-  const rows = db.all(`
-    SELECT u.id, u.hide_from_leaderboard AS hidden, u.username, u.birthdate, s.data
-    FROM users u JOIN states s ON s.user_id = u.id
-    WHERE u.disabled = 0
-  `)
-
-  const ranked = []
-  for (const row of rows) {
-    if (row.hidden) continue
-    let name = ''
-    let xp = 0
-    try {
-      const state = JSON.parse(row.data)
-      name = String(state?.player?.name ?? '').trim().slice(0, 40)
-      xp = Math.max(0, Math.round(Number(state?.player?.xp) || 0))
-    } catch {
-      continue
-    }
-    // Screened here, at the one place a name is shown to other people. The name
-    // is client-written — onboarding, and now the Personalise screen — and saved
-    // with the rest of the state, which is never content-filtered, so without
-    // this an abusive name went straight onto a public list. Checking on the way
-    // out also catches names saved before the filter existed.
+  const rows = db.all(
+    `SELECT u.id, u.username, u.birthdate, u.display_name, p.xp
+     FROM users u JOIN player_progress p ON p.user_id = u.id
+     WHERE u.disabled = 0 AND u.hide_from_leaderboard = 0
+     ORDER BY p.xp DESC, u.created_at ASC
+     LIMIT ?`,
+    [Math.max(limit, 1)],
+  )
+  return rows.map((row, i) => {
+    let name = String(row.display_name ?? row.username ?? '').trim().slice(0, 40)
     if (!name || !screenInput(name, { allowLength: 40 }).ok) name = 'Adventurer'
     // username and birthdate ride along for the route to decide who the viewer
     // may open; the route strips them before anything is sent.
-    ranked.push({ id: row.id, name, xp, rank: rankName(levelFromXp(xp)), username: row.username, birthdate: row.birthdate })
-  }
-
-  ranked.sort((a, b) => b.xp - a.xp)
-  return ranked.map((r, i) => ({ ...r, position: i + 1 })).slice(0, Math.max(limit, 1))
+    return {
+      id: row.id,
+      name,
+      xp: row.xp,
+      rank: rankName(levelFromXp(row.xp)),
+      username: row.username,
+      birthdate: row.birthdate,
+      position: i + 1,
+    }
+  })
 }
 
 export function setLeaderboardVisibility(userId, hidden) {
