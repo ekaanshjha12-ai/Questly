@@ -74,6 +74,7 @@ import {
   ageBand,
   dayIndex,
   deriveStatus,
+  progressFor,
   validateCheckinNote,
   validateMessage,
   validateTerms,
@@ -122,6 +123,7 @@ import {
   isBlockedEitherWay,
   listChallengeMessages,
   listChallengesFor,
+  focusSessionsBetween,
   listCheckins,
   rankName,
   findPlayers,
@@ -1702,12 +1704,21 @@ app.put('/api/me/settings', requireAuth, throttleState, (req, res) => {
  * conditional, so if two reads arrive together only one of them settles it and
  * the reward is paid once.
  */
+function duelProgress(row) {
+  if (!row.starts_at || !row.ends_at) return null
+  const focus = row.mode === 'focus'
+  return progressFor(row, {
+    creatorSessions: focus ? focusSessionsBetween(row.creator_id, row.starts_at, row.ends_at) : [],
+    opponentSessions: focus ? focusSessionsBetween(row.opponent_id, row.starts_at, row.ends_at) : [],
+    checkins: focus ? [] : listCheckins(row.id),
+  })
+}
+
 function settleIfDue(row, now = Date.now()) {
   if (deriveStatus(row, now) !== 'due') return row
-  const counts = new Map()
-  for (const c of listCheckins(row.id)) counts.set(c.user_id, (counts.get(c.user_id) ?? 0) + 1)
-  const creatorReward = (counts.get(row.creator_id) ?? 0) >= row.min_checkins ? row.reward_xp : 0
-  const opponentReward = (counts.get(row.opponent_id) ?? 0) >= row.min_checkins ? row.reward_xp : 0
+  const progress = duelProgress(row)
+  const creatorReward = (progress?.creator.met ?? 0) >= row.min_checkins ? row.reward_xp : 0
+  const opponentReward = (progress?.opponent.met ?? 0) >= row.min_checkins ? row.reward_xp : 0
   const settled = transitionChallenge(row.id, 'accepted', {
     status: 'completed',
     completed_at: new Date(now).toISOString(),
@@ -1742,17 +1753,29 @@ function settleIfDue(row, now = Date.now()) {
   return getChallenge(row.id)
 }
 
-/** A challenge as one of its two participants sees it. */
+/**
+ * A challenge as one of its two participants sees it.
+ *
+ * States are named as the product names them: an offer waiting is `sent`, and
+ * a finished duel is `completed` or `failed` for whoever is looking, by
+ * whether they met the objective.
+ */
 function challengeView(row, viewerId, { detail = false } = {}) {
   const now = Date.now()
   const settled = settleIfDue(row, now)
   const creator = findUserById(settled.creator_id)
   const opponent = findUserById(settled.opponent_id)
-  const status = deriveStatus(settled, now)
+  const derived = deriveStatus(settled, now)
+  const role = settled.creator_id === viewerId ? 'creator' : 'opponent'
+  const myReward = role === 'creator' ? settled.creator_reward : settled.opponent_reward
+  const status = derived === 'pending' ? 'sent' : derived === 'completed' ? (myReward > 0 ? 'completed' : 'failed') : derived
   const view = {
     id: settled.id,
-    role: settled.creator_id === viewerId ? 'creator' : 'opponent',
+    role,
     status,
+    mode: settled.mode ?? 'checkin',
+    dailyMinutes: settled.daily_minutes ?? null,
+    serverNow: new Date(now).toISOString(),
     name: settled.name,
     objective: settled.objective,
     rules: settled.rules,
@@ -1781,6 +1804,7 @@ function challengeView(row, viewerId, { detail = false } = {}) {
       settled.status === 'completed'
         ? { creator: settled.creator_reward ?? 0, opponent: settled.opponent_reward ?? 0 }
         : null,
+    progress: ['accepted', 'active', 'due', 'completed'].includes(derived) ? duelProgress(settled) : null,
   }
   if (detail) {
     view.checkins = listCheckins(settled.id).map((c) => ({
@@ -1851,7 +1875,7 @@ app.post('/api/challenges', requireAuth, throttleChallengeWrite, (req, res) => {
       link: `/challenges/${id}`,
       data: { challengeId: id },
     })
-    track(viewer.id, 'challenge_created', { days: terms.value.durationDays })
+    track(viewer.id, 'challenge_created', { days: terms.value.durationDays, mode: terms.value.mode })
     res.status(201).json({ challenge: challengeView(getChallenge(id), viewer.id, { detail: true }) })
   } catch (err) {
     console.error('challenge create failed', err)
@@ -1947,6 +1971,10 @@ app.post('/api/challenges/:id/checkin', requireAuth, throttleChallengeWrite, (re
   const now = Date.now()
   if (deriveStatus(row, now) !== 'active') {
     res.status(409).json({ error: 'Check-ins are only open while the challenge is running.' })
+    return
+  }
+  if (row.mode === 'focus') {
+    res.status(409).json({ error: 'This duel counts the focus time Questly times. Start a focus session instead.', code: 'focus_duel' })
     return
   }
   const note = validateCheckinNote(req.body?.note, row.proof)

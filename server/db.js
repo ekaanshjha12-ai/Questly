@@ -252,6 +252,14 @@ db.run(`
     opponent_reward INTEGER
   )
 `)
+// How a duel is measured: daily check-ins, or focus time the server timed.
+for (const column of ["mode TEXT NOT NULL DEFAULT 'checkin'", 'daily_minutes INTEGER']) {
+  try {
+    db.run(`ALTER TABLE challenges ADD COLUMN ${column}`)
+  } catch {
+    // Already present.
+  }
+}
 db.run('CREATE INDEX IF NOT EXISTS idx_challenges_creator ON challenges(creator_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_challenges_opponent ON challenges(opponent_id)')
 
@@ -907,12 +915,20 @@ export function insertChallenge(c) {
   db.run(
     `INSERT INTO challenges
        (id, creator_id, opponent_id, name, objective, rules, duration_days, reward_xp, proof, min_checkins,
-        start_mode, status, created_at, expires_at, starts_at, ends_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+        start_mode, status, created_at, expires_at, starts_at, ends_at, mode, daily_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
     [
       c.id, c.creatorId, c.opponentId, c.name, c.objective, c.rules, c.durationDays, c.rewardXp, c.proof,
-      c.minCheckins, c.startMode, c.createdAt, c.expiresAt, c.startsAt, c.endsAt,
+      c.minCheckins, c.startMode, c.createdAt, c.expiresAt, c.startsAt, c.endsAt, c.mode ?? 'checkin', c.dailyMinutes ?? null,
     ],
+  )
+}
+
+/** A player's timed focus inside a duel's window — the only thing a focus duel counts. */
+export function focusSessionsBetween(userId, fromIso, toIso) {
+  return db.all(
+    "SELECT started_at, ended_at, active_ms FROM focus_sessions WHERE user_id = ? AND status IN ('completed', 'ended') AND started_at >= ? AND ended_at < ? ORDER BY ended_at",
+    [userId, fromIso, toIso],
   )
 }
 

@@ -48,8 +48,8 @@ export default function ProfileScreen({ user, goals, challenges }: { user: AuthU
   const { navigate } = useRouter()
 
   const record = useMemo(() => {
-    const finished = (challenges ?? []).filter((c) => c.status === 'completed')
-    const met = finished.filter((c) => (c.role === 'creator' ? c.rewards?.creator : c.rewards?.opponent))
+    const finished = (challenges ?? []).filter((c) => c.status === 'completed' || c.status === 'failed')
+    const met = finished.filter((c) => c.status === 'completed')
     return { met: met.length, finished: finished.length }
   }, [challenges])
 

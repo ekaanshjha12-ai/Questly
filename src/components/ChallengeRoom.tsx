@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Flag, Loader2, MessageCircle, ScrollText, Send, ShieldAlert, Swords, TrendingUp, X, XCircle } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { Check, Flag, Loader2, MessageCircle, Play, ScrollText, Send, ShieldAlert, Timer, TrendingUp, X, XCircle } from 'lucide-react'
 import {
   ApiError,
   checkInChallenge,
@@ -15,13 +15,17 @@ import {
   type PlayerSummary,
 } from '../lib/api'
 import { PlayerAvatar, StatusPill, TermsSheet, formatWhen, statusInfo, timeLeft } from './ChallengeParts'
+import HeroSprite from './art/HeroSprite'
+import { useRouter } from '../app/router'
 
 /**
- * One challenge, from offer to result.
+ * One duel, from offer to result.
  *
- * What it shows follows the state: an offer to answer, an offer waiting on the
- * other person, a closed offer, or — once both have agreed — the challenge
- * itself with its progress, its terms, and its own chat.
+ * Both players face each other at the top — heroes, levels, days met and a
+ * live countdown — and what sits beneath follows the state: an offer to
+ * answer, an offer waiting on the other person, a closed offer, or the running
+ * duel with its progress, its terms and its own chat. Every number here comes
+ * from the server; a focus duel's days are the minutes Questly timed.
  */
 
 type Tab = 'progress' | 'terms' | 'chat'
@@ -74,7 +78,7 @@ export default function ChallengeRoom({
 
   const me = challenge ? (challenge.role === 'creator' ? challenge.creator : challenge.opponent) : null
   const them = challenge ? (challenge.role === 'creator' ? challenge.opponent : challenge.creator) : null
-  const running = challenge && ['accepted', 'active', 'due', 'completed'].includes(challenge.status)
+  const running = challenge && ['accepted', 'active', 'due', 'completed', 'failed'].includes(challenge.status)
 
   return (
     <motion.div
@@ -112,15 +116,7 @@ export default function ChallengeRoom({
             </button>
           </div>
 
-          {challenge && me && them && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
-              <PlayerAvatar player={me} size={24} />
-              <span className="truncate">You</span>
-              <Swords className="h-3.5 w-3.5 shrink-0 text-gold-400" />
-              <PlayerAvatar player={them} size={24} />
-              <span className="truncate">{them.name}</span>
-            </div>
-          )}
+          {challenge && me && them && <VersusBanner challenge={challenge} me={me} them={them} compact={tab === 'chat' && Boolean(running) && !answered} />}
 
           {running && !answered && (
             <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-ink-600 bg-ink-850 p-1">
@@ -163,7 +159,9 @@ export default function ChallengeRoom({
                   title="Challenge Accepted"
                   body={
                     challenge.status === 'active'
-                      ? `It has started. You and ${them.name} have ${challenge.durationDays} days — check in each day you do it.`
+                      ? challenge.mode === 'focus'
+                        ? `It has started. You and ${them.name} have ${challenge.durationDays} days — focus ${challenge.dailyMinutes} minutes a day in Focus Mode.`
+                        : `It has started. You and ${them.name} have ${challenge.durationDays} days — check in each day you do it.`
                       : `It starts ${formatWhen(challenge.startsAt)}. You can already chat with ${them.name}.`
                   }
                   action="Open the challenge"
@@ -178,14 +176,14 @@ export default function ChallengeRoom({
                 <Confirmation tone="declined" title="Challenge Declined" body={`${them.name} will see that you declined. Nothing starts.`} action="Close" onAction={onClose} />
               )}
 
-              {!answered && challenge.status === 'pending' && challenge.role === 'opponent' && (
+              {!answered && challenge.status === 'sent' && challenge.role === 'opponent' && (
                 <OfferView challenge={challenge} them={them} me={me} onAnswered={(c, accepted) => {
                   apply(c)
                   setAnswered(accepted ? 'accepted' : 'declined')
                 }} />
               )}
 
-              {!answered && challenge.status === 'pending' && challenge.role === 'creator' && (
+              {!answered && challenge.status === 'sent' && challenge.role === 'creator' && (
                 <WaitingView challenge={challenge} them={them} me={me} onChanged={apply} />
               )}
 
@@ -232,12 +230,14 @@ function termsFor(c: Challenge, me: PlayerSummary, them: PlayerSummary) {
     terms: c.terms,
     durationDays: c.durationDays,
     rewardXp: c.rewardXp,
+    mode: c.mode,
+    dailyMinutes: c.dailyMinutes,
     proof: c.proof,
     minCheckins: c.minCheckins,
     startMode: c.startMode,
     startsAt: c.startsAt,
     endsAt: c.endsAt,
-    expiresAt: c.status === 'pending' ? c.expiresAt : null,
+    expiresAt: c.status === 'sent' ? c.expiresAt : null,
     creatorName: `${creator.name} (@${creator.username})${c.role === 'creator' ? ' — you' : ''}`,
     opponentName: `${opponent.name} (@${opponent.username})${c.role === 'opponent' ? ' — you' : ''}`,
   }
@@ -395,6 +395,110 @@ function Confirmation({
   )
 }
 
+/* --- versus ------------------------------------------------------------------ */
+
+/** Milliseconds between the server's clock and this device's, so a countdown
+ * reads the same on both players' screens. */
+function useServerCountdown(target: string | null, serverNow: string) {
+  const offset = useRef(Date.parse(serverNow) - Date.now())
+  const [now, setNow] = useState(() => Date.now() + offset.current)
+  useEffect(() => {
+    offset.current = Date.parse(serverNow) - Date.now()
+  }, [serverNow])
+  useEffect(() => {
+    if (!target) return
+    const t = window.setInterval(() => setNow(Date.now() + offset.current), 1000)
+    return () => window.clearInterval(t)
+  }, [target])
+  return target ? Math.max(0, Date.parse(target) - now) : null
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const d = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const clock = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return d > 0 ? `${d}d ${clock}` : clock
+}
+
+function VersusBanner({ challenge, me, them, compact = false }: { challenge: Challenge; me: PlayerSummary; them: PlayerSummary; compact?: boolean }) {
+  const reduce = useReducedMotion()
+  const mySide = challenge.role
+  const theirSide = mySide === 'creator' ? 'opponent' : 'creator'
+  const mine = challenge.progress?.[mySide]
+  const theirs = challenge.progress?.[theirSide]
+  const need = challenge.minCheckins
+
+  const target =
+    challenge.status === 'sent' ? challenge.expiresAt : challenge.status === 'accepted' ? challenge.startsAt : challenge.status === 'active' ? challenge.endsAt : null
+  const remaining = useServerCountdown(target, challenge.serverNow)
+  const timerLabel = challenge.status === 'sent' ? 'Offer expires in' : challenge.status === 'accepted' ? 'Starts in' : 'Ends in'
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-ink-600 bg-[radial-gradient(ellipse_at_50%_0%,rgba(16,185,129,0.12),transparent_70%)] bg-ink-950/60">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-1 px-3 pt-2">
+        <Fighter player={me} label="You" met={mine?.met ?? null} need={need} still={Boolean(reduce)} compact={compact} />
+        <div className={`flex flex-col items-center ${compact ? 'pb-3' : 'pb-7'}`}>
+          <span className={`font-display font-black italic text-reward-400 drop-shadow-[0_0_12px_rgba(245,158,11,0.45)] ${compact ? 'text-xl' : 'text-3xl'}`}>VS</span>
+        </div>
+        <Fighter player={them} label={them.name} met={theirs?.met ?? null} need={need} still={Boolean(reduce)} mirrored compact={compact} />
+      </div>
+      {remaining !== null && (
+        <div className="flex items-center justify-center gap-2 border-t border-ink-700/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+          <Timer className="h-3.5 w-3.5 text-gold-400" aria-hidden />
+          {timerLabel}
+          <span className="font-mono text-sm tracking-normal text-slate-100 tabular-nums" aria-live="off">
+            {formatCountdown(remaining)}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Fighter({
+  player,
+  label,
+  met,
+  need,
+  still,
+  mirrored = false,
+  compact = false,
+}: {
+  player: PlayerSummary
+  label: string
+  met: number | null
+  need: number
+  still: boolean
+  mirrored?: boolean
+  compact?: boolean
+}) {
+  const pct = met === null ? 0 : Math.min(100, Math.round((met / Math.max(1, need)) * 100))
+  return (
+    <div className="flex min-w-0 flex-col items-center">
+      {!compact && (
+        <div className={mirrored ? '-scale-x-100' : ''}>
+          <HeroSprite look={player.look} height={76} still={still} label={`${player.name}'s character`} />
+        </div>
+      )}
+      <p className="mt-1 max-w-full truncate text-xs font-semibold text-slate-100">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-gold-400">LV {player.level}</p>
+      {met !== null && (
+        <div className="mt-1.5 w-full max-w-[9rem] pb-2">
+          <div className="h-1.5 overflow-hidden rounded-full bg-ink-700">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-600 to-gold-400 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="mt-1 text-center text-[10px] tabular-nums text-slate-400">
+            {met}/{need} days
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* --- progress ---------------------------------------------------------------- */
 
 function ProgressView({
@@ -408,18 +512,24 @@ function ProgressView({
   them: PlayerSummary
   onChanged: (c: Challenge) => void
 }) {
+  const { navigate } = useRouter()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const mySide = challenge.role
   const theirSide = mySide === 'creator' ? 'opponent' : 'creator'
-  const checkins = challenge.checkins ?? []
-  const mine = new Set(checkins.filter((c) => c.side === mySide).map((c) => c.day))
-  const theirs = new Set(checkins.filter((c) => c.side === theirSide).map((c) => c.day))
+  const empty = { days: new Array(challenge.durationDays).fill(0), met: 0 }
+  const mine = challenge.progress?.[mySide] ?? empty
+  const theirs = challenge.progress?.[theirSide] ?? empty
   const today = challenge.today
-  const doneToday = today !== null && mine.has(today)
+  const focus = challenge.mode === 'focus'
+  const target = focus ? (challenge.dailyMinutes ?? 0) : 1
+  const todayValue = today !== null ? (mine.days[today] ?? 0) : 0
+  const doneToday = today !== null && todayValue >= target
   const needsNote = challenge.proof === 'required'
+  const checkins = challenge.checkins ?? []
+  const finished = challenge.status === 'completed' || challenge.status === 'failed'
 
   async function checkIn() {
     setBusy(true)
@@ -436,13 +546,52 @@ function ProgressView({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Objective</p>
+        <p className="mt-0.5 text-sm font-semibold text-slate-100">{challenge.objective}</p>
+        <p className="mt-1 text-[11px] text-slate-400">
+          {focus
+            ? `A day counts at ${challenge.dailyMinutes} minutes of timed focus. Reach it on ${challenge.minCheckins} of ${challenge.durationDays} days to earn ${challenge.rewardXp.toLocaleString()} XP.`
+            : `Check in on ${challenge.minCheckins} of ${challenge.durationDays} days to earn ${challenge.rewardXp.toLocaleString()} XP.`}
+        </p>
+      </div>
+
       {challenge.status === 'accepted' && (
         <p className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-3 text-sm text-slate-300">
           Both of you have agreed. It starts {formatWhen(challenge.startsAt)} — in {timeLeft(challenge.startsAt ?? '')}.
         </p>
       )}
 
-      {challenge.status === 'active' && today !== null && (
+      {challenge.status === 'active' && today !== null && focus && (
+        <div className="rounded-xl border border-gold-500/40 bg-gold-500/10 p-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-100">
+              Day {today + 1} of {challenge.durationDays}
+            </p>
+            <p className="text-xs tabular-nums text-slate-300">
+              <span className="font-bold text-slate-50">{todayValue}</span> / {target} min today
+            </p>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink-700">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-600 to-gold-400" style={{ width: `${Math.min(100, Math.round((todayValue / Math.max(1, target)) * 100))}%` }} />
+          </div>
+          {doneToday ? (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-200">
+              <Check className="h-4 w-4 text-gold-400" /> Today counts. Keep going if you like — it all shows here.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate('/focus')}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-xs font-bold uppercase tracking-wider text-onAccent"
+            >
+              <Play className="h-3.5 w-3.5" /> Enter Focus Mode — {target - todayValue} min to go
+            </button>
+          )}
+        </div>
+      )}
+
+      {challenge.status === 'active' && today !== null && !focus && (
         <div className="rounded-xl border border-gold-500/40 bg-gold-500/10 p-3">
           <p className="text-xs font-semibold text-slate-100">
             Day {today + 1} of {challenge.durationDays} · ends {formatWhen(challenge.endsAt)}
@@ -469,27 +618,27 @@ function ProgressView({
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 Check in for day {today + 1}
               </button>
-              {error && <p className="text-xs text-ember-400">{error}</p>}
+              {error && <p className="text-xs text-danger-400">{error}</p>}
             </div>
           )}
         </div>
       )}
 
-      {challenge.status === 'completed' && challenge.rewards && (
+      {finished && challenge.rewards && (
         <div className="grid grid-cols-2 gap-2">
-          <Result name="You" xp={mySide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} count={mine.size} need={challenge.minCheckins} />
-          <Result name={them.name} xp={theirSide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} count={theirs.size} need={challenge.minCheckins} />
+          <Result name="You" xp={mySide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} met={mine.met} need={challenge.minCheckins} />
+          <Result name={them.name} xp={theirSide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} met={theirs.met} need={challenge.minCheckins} />
         </div>
       )}
 
       <div className="space-y-3 rounded-xl border border-ink-600 bg-ink-850 p-3">
-        <DayRow label="You" player={me} days={challenge.durationDays} done={mine} today={today} need={challenge.minCheckins} />
-        <DayRow label={them.name} player={them} days={challenge.durationDays} done={theirs} today={today} need={challenge.minCheckins} />
+        <DayRow label="You" player={me} values={mine.days} target={target} focus={focus} today={today} met={mine.met} need={challenge.minCheckins} />
+        <DayRow label={them.name} player={them} values={theirs.days} target={target} focus={focus} today={today} met={theirs.met} need={challenge.minCheckins} />
       </div>
 
-      {checkins.some((c) => c.note) && (
+      {!focus && checkins.some((c) => c.note) && (
         <div>
-          <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">Check-in notes</p>
+          <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">Check-in log</p>
           <ul className="space-y-1.5">
             {[...checkins].reverse().filter((c) => c.note).slice(0, 20).map((c) => (
               <li key={`${c.side}-${c.day}`} className="rounded-lg border border-ink-600 bg-ink-850 px-2.5 py-2 text-xs text-slate-200">
@@ -509,16 +658,20 @@ function ProgressView({
 function DayRow({
   label,
   player,
-  days,
-  done,
+  values,
+  target,
+  focus,
   today,
+  met,
   need,
 }: {
   label: string
   player: PlayerSummary
-  days: number
-  done: Set<number>
+  values: number[]
+  target: number
+  focus: boolean
   today: number | null
+  met: number
   need: number
 }) {
   return (
@@ -526,35 +679,38 @@ function DayRow({
       <div className="mb-1.5 flex items-center gap-2">
         <PlayerAvatar player={player} size={22} />
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-100">{label}</span>
-        <span className={`text-[11px] tabular-nums ${done.size >= need ? 'text-gold-400' : 'text-slate-400'}`}>
-          {done.size}/{need} needed
+        <span className={`text-[11px] tabular-nums ${met >= need ? 'text-gold-400' : 'text-slate-400'}`}>
+          {met}/{need} days
         </span>
       </div>
       <div className="flex flex-wrap gap-1">
-        {Array.from({ length: days }).map((_, d) => (
-          <span
-            key={d}
-            title={`Day ${d + 1}${done.has(d) ? ' — checked in' : ''}`}
-            className={`h-5 w-5 rounded-[5px] ${done.has(d) ? 'bg-gold-500' : 'bg-ink-700'} ${
-              today === d ? 'ring-2 ring-gold-400/80 ring-offset-1 ring-offset-ink-850' : ''
-            }`}
-          />
-        ))}
+        {values.map((value, d) => {
+          const ratio = Math.min(1, value / Math.max(1, target))
+          const full = value >= target && value > 0
+          return (
+            <span
+              key={d}
+              title={`Day ${d + 1}${focus ? ` — ${value} of ${target} min` : value ? ' — checked in' : ''}`}
+              className={`relative h-5 w-5 overflow-hidden rounded-[5px] bg-ink-700 ${today === d ? 'ring-2 ring-gold-400/80 ring-offset-1 ring-offset-ink-850' : ''}`}
+            >
+              <span className={`absolute inset-x-0 bottom-0 ${full ? 'bg-gold-500' : 'bg-gold-500/45'}`} style={{ height: `${Math.round(ratio * 100)}%` }} />
+            </span>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function Result({ name, xp, count, need }: { name: string; xp: number; count: number; need: number }) {
+function Result({ name, xp, met, need }: { name: string; xp: number; met: number; need: number }) {
   const made = xp > 0
   return (
-    <div className={`rounded-xl border p-3 text-center ${made ? 'border-gold-500/50 bg-gold-500/10' : 'border-ink-600 bg-ink-850'}`}>
+    <div className={`rounded-xl border p-3 text-center ${made ? 'border-gold-500/50 bg-gold-500/10' : 'border-danger-500/30 bg-ink-850'}`}>
       <p className="truncate text-xs font-semibold text-slate-100">{name}</p>
-      <p className={`mt-1 font-display text-lg font-bold ${made ? 'text-gold-300' : 'text-slate-500'}`}>
-        {made ? `+${xp.toLocaleString()} XP` : 'No reward'}
-      </p>
+      <p className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${made ? 'text-gold-300' : 'text-danger-400'}`}>{made ? 'Completed' : 'Failed'}</p>
+      <p className={`font-display text-lg font-bold ${made ? 'text-reward-300' : 'text-slate-500'}`}>{made ? `+${xp.toLocaleString()} XP` : 'No reward'}</p>
       <p className="text-[11px] text-slate-500">
-        {count}/{need} check-ins
+        {met}/{need} days
       </p>
     </div>
   )

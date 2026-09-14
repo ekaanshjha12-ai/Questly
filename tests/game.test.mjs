@@ -15,10 +15,14 @@ describe('progression', () => {
   let admin
   let planner
   let newcomer
+  let carol
+  let dave
 
   before(async () => {
     alice = world.seedPlayer({ username: 'alice' })
     planner = world.seedPlayer({ username: 'planner' })
+    carol = world.seedPlayer({ username: 'carol' })
+    dave = world.seedPlayer({ username: 'dave' })
     // Saved goals from onboarding, and nothing earned yet.
     newcomer = world.seedPlayer({ username: 'newcomer' })
     world.seed(`
@@ -74,6 +78,36 @@ describe('progression', () => {
       db.insertCheckin('duel-1', ${JSON.stringify(alice.id)}, 0, 'Done')
       db.insertCheckin('duel-1', ${JSON.stringify(alice.id)}, 1, 'Done again')
       db.insertCheckin('duel-1', ${JSON.stringify(bob.id)}, 0, 'Once')
+    `)
+    // A focus duel that ended yesterday: 30 minutes a day on 2 of 3 days.
+    // Carol's timed focus reaches it on two days; Dave's on one, and a check-in
+    // note from Dave counts for nothing in a focus duel.
+    world.seed(`
+      const now = Date.now()
+      const day = 86400000
+      const start = now - 4 * day
+      db.insertChallenge({
+        id: 'duel-focus', creatorId: ${JSON.stringify(dave.id)}, opponentId: ${JSON.stringify(carol.id)},
+        name: 'Deep Work Duel', objective: 'Focus 30 minutes a day', rules: 'Timed focus only',
+        durationDays: 3, rewardXp: 150, proof: 'optional', minCheckins: 2, startMode: 'accept', mode: 'focus', dailyMinutes: 30,
+        createdAt: new Date(start - day).toISOString(), expiresAt: new Date(start).toISOString(), startsAt: null, endsAt: null,
+      })
+      db.transitionChallenge('duel-focus', 'pending', {
+        status: 'accepted', responded_at: new Date(start).toISOString(),
+        starts_at: new Date(start).toISOString(), ends_at: new Date(start + 3 * day).toISOString(),
+      })
+      const session = (id, userId, dayIndex, minutes) => {
+        const ended = start + dayIndex * day + 3 * 3600000
+        db.db.run(
+          "INSERT INTO focus_sessions (id, user_id, label, kind, status, started_at, ended_at, active_ms, day) VALUES (?, ?, 'Focus', 'timer', 'completed', ?, ?, ?, '2026-01-01')",
+          [id, userId, new Date(ended - minutes * 60000).toISOString(), new Date(ended).toISOString(), minutes * 60000],
+        )
+      }
+      session('fa0', ${JSON.stringify(carol.id)}, 0, 35)
+      session('fa1', ${JSON.stringify(carol.id)}, 1, 40)
+      session('fb0', ${JSON.stringify(dave.id)}, 0, 20)
+      session('fb2', ${JSON.stringify(dave.id)}, 2, 31)
+      db.insertCheckin('duel-focus', ${JSON.stringify(dave.id)}, 1, 'I focused, trust me')
     `)
     await world.start()
   })
@@ -381,6 +415,40 @@ describe('progression', () => {
     assert.ok(aliceNotes.body.notifications.some((n) => n.kind === 'challenge_completed' && n.body.includes('+100 XP')))
     const bobNotes = await bob.client('GET', '/api/notifications')
     assert.ok(bobNotes.body.notifications.some((n) => n.kind === 'challenge_completed' && /not met/.test(n.body)))
+    // Each side sees its own result.
+    assert.equal((await bob.client('GET', '/api/challenges/duel-1')).body.challenge.status, 'failed')
+  })
+
+  it('counts only server-timed focus in a focus duel', async () => {
+    const seen = await carol.client('GET', '/api/challenges/duel-focus')
+    assert.equal(seen.status, 200)
+    const duel = seen.body.challenge
+    assert.equal(duel.mode, 'focus')
+    assert.equal(duel.status, 'completed')
+    assert.deepEqual(duel.progress.opponent.days, [35, 40, 0])
+    assert.deepEqual(duel.progress.creator.days, [20, 0, 31])
+    assert.deepEqual([duel.progress.creator.met, duel.progress.opponent.met], [1, 2])
+    assert.deepEqual(duel.rewards, { creator: 0, opponent: 150 })
+    assert.equal((await dave.client('GET', '/api/challenges/duel-focus')).body.challenge.status, 'failed')
+
+    // A running focus duel refuses check-ins: the timer is the only proof.
+    const offer = await carol.client('POST', '/api/challenges', {
+      opponent: 'dave', name: 'Rematch', objective: 'Focus an hour a day', rules: 'Timed focus only',
+      durationDays: 3, rewardXp: 100, minCheckins: 2, startMode: 'accept', mode: 'focus', dailyMinutes: 60, proof: 'required',
+    })
+    assert.equal(offer.status, 201)
+    assert.equal(offer.body.challenge.status, 'sent')
+    assert.equal(offer.body.challenge.proof, 'optional')
+    const bad = await carol.client('POST', '/api/challenges', {
+      opponent: 'dave', name: 'Odd', objective: 'Focus', rules: 'Rules here', durationDays: 3, rewardXp: 100, minCheckins: 2,
+      startMode: 'accept', mode: 'focus', dailyMinutes: 7,
+    })
+    assert.equal(bad.status, 400)
+    const accepted = await dave.client('POST', `/api/challenges/${offer.body.challenge.id}/respond`, { accept: true })
+    assert.equal(accepted.body.challenge.status, 'active')
+    const checkin = await dave.client('POST', `/api/challenges/${offer.body.challenge.id}/checkin`, { note: 'Did an hour' })
+    assert.equal(checkin.status, 409)
+    assert.equal(checkin.body.code, 'focus_duel')
   })
 
   it('ranks the leaderboard by server XP', async () => {

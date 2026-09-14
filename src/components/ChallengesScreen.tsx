@@ -44,10 +44,10 @@ export default function ChallengesScreen({
   }, [])
 
   const list = challenges ?? []
-  const offers = list.filter((c) => c.role === 'opponent' && c.status === 'pending')
+  const offers = list.filter((c) => c.role === 'opponent' && c.status === 'sent')
   const running = list.filter((c) => ['accepted', 'active', 'due'].includes(c.status))
-  const sent = list.filter((c) => c.role === 'creator' && c.status === 'pending')
-  const history = list.filter((c) => ['completed', 'rejected', 'expired', 'cancelled'].includes(c.status))
+  const sent = list.filter((c) => c.role === 'creator' && c.status === 'sent')
+  const history = list.filter((c) => ['completed', 'failed', 'rejected', 'expired', 'cancelled'].includes(c.status))
 
   return (
     <div className="space-y-5">
@@ -127,17 +127,17 @@ function Group({
 function ChallengeRow({ c, onOpen, highlight }: { c: Challenge; onOpen: () => void; highlight: boolean }) {
   const them = c.role === 'creator' ? c.opponent : c.creator
   const line =
-    c.status === 'pending'
+    c.status === 'sent'
       ? `${c.role === 'opponent' ? 'Answer' : 'Expires'} within ${timeLeft(c.expiresAt)}`
       : c.status === 'active'
         ? `Day ${(c.today ?? 0) + 1} of ${c.durationDays} · ends ${formatWhen(c.endsAt)}`
         : c.status === 'accepted'
           ? `Starts ${formatWhen(c.startsAt)}`
           : c.status === 'completed' && c.rewards
-            ? (c.role === 'creator' ? c.rewards.creator : c.rewards.opponent) > 0
-              ? `You earned ${(c.role === 'creator' ? c.rewards.creator : c.rewards.opponent).toLocaleString()} XP`
-              : 'Finished — no reward this time'
-            : `${c.durationDays} days · ${c.rewardXp.toLocaleString()} XP`
+            ? `You earned ${(c.role === 'creator' ? c.rewards.creator : c.rewards.opponent).toLocaleString()} XP`
+            : c.status === 'failed'
+              ? 'Objective not met — no reward this time'
+              : `${c.durationDays} days · ${c.rewardXp.toLocaleString()} XP`
 
   return (
     <button

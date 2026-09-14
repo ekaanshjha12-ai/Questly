@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, Swords, X } from 'lucide-react'
-import { ApiError, sendChallenge, type Challenge, type ChallengeTermsInput, type PlayerSummary } from '../lib/api'
+import { CheckSquare, Loader2, Swords, Timer, X } from 'lucide-react'
+import { ApiError, sendChallenge, type Challenge, type ChallengeTermsInput, type DuelMode, type PlayerSummary } from '../lib/api'
 import { StatusPill, TermsSheet } from './ChallengeParts'
 
 /**
@@ -18,16 +18,28 @@ import { StatusPill, TermsSheet } from './ChallengeParts'
 
 const DURATIONS = [3, 5, 7, 14, 21, 30]
 const REWARD_TIERS = [50, 100, 250, 500, 750, 1000, 1500, 2000]
+const DAILY_MINUTES = [15, 30, 45, 60, 90, 120, 180]
 const XP_PER_DAY_CAP = 75
 const TERMS_TEXT = 'Both participants must follow the agreed rules.'
 
-const TEMPLATES: { label: string; name: string; objective: string; rules: string; days: number }[] = [
+const TEMPLATES: { label: string; name: string; objective: string; rules: string; days: number; mode: DuelMode; minutes?: number }[] = [
   {
     label: '📚 Study battle',
     name: '7 Day Study Battle',
     objective: 'Study 2 hours every day',
-    rules: 'Complete 2 hours of focused study each day.',
+    rules: 'Complete 2 hours of focused study each day, timed in Focus Mode.',
     days: 7,
+    mode: 'focus',
+    minutes: 120,
+  },
+  {
+    label: '🧠 Deep work duel',
+    name: 'Deep Work Duel',
+    objective: 'An hour of deep work a day',
+    rules: 'One hour of distraction-free work each day, timed in Focus Mode.',
+    days: 5,
+    mode: 'focus',
+    minutes: 60,
   },
   {
     label: '💪 Workout streak',
@@ -35,6 +47,7 @@ const TEMPLATES: { label: string; name: string; objective: string; rules: string
     objective: 'Work out every day',
     rules: 'At least 30 minutes of exercise each day. Walks count if they are brisk.',
     days: 14,
+    mode: 'checkin',
   },
   {
     label: '🌅 Early riser',
@@ -42,6 +55,7 @@ const TEMPLATES: { label: string; name: string; objective: string; rules: string
     objective: 'Be up before 7am',
     rules: 'Out of bed before 7:00 local time. Check in when you are up.',
     days: 7,
+    mode: 'checkin',
   },
   {
     label: '📖 Reading race',
@@ -49,8 +63,35 @@ const TEMPLATES: { label: string; name: string; objective: string; rules: string
     objective: 'Read 20 pages a day',
     rules: 'Read at least 20 pages each day. Any book counts.',
     days: 21,
+    mode: 'checkin',
   },
 ]
+
+/** Where an unsent offer waits, per opponent, on this device only. */
+const draftKey = (username: string) => `questly:duel-draft:${username}`
+
+interface Draft {
+  name: string
+  objective: string
+  rules: string
+  days: number
+  reward: number
+  mode: DuelMode
+  minutes: number
+  proof: 'required' | 'optional'
+  minCheckins: number
+  startMode: 'accept' | 'date'
+  startDate: string
+}
+
+function readDraft(username: string): Partial<Draft> | null {
+  try {
+    const raw = localStorage.getItem(draftKey(username))
+    return raw ? (JSON.parse(raw) as Partial<Draft>) : null
+  } catch {
+    return null
+  }
+}
 
 const INPUT =
   'w-full rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none'
@@ -77,17 +118,30 @@ export default function ChallengeComposer({
   onClose: () => void
   onSent: (challenge: Challenge) => void
 }) {
-  const [name, setName] = useState('')
-  const [objective, setObjective] = useState('')
-  const [rules, setRules] = useState('')
-  const [days, setDays] = useState(7)
-  const [reward, setReward] = useState(maxReward(7))
-  const [proof, setProof] = useState<'required' | 'optional'>('optional')
-  const [minCheckins, setMinCheckins] = useState(7)
-  const [startMode, setStartMode] = useState<'accept' | 'date'>('accept')
-  const [startDate, setStartDate] = useState(tomorrow())
+  // A half-written offer comes back when the composer is opened again.
+  const [saved] = useState(() => readDraft(opponent.username))
+  const [name, setName] = useState(saved?.name ?? '')
+  const [objective, setObjective] = useState(saved?.objective ?? '')
+  const [rules, setRules] = useState(saved?.rules ?? '')
+  const [days, setDays] = useState(DURATIONS.includes(saved?.days ?? 0) ? (saved?.days as number) : 7)
+  const [reward, setReward] = useState(REWARD_TIERS.includes(saved?.reward ?? 0) ? (saved?.reward as number) : maxReward(7))
+  const [mode, setMode] = useState<DuelMode>(saved?.mode === 'checkin' ? 'checkin' : 'focus')
+  const [minutes, setMinutes] = useState(DAILY_MINUTES.includes(saved?.minutes ?? 0) ? (saved?.minutes as number) : 60)
+  const [proof, setProof] = useState<'required' | 'optional'>(saved?.proof === 'required' ? 'required' : 'optional')
+  const [minCheckins, setMinCheckins] = useState(saved?.minCheckins ?? 7)
+  const [startMode, setStartMode] = useState<'accept' | 'date'>(saved?.startMode === 'date' ? 'date' : 'accept')
+  const [startDate, setStartDate] = useState(saved?.startDate && saved.startDate >= tomorrow() ? saved.startDate : tomorrow())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ message: string; field?: string } | null>(null)
+
+  useEffect(() => {
+    const draft: Draft = { name, objective, rules, days, reward, mode, minutes, proof, minCheckins, startMode, startDate }
+    try {
+      if (name || objective || rules) localStorage.setItem(draftKey(opponent.username), JSON.stringify(draft))
+    } catch {
+      // Private mode: the draft lasts as long as the sheet is open.
+    }
+  }, [name, objective, rules, days, reward, mode, minutes, proof, minCheckins, startMode, startDate, opponent.username])
 
   const floor = Math.ceil(days / 2)
   const cap = days * XP_PER_DAY_CAP
@@ -106,6 +160,8 @@ export default function ChallengeComposer({
     setDays(t.days)
     setReward(maxReward(t.days) >= 500 ? Math.min(500, maxReward(t.days)) : maxReward(t.days))
     setMinCheckins(t.days)
+    setMode(t.mode)
+    if (t.minutes) setMinutes(t.minutes)
   }
 
   // Midnight at the start of the chosen day, on this device's clock.
@@ -129,13 +185,20 @@ export default function ChallengeComposer({
       rules: rules.trim(),
       durationDays: days,
       rewardXp: reward,
-      proof,
+      mode,
+      ...(mode === 'focus' ? { dailyMinutes: minutes } : {}),
+      proof: mode === 'focus' ? 'optional' : proof,
       minCheckins,
       startMode,
       ...(startsAt ? { startsAt } : {}),
     }
     try {
       const { challenge } = await sendChallenge(opponent.username, terms)
+      try {
+        localStorage.removeItem(draftKey(opponent.username))
+      } catch {
+        // Nothing to clear.
+      }
       onSent(challenge)
     } catch (err) {
       const field = err instanceof ApiError ? (err.field ?? undefined) : undefined
@@ -172,7 +235,7 @@ export default function ChallengeComposer({
             </p>
             <div className="mt-0.5 flex items-center gap-2">
               <StatusPill status="draft" />
-              <span className="text-[11px] text-slate-500">@{opponent.username}</span>
+              <span className="text-[11px] text-slate-500">@{opponent.username}{name || objective || rules ? ' · draft kept on this device' : ''}</span>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-slate-500 hover:bg-ink-800 hover:text-slate-200">
@@ -200,6 +263,25 @@ export default function ChallengeComposer({
           <Field label="Objective" error={error?.field === 'objective' ? error.message : null}>
             <input value={objective} onChange={(e) => setObjective(e.target.value.slice(0, 140))} placeholder="Study 2 hours every day" className={INPUT} />
           </Field>
+
+          <Field label="How it is measured">
+            <div className="grid grid-cols-2 gap-1.5">
+              <ModeChoice active={mode === 'focus'} onClick={() => setMode('focus')} icon={Timer} title="Focus time" body="Timed by Questly. Nothing to claim." />
+              <ModeChoice active={mode === 'checkin'} onClick={() => setMode('checkin')} icon={CheckSquare} title="Daily check-in" body="For things a timer cannot see." />
+            </div>
+          </Field>
+
+          {mode === 'focus' && (
+            <Field label="Focus minutes a day" error={error?.field === 'dailyMinutes' ? error.message : null}>
+              <div className="flex flex-wrap gap-1.5">
+                {DAILY_MINUTES.map((m) => (
+                  <Choice key={m} active={minutes === m} onClick={() => setMinutes(m)}>
+                    {m >= 60 ? `${m / 60}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m} min`}
+                  </Choice>
+                ))}
+              </div>
+            </Field>
+          )}
 
           <Field label="Duration">
             <div className="flex flex-wrap gap-1.5">
@@ -251,18 +333,23 @@ export default function ChallengeComposer({
             />
           </Field>
 
-          <Field label="Proof">
-            <div className="flex flex-wrap gap-1.5">
-              <Choice active={proof === 'required'} onClick={() => setProof('required')}>
-                Required
-              </Choice>
-              <Choice active={proof === 'optional'} onClick={() => setProof('optional')}>
-                Optional
-              </Choice>
-            </div>
-          </Field>
+          {mode === 'checkin' && (
+            <Field label="Proof">
+              <div className="flex flex-wrap gap-1.5">
+                <Choice active={proof === 'required'} onClick={() => setProof('required')}>
+                  Required
+                </Choice>
+                <Choice active={proof === 'optional'} onClick={() => setProof('optional')}>
+                  Optional
+                </Choice>
+              </div>
+            </Field>
+          )}
 
-          <Field label={`Completion — check in on at least ${minCheckins} of ${days} days`} error={error?.field === 'minCheckins' ? error.message : null}>
+          <Field
+            label={`Completion — ${mode === 'focus' ? `reach ${minutes} min` : 'check in'} on at least ${minCheckins} of ${days} days`}
+            error={error?.field === 'minCheckins' ? error.message : null}
+          >
             <input
               type="range"
               min={floor}
@@ -286,6 +373,8 @@ export default function ChallengeComposer({
               terms: TERMS_TEXT,
               durationDays: days,
               rewardXp: reward,
+              mode,
+              dailyMinutes: mode === 'focus' ? minutes : null,
               proof,
               minCheckins,
               startMode,
@@ -322,6 +411,24 @@ function Field({ label, error, children }: { label: string; error?: string | nul
       {children}
       {error && <p className="mt-1 text-xs text-ember-400">{error}</p>}
     </div>
+  )
+}
+
+function ModeChoice({ active, onClick, icon: Icon, title, body }: { active: boolean; onClick: () => void; icon: typeof Timer; title: string; body: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+        active ? 'border-gold-500 bg-gold-500/15' : 'border-ink-600 bg-ink-850 hover:border-ink-500'
+      }`}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-50">
+        <Icon className="h-3.5 w-3.5 text-gold-400" aria-hidden /> {title}
+      </span>
+      <span className="text-[11px] leading-snug text-slate-400">{body}</span>
+    </button>
   )
 }
 

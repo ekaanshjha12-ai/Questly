@@ -103,7 +103,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 3 | Design system, navigation, router, Home hub, Quest Board, Focus Mode + victory, Level Up | Done (Clubs tab arrives with phase 7) |
 | 4 | Character, wardrobe/inventory, Questly Card upgrade | Done |
 | 5 | Chronicle Log notifications | Done |
-| 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Planned |
+| 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Done: focus duels count server-timed minutes; check-in duels kept; Sent/Completed/Failed states; VS screen with countdown; drafts kept on device |
 | 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Planned |
 | 8 | World map: regions, locks, time of day, club buildings, events | Planned |
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Planned |
@@ -121,9 +121,6 @@ Kept up to date as phases land.
 
 - **Clubs tab.** Navigation has five tabs until clubs exist; a sixth tab with
   nothing behind it would be fake functionality.
-- **Duels** keep their existing check-in flow and screens; the VS screen,
-  states and focus-validated progress are phase 6. Their XP already goes
-  through the ledger.
 - **Main bundle** is about 525 kB (166 kB gzipped). The sound engine and
   motion library are the bulk; splitting them is part of phase 15.
 - **Reporting messages** from inside a conversation is not built yet; players

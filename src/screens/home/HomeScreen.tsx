@@ -39,7 +39,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
   const featured = quests.find((q) => q.id === snapshot.featuredQuestId) ?? null
   const focus = snapshot.focus
   const duel = (challenges ?? []).find((c) => c.status === 'active' || c.status === 'accepted') ?? null
-  const offers = (challenges ?? []).filter((c) => c.role === 'opponent' && c.status === 'pending').length
+  const offers = (challenges ?? []).filter((c) => c.role === 'opponent' && c.status === 'sent').length
   const openCount = quests.filter((q) => q.status === 'active' || q.status === 'in_progress').length
   const doneToday = quests.filter((q) => q.status === 'completed').length
   const recent = achievements.recent[0] ?? null

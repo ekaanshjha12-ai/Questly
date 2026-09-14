@@ -27,11 +27,12 @@ import { playerAvatarUrl } from '../lib/api'
  */
 const STATUS: Record<ChallengeStatus, { label: string; color: string; icon: typeof Clock; hint: string }> = {
   draft: { label: 'Draft', color: '#a3a3a3', icon: PencilLine, hint: 'Being written. Nothing has been sent.' },
-  pending: { label: 'Pending', color: '#f59e0b', icon: Clock, hint: 'Sent, waiting for an answer.' },
+  sent: { label: 'Sent', color: '#f59e0b', icon: Clock, hint: 'Sent, waiting for an answer.' },
   accepted: { label: 'Accepted', color: '#38bdf8', icon: Handshake, hint: 'Both agreed. Starts soon.' },
   active: { label: 'Active', color: '#22c55e', icon: CalendarClock, hint: 'Running now.' },
   due: { label: 'Finishing', color: '#22c55e', icon: Hourglass, hint: 'Just ended. Results are being counted.' },
-  completed: { label: 'Completed', color: '#eab308', icon: Trophy, hint: 'Finished. Results are in.' },
+  completed: { label: 'Completed', color: '#eab308', icon: Trophy, hint: 'You met the objective.' },
+  failed: { label: 'Failed', color: '#ef4444', icon: XCircle, hint: 'The objective was not met.' },
   rejected: { label: 'Rejected', color: '#ef4444', icon: XCircle, hint: 'The offer was declined.' },
   expired: { label: 'Expired', color: '#737373', icon: Hourglass, hint: 'Nobody answered in time.' },
   cancelled: { label: 'Cancelled', color: '#737373', icon: Ban, hint: 'Withdrawn or ended early.' },
@@ -110,6 +111,8 @@ export interface TermsView {
   terms: string
   durationDays: number
   rewardXp: number
+  mode: 'focus' | 'checkin'
+  dailyMinutes: number | null
   proof: 'required' | 'optional'
   minCheckins: number
   startMode: 'accept' | 'date'
@@ -131,10 +134,11 @@ export function TermsSheet({ t }: { t: TermsView }) {
   const start =
     t.startsAt ? formatWhen(t.startsAt) : t.startMode === 'accept' ? 'As soon as it is accepted' : 'Not set'
   const end = t.endsAt ? formatWhen(t.endsAt) : `${t.durationDays} days after it starts`
+  const unit = t.mode === 'focus' ? `Reach ${t.dailyMinutes ?? '—'} minutes of timed focus` : 'Check in'
   const completion =
     t.minCheckins >= t.durationDays
-      ? `Check in on all ${t.durationDays} days.`
-      : `Check in on at least ${t.minCheckins} of the ${t.durationDays} days.`
+      ? `${unit} on all ${t.durationDays} days.`
+      : `${unit} on at least ${t.minCheckins} of the ${t.durationDays} days.`
 
   const rows: [string, React.ReactNode][] = [
     ['Created by', t.creatorName],
@@ -143,12 +147,15 @@ export function TermsSheet({ t }: { t: TermsView }) {
     ['Duration', `${t.durationDays} days`],
     ['Start date', start],
     ['End date', end],
-    ['Reward', `${t.rewardXp.toLocaleString()} XP to each person who completes it`],
+    ['Measured by', t.mode === 'focus' ? 'Focus sessions timed by Questly' : 'A daily check-in'],
+    ['Reward', `${t.rewardXp.toLocaleString()} XP to each person who completes it. No stakes: nobody loses anything.`],
     [
       'Proof',
-      t.proof === 'required'
-        ? 'Required — every check-in needs a short note saying what you did'
-        : 'Optional — a check-in can be a single tap',
+      t.mode === 'focus'
+        ? 'The focus timer — only minutes Questly timed count'
+        : t.proof === 'required'
+          ? 'Required — every check-in needs a short note saying what you did'
+          : 'Optional — a check-in can be a single tap',
     ],
     ['Completion', completion],
   ]

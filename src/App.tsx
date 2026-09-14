@@ -428,7 +428,7 @@ function Routes({
           onRefresh={challengeFeed.refresh}
           onUpsert={(c: Challenge) => {
             challengeFeed.upsert(c)
-            if (c.status === 'completed') void game.refresh()
+            if (c.status === 'completed' || c.status === 'failed') void game.refresh()
           }}
           openId={duel?.id ?? null}
           onOpenChange={(id) => (id ? navigate(`/challenges/${encodeURIComponent(id)}`, { keepScroll: true }) : back('/challenges'))}

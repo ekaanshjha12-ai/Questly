@@ -16,6 +16,18 @@ export const DURATIONS = [3, 5, 7, 14, 21, 30]
 export const REWARD_TIERS = [50, 100, 250, 500, 750, 1000, 1500, 2000]
 
 /**
+ * How a duel is measured.
+ *
+ *   focus    minutes of focus the server timed each day. Nobody can claim a
+ *            day they did not put in: a day counts once the timed minutes
+ *            reach the agreed target.
+ *   checkin  a daily check-in, with a note when proof is required. For
+ *            objectives Questly cannot time — an early start, a workout.
+ */
+export const MODES = ['focus', 'checkin']
+export const DAILY_MINUTES = [15, 30, 45, 60, 90, 120, 180]
+
+/**
  * The most XP a challenge may pay, per day it lasts.
  *
  * Rewards are paid by the app, not by either player, which makes a challenge
@@ -97,7 +109,16 @@ export function validateTerms(input, now = Date.now()) {
     }
   }
 
-  const proof = input?.proof === 'required' ? 'required' : input?.proof === 'optional' ? 'optional' : null
+  const mode = MODES.includes(input?.mode) ? input.mode : input?.mode === undefined ? 'checkin' : null
+  if (!mode) return { ok: false, error: 'Choose how the duel is measured.', field: 'mode' }
+  let dailyMinutes = null
+  if (mode === 'focus') {
+    dailyMinutes = Number(input?.dailyMinutes)
+    if (!DAILY_MINUTES.includes(dailyMinutes)) return { ok: false, error: 'Pick the focus minutes a day from the list.', field: 'dailyMinutes' }
+  }
+
+  // A focus duel's proof is the timer itself.
+  const proof = mode === 'focus' ? 'optional' : input?.proof === 'required' ? 'required' : input?.proof === 'optional' ? 'optional' : null
   if (!proof) return { ok: false, error: 'Choose whether proof is required.', field: 'proof' }
 
   // Completion means checking in on at least this many days. Never less than
@@ -130,6 +151,8 @@ export function validateTerms(input, now = Date.now()) {
       rules: rulesRaw,
       durationDays: days,
       rewardXp: reward,
+      mode,
+      dailyMinutes,
       proof,
       minCheckins,
       startMode: startsAt ? 'date' : 'accept',
@@ -167,6 +190,32 @@ export function dayIndex(row, now = Date.now()) {
   const start = Date.parse(row.starts_at)
   if (now < start || now >= Date.parse(row.ends_at)) return null
   return Math.floor((now - start) / DAY_MS)
+}
+
+/**
+ * Each side's progress, day by day. For a focus duel a day's value is the
+ * minutes timed that day (by when the session ended); for a check-in duel it
+ * is 1 or 0. `met` is how many days reached the bar.
+ */
+export function progressFor(row, { creatorSessions = [], opponentSessions = [], checkins = [] }) {
+  const days = row.duration_days
+  const start = row.starts_at ? Date.parse(row.starts_at) : null
+  const side = (userId, sessions) => {
+    const values = new Array(days).fill(0)
+    if (start === null) return { days: values, met: 0 }
+    if (row.mode === 'focus') {
+      const ms = new Array(days).fill(0)
+      for (const s of sessions) {
+        const index = Math.floor((Date.parse(s.ended_at) - start) / DAY_MS)
+        if (index >= 0 && index < days) ms[index] += Math.max(0, Number(s.active_ms) || 0)
+      }
+      for (let i = 0; i < days; i += 1) values[i] = Math.floor(ms[i] / 60_000)
+      return { days: values, met: values.filter((m) => m >= (row.daily_minutes ?? Infinity)).length }
+    }
+    for (const c of checkins) if (c.user_id === userId && c.day >= 0 && c.day < days) values[c.day] = 1
+    return { days: values, met: values.filter(Boolean).length }
+  }
+  return { creator: side(row.creator_id, creatorSessions), opponent: side(row.opponent_id, opponentSessions) }
 }
 
 export function validateCheckinNote(note, proof) {

@@ -588,16 +588,27 @@ export interface PublicPlayer extends PlayerSummary {
 /** Every state a challenge can be in. `draft` only ever exists on this device,
  * while an offer is being written; `due` is momentary, between the end of a
  * challenge and the server settling it. */
+/** Draft exists only while an offer is being written; the rest come from the server. */
 export type ChallengeStatus =
   | 'draft'
-  | 'pending'
+  | 'sent'
   | 'accepted'
   | 'active'
   | 'due'
   | 'completed'
+  | 'failed'
   | 'rejected'
   | 'expired'
   | 'cancelled'
+
+export type DuelMode = 'focus' | 'checkin'
+
+export interface DuelSideProgress {
+  /** Focus minutes per day for a focus duel; 1 or 0 per day for a check-in duel. */
+  days: number[]
+  /** Days that reached the bar. */
+  met: number
+}
 
 export interface ChallengeCheckin {
   side: 'creator' | 'opponent'
@@ -610,6 +621,10 @@ export interface Challenge {
   id: string
   role: 'creator' | 'opponent'
   status: ChallengeStatus
+  mode: DuelMode
+  /** Focus minutes a day that count as a day done, for a focus duel. */
+  dailyMinutes: number | null
+  serverNow: string
   name: string
   objective: string
   rules: string
@@ -630,6 +645,7 @@ export interface Challenge {
   /** Which day of the challenge it is, from 0, while it is running. */
   today: number | null
   rewards: { creator: number; opponent: number } | null
+  progress: { creator: DuelSideProgress; opponent: DuelSideProgress } | null
   checkins?: ChallengeCheckin[]
   /** The other side's age group when it differs from yours, for the chat's safety note. */
   otherAge?: 'adult' | 'under18' | null
@@ -641,6 +657,8 @@ export interface ChallengeTermsInput {
   rules: string
   durationDays: number
   rewardXp: number
+  mode: DuelMode
+  dailyMinutes?: number
   proof: 'required' | 'optional'
   minCheckins: number
   startMode: 'accept' | 'date'

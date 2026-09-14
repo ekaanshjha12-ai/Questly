@@ -37,7 +37,7 @@ export function useChallenges({
       const { challenges: list } = await fetchChallenges()
       setChallenges(list)
       setError(null)
-      const done = new Set(list.filter((c) => c.status === 'completed').map((c) => c.id))
+      const done = new Set(list.filter((c) => c.status === 'completed' || c.status === 'failed').map((c) => c.id))
       const known = finished.current
       finished.current = done
       if (known && [...done].some((id) => !known.has(id))) onSettledRef.current?.()
@@ -76,7 +76,7 @@ export function useChallenges({
     })
   }, [])
 
-  const incoming = (challenges ?? []).filter((c) => c.role === 'opponent' && c.status === 'pending')
+  const incoming = (challenges ?? []).filter((c) => c.role === 'opponent' && c.status === 'sent')
 
   return { challenges, error, refresh, upsert, incomingCount: incoming.length }
 }
