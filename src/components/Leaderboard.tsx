@@ -94,9 +94,8 @@ export default function Leaderboard({ myName }: { myName: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Trophy className="h-4 w-4 text-gold-400" />
-        <p className="font-display text-base font-semibold text-slate-50">Leaderboard</p>
-        <span className="text-xs text-slate-500">{data.total} ranked</span>
+        <Trophy className="h-4 w-4 text-reward-400" aria-hidden />
+        <span className="text-xs text-slate-400">{data.total} ranked</span>
         <button
           type="button"
           onClick={() => void toggle()}

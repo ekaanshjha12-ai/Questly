@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Loader2, Swords } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import type { Challenge } from '../lib/api'
 import { PlayerAvatar, StatusPill, formatWhen, timeLeft } from './ChallengeParts'
 import PlayerCardSheet from './PlayerCardSheet'
@@ -20,15 +20,23 @@ export default function ChallengesScreen({
   error,
   onRefresh,
   onUpsert,
+  openId: routeOpenId,
+  onOpenChange,
 }: {
   myName: string
   challenges: Challenge[] | null
   error: string | null
   onRefresh: () => Promise<void>
   onUpsert: (challenge: Challenge) => void
+  /** The challenge in the address bar, when the page is routed. */
+  openId?: string | null
+  onOpenChange?: (id: string | null) => void
 }) {
   const [viewing, setViewing] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [localOpenId, setLocalOpenId] = useState<string | null>(null)
+  const routed = onOpenChange !== undefined
+  const openId = routed ? (routeOpenId ?? null) : localOpenId
+  const setOpenId = routed ? onOpenChange : setLocalOpenId
 
   useEffect(() => {
     void onRefresh()
@@ -43,19 +51,10 @@ export default function ChallengesScreen({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-50">
-          <Swords className="h-5 w-5 text-gold-400" /> Challenges
-        </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Find someone, open their card, challenge them. Win XP by finishing what you agreed.
-        </p>
-      </div>
-
       {/* --- find people ---------------------------------------------------- */}
-      <div className="rounded-2xl border border-ink-600 bg-ink-850 p-3">
+      <div className="panel p-3">
         <PlayerSearch onPick={(p) => setViewing(p.username)} placeholder="Find someone to challenge" maxHeight="16rem" />
-        <p className="mt-2 px-1 text-[10px] text-slate-500">You can also tap a name on the leaderboard in Hero → Ranking.</p>
+        <p className="mt-2 px-1 text-[11px] text-slate-500">You can also tap a name on the leaderboard.</p>
       </div>
 
       {error && !challenges && <p className="text-xs text-ember-400">{error}</p>}

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchChallenges, type Challenge } from '../lib/api'
 
 /**
- * The player's challenges, kept reasonably fresh, and rewards paid in as they
- * land.
+ * The player's challenges, kept reasonably fresh.
+ *
+ * Rewards are paid by the server when a challenge settles; all this does is
+ * notice a challenge finishing so the caller can fetch the new progress.
  *
  * Polled rather than pushed: a minute is plenty for "someone challenged you",
  * the app has no socket server to push with, and polling stops entirely while
@@ -15,32 +17,30 @@ const POLL_MS = 60_000
 
 export function useChallenges({
   enabled,
-  claimed,
-  onReward,
+  onSettled,
 }: {
   enabled: boolean
-  /** Ids already paid into state. */
-  claimed: string[]
-  onReward: (challengeId: string, xp: number) => void
+  /** A challenge finished since the last look — progress may have changed. */
+  onSettled?: () => void
 }) {
   const [challenges, setChallenges] = useState<Challenge[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const claimedRef = useRef(claimed)
-  claimedRef.current = claimed
-  const onRewardRef = useRef(onReward)
-  onRewardRef.current = onReward
+  const onSettledRef = useRef(onSettled)
+  onSettledRef.current = onSettled
+  // Ids seen finished. Null until the first load, so old results do not count
+  // as news.
+  const finished = useRef<Set<string> | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const { challenges: list } = await fetchChallenges()
       setChallenges(list)
       setError(null)
-      for (const c of list) {
-        if (c.status !== 'completed' || !c.rewards) continue
-        const xp = c.role === 'creator' ? c.rewards.creator : c.rewards.opponent
-        if (xp > 0 && !claimedRef.current.includes(c.id)) onRewardRef.current(c.id, xp)
-      }
+      const done = new Set(list.filter((c) => c.status === 'completed').map((c) => c.id))
+      const known = finished.current
+      finished.current = done
+      if (known && [...done].some((id) => !known.has(id))) onSettledRef.current?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load challenges.')
     }

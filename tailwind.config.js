@@ -56,6 +56,39 @@ export default {
         emerald: {
           400: 'rgb(var(--emerald-400) / <alpha-value>)',
         },
+        /** Rewards: XP, coins, anything earned. */
+        reward: {
+          300: 'rgb(var(--reward-300) / <alpha-value>)',
+          400: 'rgb(var(--reward-400) / <alpha-value>)',
+          500: 'rgb(var(--reward-500) / <alpha-value>)',
+          600: 'rgb(var(--reward-600) / <alpha-value>)',
+        },
+        /** Parchment surfaces and their ink. */
+        parch: {
+          50: 'rgb(var(--parch-50) / <alpha-value>)',
+          100: 'rgb(var(--parch-100) / <alpha-value>)',
+          200: 'rgb(var(--parch-200) / <alpha-value>)',
+          300: 'rgb(var(--parch-300) / <alpha-value>)',
+          ink: 'rgb(var(--parch-ink) / <alpha-value>)',
+          soft: 'rgb(var(--parch-soft) / <alpha-value>)',
+        },
+        rarity: {
+          common: 'rgb(var(--rarity-common) / <alpha-value>)',
+          rare: 'rgb(var(--rarity-rare) / <alpha-value>)',
+          epic: 'rgb(var(--rarity-epic) / <alpha-value>)',
+          legendary: 'rgb(var(--rarity-legendary) / <alpha-value>)',
+        },
+        danger: {
+          400: 'rgb(var(--danger-400) / <alpha-value>)',
+          500: 'rgb(var(--danger-500) / <alpha-value>)',
+          600: 'rgb(var(--danger-600) / <alpha-value>)',
+        },
+        info: {
+          400: 'rgb(var(--info-400) / <alpha-value>)',
+        },
+        arcane: {
+          400: 'rgb(var(--arcane-400) / <alpha-value>)',
+        },
         blue: {
           400: 'rgb(var(--blue-400) / <alpha-value>)',
         },
@@ -63,13 +96,15 @@ export default {
         onAccent: 'rgb(var(--on-accent) / <alpha-value>)',
       },
       fontFamily: {
-        display: ['"Cinzel"', 'ui-serif', 'Georgia', 'serif'],
+        display: ['"Playfair Display"', 'ui-serif', 'Georgia', 'serif'],
         body: ['"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        pixel: ['"Silkscreen"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
         // Softened in the light theme, where a glow against white reads as blur
         // rather than light.
         glow: '0 0 20px var(--glow-gold)',
+        'glow-reward': '0 0 24px var(--glow-reward)',
         'glow-mystic': '0 0 20px var(--glow-mystic)',
       },
       keyframes: {

@@ -39,6 +39,20 @@ const DIFFICULTY = { easy: 0.75, normal: 1, hard: 1.25, heroic: 1.5 }
 /** Most open quests a player can hold, and create in a day. */
 export const MAX_OPEN_QUESTS = 100
 export const MAX_CREATED_PER_DAY = 40
+/** A plan from the AI planner adds its tasks together; two full plans a day. */
+export const MAX_PLAN_ITEMS = 40
+export const MAX_PLAN_QUESTS_PER_DAY = 80
+
+/** What each part of a generated plan becomes on the board. */
+const PLAN_SHAPE = {
+  todo: { type: 'optional', durationMin: 15, difficulty: 'normal' },
+  daily: { type: 'optional', durationMin: 20, difficulty: 'normal' },
+  weekly: { type: 'side', durationMin: 45, difficulty: 'normal' },
+  monthly: { type: 'main', durationMin: 90, difficulty: 'hard' },
+}
+
+/** Quests the player put on the board themselves, and so may edit or delete. */
+const OWN_ORIGINS = new Set(['user', 'legacy_todo', 'plan'])
 
 export const VERIFY_BONUS = { photo: 15, voice: 8 }
 
@@ -171,6 +185,7 @@ export function questView(row, { now = Date.now(), level = Infinity } = {}) {
     createdAt: row.created_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    updatedAt: row.updated_at,
     verified: row.verified_at ? { by: row.verified_by, at: row.verified_at } : null,
     pinned: Boolean(row.pinned),
   }
@@ -215,19 +230,56 @@ export function createQuest(userId, input) {
   const recent = db.get("SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND origin = 'user' AND created_at > ?", [userId, since])?.n ?? 0
   if (recent >= MAX_CREATED_PER_DAY) throw conflict('That is a lot of new quests for one day. Try again tomorrow.', 'too_many_created')
 
+  const id = insertQuest(userId, value, 'user', now)
+  return questView(loadQuest(userId, id), { level: playerLevel(userId) })
+}
+
+function insertQuest(userId, value, origin, now) {
   const id = randomUUID()
   const iso = new Date(now).toISOString()
   db.run(
     `INSERT INTO quests (id, user_id, type, origin, goal_id, title, description, category, difficulty, duration_min, xp_reward, rarity,
        progress_kind, progress_target, progress_unit, milestones, status, starts_at, deadline_at, created_at, updated_at)
-     VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      id, userId, value.type, value.goalId, value.title, value.description, value.category, value.difficulty, value.durationMin,
+      id, userId, value.type, origin, value.goalId, value.title, value.description, value.category, value.difficulty, value.durationMin,
       value.xp, value.rarity, value.progressKind, value.target, value.unit, value.milestones ? JSON.stringify(value.milestones) : null,
       value.startsAt && Date.parse(value.startsAt) > now ? 'upcoming' : 'active', value.startsAt, value.deadlineAt, iso, iso,
     ],
   )
-  return questView(loadQuest(userId, id), { level: playerLevel(userId) })
+  return id
+}
+
+/**
+ * Puts a generated plan on the board in one go: every task becomes a quest, or
+ * none do. The plan's own wording is checked like anything a player writes, and
+ * what each task pays comes from its part of the plan, not from the request.
+ */
+export function createPlanQuests(userId, items) {
+  if (!Array.isArray(items) || items.length === 0) throw invalid('The plan has nothing in it.', 'items')
+  if (items.length > MAX_PLAN_ITEMS) throw invalid(`A plan can add at most ${MAX_PLAN_ITEMS} quests.`, 'items')
+  const now = Date.now()
+  const values = items.map((item) => {
+    const shape = PLAN_SHAPE[item?.kind] ?? PLAN_SHAPE.todo
+    // Plans write longer lines than the board shows; cut at a word.
+    let title = String(item?.title ?? '').trim().replace(/\s+/g, ' ')
+    if (title.length > 80) title = title.slice(0, 80).replace(/\s+\S*$/, '') || title.slice(0, 80)
+    return validateQuestInput({ ...shape, title, category: item?.category }, now)
+  })
+
+  const open = db.get(
+    "SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND status IN ('active', 'in_progress', 'upcoming', 'locked')",
+    [userId],
+  )?.n ?? 0
+  if (open + values.length > MAX_OPEN_QUESTS) {
+    throw conflict(`That would put you over ${MAX_OPEN_QUESTS} open quests. Finish or abandon some first.`, 'too_many_open')
+  }
+  const since = new Date(now - 86_400_000).toISOString()
+  const recent = db.get("SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND origin = 'plan' AND created_at > ?", [userId, since])?.n ?? 0
+  if (recent + values.length > MAX_PLAN_QUESTS_PER_DAY) throw conflict('That is a lot of planned quests for one day. Try again tomorrow.', 'too_many_created')
+
+  const level = playerLevel(userId)
+  return transaction(() => values.map((value) => questView(loadQuest(userId, insertQuest(userId, value, 'plan', now)), { level })))
 }
 
 /** Text and dates can always change on an open quest; what sets its reward
@@ -237,7 +289,7 @@ export function updateQuest(userId, questId, input) {
   const now = Date.now()
   const status = deriveStatus(row, now)
   if (TERMINAL.has(status)) throw conflict('Finished quests cannot be edited.', 'finished')
-  if (row.origin !== 'user' && row.origin !== 'legacy_todo') throw conflict('Only quests you wrote can be edited.', 'not_editable')
+  if (!OWN_ORIGINS.has(row.origin)) throw conflict('Only quests you wrote can be edited.', 'not_editable')
 
   const merged = {
     type: input?.type ?? row.type,
@@ -285,7 +337,7 @@ export function updateQuest(userId, questId, input) {
 
 export function deleteQuest(userId, questId) {
   const row = loadQuest(userId, questId)
-  if (row.origin !== 'user' && row.origin !== 'legacy_todo') throw conflict('Only quests you wrote can be deleted.', 'not_deletable')
+  if (!OWN_ORIGINS.has(row.origin)) throw conflict('Only quests you wrote can be deleted.', 'not_deletable')
   if (row.status === 'completed' || row.xp_paid > 0) throw conflict('Quests that have paid XP stay in your history.', 'has_history')
   db.run('DELETE FROM quests WHERE id = ? AND user_id = ?', [row.id, userId])
 }

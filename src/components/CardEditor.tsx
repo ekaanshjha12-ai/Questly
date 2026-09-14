@@ -44,7 +44,7 @@ type Panel = 'add' | 'background' | null
 type AddTab = 'text' | 'sticker' | 'info'
 
 const PEN_SIZES = [6, 14, 28]
-const ALL_FIELDS: CardField[] = ['avatar', 'name', 'username', 'bio', 'rank', 'level', 'xp', 'birthday', 'joined', 'email']
+const ALL_FIELDS: CardField[] = ['hero', 'avatar', 'name', 'username', 'bio', 'rank', 'level', 'xp', 'birthday', 'joined', 'email']
 const HISTORY = 30
 
 export default function CardEditor({

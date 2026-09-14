@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  Download,
   IdCard,
   Loader2,
+  LogOut,
   MessageCircle,
   MonitorSmartphone,
   Moon,
   MousePointer2,
   PartyPopper,
+  ShieldAlert,
   Swords,
   Sun,
   UserRound,
@@ -15,12 +18,14 @@ import {
 import type { AppState, CardDesign } from '../types'
 import { useTheme, type ThemeChoice } from '../hooks/useTheme'
 import { useCelebrations } from '../lib/prefs'
-import { ApiError, avatarUrl, updateProfile, updateSettings, uploadAvatar, type AuthUser } from '../lib/api'
+import { ApiError, avatarUrl, deleteAccount, updateProfile, updateSettings, uploadAvatar, type AuthUser, type Look, type Progress } from '../lib/api'
 import { BIO_MAX, ageFromBirthdate, type PreparedAvatar } from '../lib/profile'
 import { cardData } from '../lib/card'
 import CursorPicker from './CursorPicker'
 import CardEditor from './CardEditor'
 import { PicturePicker } from './SignupFlow'
+import { Sheet } from './ui/Sheet'
+import Button from './ui/Button'
 
 /**
  * How the app looks and feels, in one place.
@@ -30,32 +35,43 @@ import { PicturePicker } from './SignupFlow'
  * name is stored per device — the same person may want a quiet dark screen on a
  * phone at night and the sword and sparks on a desktop.
  */
+/** The card designer on its own page: design, drag, draw. */
+export function CardDesigner({
+  state,
+  user,
+  progress,
+  look,
+  onSetCard,
+}: {
+  state: AppState
+  user: AuthUser
+  progress: Progress | null
+  look: Look | null
+  onSetCard: (card: CardDesign | null) => void
+}) {
+  const data = useMemo(() => cardData(state, user, { progress, look }), [state, user, progress, look])
+  return (
+    <Section icon={IdCard} title="Your Questly Card" note="Add your character, stats, stickers and text, drag and resize them, or draw on it. Your age always shows in the corner.">
+      <CardEditor design={state.card} data={data} onChange={onSetCard} />
+    </Section>
+  )
+}
+
 export default function PersonaliseScreen({
   state,
   user,
   onRename,
-  onSetCard,
   onUserChange,
+  onSignOut,
 }: {
   state: AppState
   user: AuthUser
   onRename: (name: string) => void
-  onSetCard: (card: CardDesign | null) => void
   onUserChange: (user: AuthUser) => void
+  onSignOut: () => void
 }) {
-  const data = useMemo(() => cardData(state, user), [state, user])
-
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-lg font-bold text-slate-50">Personalise</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Make it yours. Changes apply straight away.</p>
-      </div>
-
-      <Section icon={IdCard} title="Your card" note="Add stickers and text, drag things around, draw on it. Your age always shows in the corner.">
-        <CardEditor design={state.card} data={data} onChange={onSetCard} />
-      </Section>
-
       <Section icon={UserRound} title="Profile" note="Your picture, name and bio — they update your card too.">
         <ProfileFields state={state} user={user} onRename={onRename} onUserChange={onUserChange} />
       </Section>
@@ -81,6 +97,89 @@ export default function PersonaliseScreen({
       <Section icon={PartyPopper} title="Celebrations" note="Confetti when you level up or reach a new rank.">
         <CelebrationToggle />
       </Section>
+
+      <Section icon={ShieldAlert} title="Account and data" note="Your data is yours. Download everything Questly holds about you, or delete the account for good.">
+        <AccountControls user={user} onSignOut={onSignOut} />
+      </Section>
+    </div>
+  )
+}
+
+/**
+ * Export, sign out, delete. Deleting needs the password: a signed-in phone
+ * left on a table should not be enough to erase someone's history.
+ */
+function AccountControls({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function remove() {
+    setBusy(true)
+    setProblem(null)
+    try {
+      await deleteAccount(password)
+      onSignOut()
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'Could not delete the account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <a
+        href="/api/account/export"
+        download="questly-export.json"
+        className="flex min-h-[44px] items-center gap-3 rounded-xl border border-ink-600 bg-ink-800 px-3 text-sm text-slate-200 hover:border-ink-500"
+      >
+        <Download className="h-4 w-4 text-gold-400" /> Download my data
+      </a>
+      <button type="button" onClick={onSignOut} className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border border-ink-600 bg-ink-800 px-3 text-left text-sm text-slate-200 hover:border-ink-500">
+        <LogOut className="h-4 w-4 text-slate-400" /> Sign out of {user.email}
+      </button>
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border border-danger-500/40 bg-danger-500/10 px-3 text-left text-sm text-danger-400 hover:bg-danger-500/15"
+      >
+        <ShieldAlert className="h-4 w-4" /> Delete account
+      </button>
+
+      <Sheet
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Delete your account?"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={busy}>
+              Keep account
+            </Button>
+            <Button variant="danger" size="sm" loading={busy} disabled={!password} onClick={() => void remove()}>
+              Delete forever
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm leading-relaxed text-slate-300">
+          This permanently deletes your account, progress, quests, items, posts, messages and challenges. It cannot be undone. Download your data first if you want a copy.
+        </p>
+        <label className="mt-4 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400" htmlFor="delete-password">
+          Confirm with your password
+        </label>
+        <input
+          id="delete-password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="field mt-1.5"
+        />
+        {problem && <p className="mt-2 text-xs text-danger-400">{problem}</p>}
+      </Sheet>
     </div>
   )
 }
@@ -333,8 +432,8 @@ function NameField({ name, onRename }: { name: string; onRename: (name: string) 
 }
 
 const THEMES: { id: ThemeChoice; label: string; icon: typeof Sun; page: string; card: string }[] = [
-  { id: 'light', label: 'Light', icon: Sun, page: '#e6e6e6', card: '#ffffff' },
-  { id: 'dark', label: 'Dark', icon: Moon, page: '#0b0b0b', card: '#1f1f1f' },
+  { id: 'dark', label: 'Night', icon: Moon, page: '#090b0c', card: '#1b2024' },
+  { id: 'light', label: 'Parchment', icon: Sun, page: '#ece4d3', card: '#faf6ea' },
   { id: 'system', label: 'Match device', icon: MonitorSmartphone, page: '', card: '' },
 ]
 
@@ -363,7 +462,7 @@ function ThemePicker() {
               className="relative block h-12 overflow-hidden rounded-lg border border-ink-600"
               style={
                 theme.id === 'system'
-                  ? { background: 'linear-gradient(135deg, #e6e6e6 0 50%, #0b0b0b 50% 100%)' }
+                  ? { background: 'linear-gradient(135deg, #ece4d3 0 50%, #090b0c 50% 100%)' }
                   : { background: theme.page }
               }
               aria-hidden
@@ -378,10 +477,10 @@ function ThemePicker() {
                   className="absolute inset-x-2 top-2 flex h-6 items-center gap-1 rounded-md px-1.5"
                   style={{ background: theme.card }}
                 >
-                  <span className="h-2 w-2 rounded-full bg-[#4ade80]" />
+                  <span className="h-2 w-2 rounded-full bg-[#10b981]" />
                   <span
                     className="h-1 flex-1 rounded-full"
-                    style={{ background: theme.id === 'light' ? '#d4d4d4' : '#3a3a3a' }}
+                    style={{ background: theme.id === 'light' ? '#d8c7a6' : '#3a4248' }}
                   />
                 </span>
               )}

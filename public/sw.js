@@ -19,7 +19,7 @@ const SHELL = `${VERSION}-shell`
 const ASSETS = `${VERSION}-assets`
 
 // Enough to render something useful on a cold, offline start.
-const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
+const PRECACHE = ['/', '/theme-init.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -79,6 +79,23 @@ self.addEventListener('fetch', (event) => {
             return res
           }),
       ),
+    )
+    return
+  }
+
+  // The theme script has no fingerprint, so it is fetched fresh when online and
+  // served from the cache when not.
+  if (url.pathname === '/theme-init.js') {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(SHELL).then((c) => c.put('/theme-init.js', copy))
+          }
+          return res
+        })
+        .catch(() => caches.match('/theme-init.js').then((hit) => hit ?? Response.error())),
     )
     return
   }

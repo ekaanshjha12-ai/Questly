@@ -1,127 +1,72 @@
-import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { IdCard, MessageCircle, Newspaper, Swords } from 'lucide-react'
-import type { AppState, CardDesign } from '../../types'
-import type { AuthUser, Challenge } from '../../lib/api'
-import { cardData } from '../../lib/card'
+import { useEffect, useRef } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import type { AppState } from '../../types'
+import type { AuthUser } from '../../lib/api'
 import type { Inbox } from '../../hooks/useMessages'
+import { match, useRouter } from '../../app/router'
 import FeedScreen from './FeedScreen'
 import MessagesScreen from './MessagesScreen'
-import ChallengesScreen from '../ChallengesScreen'
-import CardEditor from '../CardEditor'
+import PlayerCardSheet from '../PlayerCardSheet'
+import Tabs from '../ui/Tabs'
 
 /**
- * The social side of Questly: the feed, challenges, messages, and your own
- * card.
+ * The social side of Questly: the Adventure Log, messages, and your own posts.
  *
- * No followers and no following — everyone in your age band shares one feed,
- * and the way to connect with a person is to open their card: challenge them,
- * or message them.
+ * No followers and no following — everyone shares one log, and the way to
+ * connect with a person is to open their card: challenge them, or message
+ * them. Each tab has its own address, so a notification can open a
+ * conversation directly and the back gesture moves between tabs.
  */
 
-export type SocialTab = 'feed' | 'challenges' | 'messages' | 'card'
+export type SocialTab = 'feed' | 'messages' | 'mine'
 
-const TABS: { id: SocialTab; label: string; icon: typeof Newspaper }[] = [
-  { id: 'feed', label: 'Feed', icon: Newspaper },
-  { id: 'challenges', label: 'Challenges', icon: Swords },
-  { id: 'messages', label: 'Messages', icon: MessageCircle },
-  { id: 'card', label: 'My card', icon: IdCard },
-]
+export default function SocialHome({ state, user, inbox }: { state: AppState; user: AuthUser; inbox: Inbox }) {
+  const { path, search, navigate } = useRouter()
+  const conversation = match('/social/messages/:id', path)
+  const player = match('/u/:username', path)
+  const tab: SocialTab = path.startsWith('/social/messages') ? 'messages' : path === '/social/mine' ? 'mine' : 'feed'
 
-export default function SocialHome({
-  state,
-  user,
-  challenges,
-  inbox,
-  onSetCard,
-  startSharing,
-}: {
-  state: AppState
-  user: AuthUser
-  inbox: Inbox
-  challenges: {
-    challenges: Challenge[] | null
-    error: string | null
-    refresh: () => Promise<void>
-    upsert: (c: Challenge) => void
-    incomingCount: number
-  }
-  onSetCard: (card: CardDesign | null) => void
-  startSharing?: boolean
-}) {
-  const [tab, setTab] = useState<SocialTab>('feed')
-  const data = useMemo(() => cardData(state, user), [state, user])
+  // "Share progress" from Focus Mode arrives as ?share=1. Read once, then the
+  // address is tidied so a refresh does not open the composer again.
+  const startSharing = useRef(search.get('share') === '1').current
+  useEffect(() => {
+    if (search.get('share') === '1') navigate('/social', { replace: true, keepScroll: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const tabs = [
+    { id: 'feed' as const, label: 'Adventure Log' },
+    { id: 'messages' as const, label: 'Messages', badge: inbox.unread + inbox.requests },
+    ...(user.username ? [{ id: 'mine' as const, label: 'My posts' }] : []),
+  ]
 
   return (
     <div className="space-y-4">
-      {/* Four tabs: on a phone, icon over label so each fits its quarter. */}
-      <div className="grid grid-cols-4 gap-1 rounded-2xl border border-ink-600 bg-ink-850 p-1">
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const badge = id === 'challenges' ? challenges.incomingCount : id === 'messages' ? inbox.unread + inbox.requests : 0
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              aria-pressed={tab === id}
-              aria-label={badge > 0 ? `${label}, ${badge} new` : label}
-              className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:py-2.5 sm:text-xs ${
-                tab === id ? 'text-onAccent' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {tab === id && (
-                <motion.span
-                  layoutId="social-tab"
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500"
-                  transition={{ type: 'spring', stiffness: 400, damping: 34 }}
-                />
-              )}
-              <span className="relative">
-                <Icon className="h-4 w-4" />
-                {badge > 0 && (
-                  <span className="absolute -right-2.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-ember-500 px-1 text-[8px] font-bold leading-none text-onAccent ring-2 ring-ink-850">
-                    {badge > 9 ? '9+' : badge}
-                  </span>
-                )}
-              </span>
-              <span className="relative">{label}</span>
-            </button>
-          )
-        })}
-      </div>
+      <Tabs
+        label="Social"
+        tabs={tabs}
+        value={tab}
+        onChange={(id) => navigate(id === 'feed' ? '/social' : id === 'messages' ? '/social/messages' : '/social/mine', { keepScroll: false })}
+      />
 
       {tab === 'feed' && <FeedScreen state={state} myName={state.player.name} startSharing={startSharing} />}
 
-      {tab === 'challenges' && (
-        <ChallengesScreen
+      {tab === 'messages' && (
+        <MessagesScreen
+          inbox={inbox}
           myName={state.player.name}
-          challenges={challenges.challenges}
-          error={challenges.error}
-          onRefresh={challenges.refresh}
-          onUpsert={challenges.upsert}
+          conversationId={conversation?.id ?? null}
+          onConversationClosed={() => {
+            if (conversation) navigate('/social/messages', { replace: true })
+          }}
         />
       )}
 
-      {tab === 'messages' && <MessagesScreen inbox={inbox} myName={state.player.name} />}
+      {tab === 'mine' && user.username && <FeedScreen state={state} myName={state.player.name} username={user.username} />}
 
-      {tab === 'card' && (
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-ink-600 bg-ink-850 p-4">
-            <p className="font-display text-sm font-semibold text-slate-100">Your Questly card</p>
-            <p className="text-[11px] text-slate-500">This is what other players see when they open you. Make it yours.</p>
-            <div className="mt-3">
-              <CardEditor design={state.card} data={data} onChange={onSetCard} />
-            </div>
-          </section>
-
-          {user.username && (
-            <section>
-              <p className="mb-2 text-[11px] uppercase tracking-wide text-slate-500">Your posts</p>
-              <FeedScreen state={state} myName={state.player.name} username={user.username} />
-            </section>
-          )}
-        </div>
-      )}
+      <AnimatePresence>
+        {player && <PlayerCardSheet username={player.username} myName={state.player.name} onClose={() => navigate('/social', { replace: true })} />}
+      </AnimatePresence>
     </div>
   )
 }

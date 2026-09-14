@@ -13,9 +13,9 @@ function systemTheme(): ResolvedTheme {
 export function storedChoice(): ThemeChoice {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'system'
+    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'dark'
   } catch {
-    return 'system'
+    return 'dark'
   }
 }
 
@@ -34,7 +34,7 @@ export function applyTheme(resolved: ResolvedTheme): void {
   const root = document.documentElement
   root.setAttribute('data-theme', resolved)
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', resolved === 'light' ? '#e6e6e6' : '#0b0b0b')
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#ece4d3' : '#090b0c')
 }
 
 /** Fired whenever any control changes the theme, so every other control showing

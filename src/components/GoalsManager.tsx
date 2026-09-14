@@ -33,11 +33,12 @@ export default function GoalsManager({ goals, onAddGoal, onArchiveGoal }: Props)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-semibold text-slate-100">Your Goals</h2>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">Each goal writes daily, weekly and monthly quests for you.</p>
         <button
+          type="button"
           onClick={() => setShowForm((s) => !s)}
-          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3.5 py-2 text-sm font-semibold text-onAccent hover:opacity-90"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3.5 py-2 text-sm font-semibold text-onAccent hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> New Goal
         </button>

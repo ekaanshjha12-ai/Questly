@@ -1,50 +1,38 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type {
   AppState,
+  CardDesign,
   CharacterId,
-  Goal,
-  GoalCategory,
-  FocusSession,
-  NewGoalInput,
-  PlanItemInput,
-  SessionKind,
-  ScheduleEntry,
-  StreakState,
   Deck,
   ExplainReport,
-  SuccessOutlook,
-  PlanItem,
-  QuestPool,
-  Todo,
+  Goal,
+  GoalCategory,
   Habit,
   MoodSlot,
-  CardDesign,
-  VerificationKind,
+  NewGoalInput,
+  QuestPool,
+  ScheduleEntry,
+  SuccessOutlook,
 } from '../types'
 import { hydrate, saveCachedState } from '../lib/storage'
-import { generateQuestPool as generateQuestPoolRemote, saveState as saveStateRemote } from '../lib/api'
-import { ensureCurrentQuests } from '../lib/quests'
-import { dailyKey, isYesterday, periodKey } from '../lib/period'
-import { advanceProgression, levelFromXp, proofsOutstanding, PROOFS_PER_LEVEL } from '../lib/leveling'
-import { evaluateAchievements, ACHIEVEMENTS } from '../lib/achievements'
-import { findModel, isModelUnlocked, rankForLevel } from '../data/ranks'
-import { sessionXp } from '../lib/time'
+import { ApiError, generateQuestPool as generateQuestPoolRemote, refreshGoalQuests, saveState as saveStateRemote, type RewardSummary } from '../lib/api'
 import { tidyCard } from '../lib/card'
 
-export type AppEvent =
-  | { id: string; type: 'xp'; amount: number }
-  | { id: string; type: 'levelup'; level: number }
-  | { id: string; type: 'achievement'; achievementId: string }
-  | { id: string; type: 'streak'; days: number }
-  | { id: string; type: 'rank'; rankId: string }
+/**
+ * The player's notebook: goals, habits, moods, the planner's placements,
+ * study decks, reports, the progress outlook and the card design.
+ *
+ * Kept in the browser and saved to the server as one document. Nothing here
+ * earns anything — quests, focus sessions, XP and items belong to the server
+ * (see game/GameProvider.tsx). A save can still unlock an achievement (a first
+ * goal, a designed card); the server says so in its reply and `onRewards`
+ * passes that on.
+ */
 
 type Action =
   | { type: 'ONBOARD'; name: string; character: CharacterId; goals: NewGoalInput[] }
-  | { type: 'ADD_GOAL'; title: string; category: GoalCategory }
+  | { type: 'ADD_GOAL'; title: string; category: GoalCategory; detail?: string }
   | { type: 'ARCHIVE_GOAL'; goalId: string }
-  | { type: 'SYNC_QUESTS' }
-  | { type: 'COMPLETE_QUEST'; questId: string }
-  | { type: 'UNCOMPLETE_QUEST'; questId: string }
   | { type: 'SET_QUEST_POOL'; goalId: string; pool: QuestPool }
   | { type: 'ADD_DECK'; topic: string; cards: { front: string; back: string; subtopic?: string }[] }
   | { type: 'DELETE_DECK'; deckId: string }
@@ -54,63 +42,20 @@ type Action =
   | { type: 'ADD_REPORT'; report: Omit<ExplainReport, 'id' | 'createdAt'> }
   | { type: 'DELETE_REPORT'; reportId: string }
   | { type: 'SET_OUTLOOK'; outlook: Omit<SuccessOutlook, 'createdAt'> }
-  | { type: 'BUY_MODEL'; modelId: string }
-  | { type: 'EQUIP_MODEL'; modelId: string | null }
-  | { type: 'ADD_TODO'; title: string }
-  | { type: 'TOGGLE_TODO'; todoId: string }
-  | { type: 'DELETE_TODO'; todoId: string }
-  | { type: 'CLEAR_DONE_TODOS' }
   | { type: 'SCHEDULE_TASK'; refType: 'todo' | 'quest'; refId: string; date: string; block?: string }
-  /** `block: null` clears the time of day; omitting it keeps whatever the entry
-   * already had, so dragging between weekday columns does not lose the hour. */
+  | { type: 'ADD_SCHEDULE_ENTRIES'; entries: { refId: string; date: string; block?: string }[] }
+  /** `block: null` clears the time of day; omitting it keeps what the entry had. */
   | { type: 'MOVE_SCHEDULE_ENTRY'; entryId: string; date: string; block?: string | null }
   | { type: 'UNSCHEDULE'; entryId: string }
-  | { type: 'ADD_PLANNED_TODO'; title: string; date: string; block?: string }
-  | { type: 'APPLY_PLAN'; items: PlanItemInput[] }
-  | {
-      type: 'SAVE_SESSION'
-      kind: SessionKind
-      label: string
-      plan: PlanItem[]
-      goalId: string | null
-      durationMs: number
-      targetMs: number | null
-      completed: boolean
-      startedAt: string
-    }
-  | { type: 'DELETE_SESSION'; sessionId: string }
-  | { type: 'VERIFY_QUEST'; questId: string; kind: VerificationKind; note: string }
   | { type: 'RENAME_PLAYER'; name: string }
   | { type: 'SET_CARD'; card: CardDesign | null }
-  | { type: 'GRANT_CHALLENGE_REWARD'; challengeId: string; xp: number }
   | { type: 'ADD_HABIT'; name: string; color: string }
   | { type: 'RENAME_HABIT'; habitId: string; name: string }
   | { type: 'RECOLOR_HABIT'; habitId: string; color: string }
   | { type: 'DELETE_HABIT'; habitId: string }
   | { type: 'TOGGLE_HABIT_MARK'; habitId: string; date: string }
-  /** `moodId: null` clears the slot, which is how you undo a mistap. */
   | { type: 'SET_MOOD'; date: string; slot: MoodSlot; moodId: string | null }
   | { type: 'HYDRATE'; state: AppState }
-
-export const TODO_XP = 10
-const TODO_COINS = Math.round(TODO_XP / 3)
-
-/** Bonus for backing a completed quest with evidence. A photo is stronger
- * proof than a self-reported description, so it's worth more. */
-export const VERIFY_BONUS_XP: Record<VerificationKind, number> = {
-  photo: 15,
-  voice: 8,
-}
-
-function makeTodo(title: string): Todo {
-  return {
-    id: crypto.randomUUID(),
-    title: title.trim(),
-    done: false,
-    createdAt: new Date().toISOString(),
-    completedAt: null,
-  }
-}
 
 function makeEntry(refType: 'todo' | 'quest', refId: string, date: string, block?: string): ScheduleEntry {
   return {
@@ -145,172 +90,42 @@ function makeHabit(name: string, color: string): Habit {
   }
 }
 
-function withSyncedQuests(state: AppState): AppState {
-  const quests = ensureCurrentQuests(state.goals, state.quests)
-  return quests === state.quests ? state : { ...state, quests }
-}
-
-/** Advances the streak the first time anything is completed on a given day;
- * repeat completions the same day leave it untouched. */
-function advanceStreak(streak: StreakState, now: Date): StreakState {
-  const today = dailyKey(now)
-  if (streak.lastCompletedDay === today) return streak
-  const continued = streak.lastCompletedDay ? isYesterday(streak.lastCompletedDay, now) : false
-  const current = continued ? streak.current + 1 : 1
-  return { current, longest: Math.max(streak.longest, current), lastCompletedDay: today }
-}
-
-/**
- * Wraps the reducer so every state change gets a chance to claim levels the
- * player has earned. Done here rather than in each case so no action can
- * accidentally leave XP and level out of step.
- */
-function makeReducer(proofsRequired: number) {
-  return function reducerWithProgression(state: AppState, action: Action): AppState {
-    const next = reducer(state, action)
-    if (next === state) return next
-
-    const xpLevel = levelFromXp(next.player.xp).level
-    const progression = advanceProgression(next.progression, xpLevel, proofsRequired)
-    return progression === next.progression ? next : { ...next, progression }
-  }
-}
-
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'HYDRATE':
-      return withSyncedQuests(action.state)
+      return action.state
 
     case 'ONBOARD': {
-      const goals = action.goals
-        .filter((g) => g.title.trim())
-        .map((g) => makeGoal(g.title, g.category, g.detail))
-      const next: AppState = {
+      const goals = action.goals.filter((g) => g.title.trim()).map((g) => makeGoal(g.title, g.category, g.detail))
+      return {
         ...state,
         onboarded: true,
         player: { ...state.player, name: action.name.trim() || 'Adventurer', character: action.character },
         goals: [...state.goals, ...goals],
       }
-      return withSyncedQuests(next)
     }
 
     case 'ADD_GOAL': {
-      const goal = makeGoal(action.title, action.category)
-      const next: AppState = { ...state, goals: [...state.goals, goal] }
-      return withSyncedQuests(next)
-    }
-
-    case 'ARCHIVE_GOAL': {
-      return {
-        ...state,
-        goals: state.goals.map((g) => (g.id === action.goalId ? { ...g, archived: true } : g)),
-      }
-    }
-
-    case 'SYNC_QUESTS':
-      return withSyncedQuests(state)
-
-    case 'COMPLETE_QUEST': {
-      const quest = state.quests.find((q) => q.id === action.questId)
-      if (!quest || quest.completed) return state
-
-      const now = new Date()
-      const quests = state.quests.map((q) =>
-        q.id === quest.id ? { ...q, completed: true, completedAt: now.toISOString() } : q,
-      )
-
-      return withSyncedQuests({
-        ...state,
-        quests,
-        streak: advanceStreak(state.streak, now),
-        player: { ...state.player, xp: state.player.xp + quest.xp, coins: state.player.coins + Math.round(quest.xp / 3) },
-      })
-    }
-
-    case 'UNCOMPLETE_QUEST': {
-      const quest = state.quests.find((q) => q.id === action.questId)
-      if (!quest || !quest.completed) return state
-      // A verified quest is locked: un-ticking it would refund the base XP but
-      // not the verification bonus, so re-completing could mint XP.
-      if (quest.verifiedBy) return state
-      const quests = state.quests.map((q) => (q.id === quest.id ? { ...q, completed: false, completedAt: null } : q))
-      return withSyncedQuests({
-        ...state,
-        quests,
-        player: {
-          ...state.player,
-          xp: Math.max(0, state.player.xp - quest.xp),
-          coins: Math.max(0, state.player.coins - Math.round(quest.xp / 3)),
-        },
-      })
-    }
-
-    case 'ADD_TODO': {
       if (!action.title.trim()) return state
-      return { ...state, todos: [makeTodo(action.title), ...state.todos] }
+      return { ...state, goals: [...state.goals, makeGoal(action.title, action.category, action.detail)] }
     }
 
-    case 'TOGGLE_TODO': {
-      const todo = state.todos.find((t) => t.id === action.todoId)
-      if (!todo) return state
-      const now = new Date()
+    case 'ARCHIVE_GOAL':
+      return { ...state, goals: state.goals.map((g) => (g.id === action.goalId ? { ...g, archived: true } : g)) }
 
-      if (todo.done) {
-        return withSyncedQuests({
-          ...state,
-          todos: state.todos.map((t) => (t.id === todo.id ? { ...t, done: false, completedAt: null } : t)),
-          player: {
-            ...state.player,
-            xp: Math.max(0, state.player.xp - TODO_XP),
-            coins: Math.max(0, state.player.coins - TODO_COINS),
-          },
-        })
-      }
-
-      return withSyncedQuests({
-        ...state,
-        todos: state.todos.map((t) =>
-          t.id === todo.id ? { ...t, done: true, completedAt: now.toISOString() } : t,
-        ),
-        streak: advanceStreak(state.streak, now),
-        player: {
-          ...state.player,
-          xp: state.player.xp + TODO_XP,
-          coins: state.player.coins + TODO_COINS,
-        },
-      })
+    case 'SET_QUEST_POOL': {
+      const goal = state.goals.find((g) => g.id === action.goalId)
+      if (!goal || goal.questPool) return state
+      return { ...state, goals: state.goals.map((g) => (g.id === action.goalId ? { ...g, questPool: action.pool } : g)) }
     }
-
-    case 'DELETE_TODO':
-      return {
-        ...state,
-        todos: state.todos.filter((t) => t.id !== action.todoId),
-        schedule: state.schedule.filter((e) => !(e.refType === 'todo' && e.refId === action.todoId)),
-      }
 
     case 'RENAME_PLAYER': {
-      // Same limit as onboarding. The leaderboard screens the name on its way
-      // out, since that is the only place anyone else sees it.
       const name = action.name.trim().slice(0, 24)
       if (!name || name === state.player.name) return state
       return { ...state, player: { ...state.player, name } }
     }
 
-    case 'GRANT_CHALLENGE_REWARD': {
-      // Keyed by challenge, so fetching the list again — or on another device
-      // sharing this state — never pays the same reward twice. XP only: the
-      // server allowed exactly this much above the normal rate, and minting
-      // coins alongside it is not part of what was agreed.
-      if (action.xp <= 0 || state.challengeRewards.includes(action.challengeId)) return state
-      return {
-        ...state,
-        player: { ...state.player, xp: state.player.xp + Math.round(action.xp) },
-        challengeRewards: [...state.challengeRewards, action.challengeId].slice(-5000),
-      }
-    }
-
     case 'SET_CARD':
-      // Tidied on the way in, so an oversized drawing never reaches a save.
       return { ...state, card: action.card ? tidyCard(action.card) : null }
 
     case 'ADD_HABIT': {
@@ -322,38 +137,21 @@ function reducer(state: AppState, action: Action): AppState {
     case 'RENAME_HABIT': {
       const name = action.name.trim()
       if (!name) return state
-      return {
-        ...state,
-        habits: state.habits.map((h) => (h.id === action.habitId ? { ...h, name } : h)),
-      }
+      return { ...state, habits: state.habits.map((h) => (h.id === action.habitId ? { ...h, name } : h)) }
     }
 
     case 'RECOLOR_HABIT':
-      return {
-        ...state,
-        habits: state.habits.map((h) =>
-          h.id === action.habitId ? { ...h, color: action.color } : h,
-        ),
-      }
+      return { ...state, habits: state.habits.map((h) => (h.id === action.habitId ? { ...h, color: action.color } : h)) }
 
     case 'DELETE_HABIT': {
-      // The marks go with it. Keeping them would quietly resurrect the row the
-      // next time someone reused the id, and orphaned marks are dead weight in
-      // every save from then on.
+      // The marks go with it, or reusing the id later would resurrect them.
       const { [action.habitId]: _dropped, ...marks } = state.habitMarks
-      return {
-        ...state,
-        habits: state.habits.filter((h) => h.id !== action.habitId),
-        habitMarks: marks,
-      }
+      return { ...state, habits: state.habits.filter((h) => h.id !== action.habitId), habitMarks: marks }
     }
 
     case 'TOGGLE_HABIT_MARK': {
       const marked = state.habitMarks[action.habitId] ?? []
-      const has = marked.includes(action.date)
-      const next = has
-        ? marked.filter((d) => d !== action.date)
-        : [...marked, action.date].sort()
+      const next = marked.includes(action.date) ? marked.filter((d) => d !== action.date) : [...marked, action.date].sort()
       return { ...state, habitMarks: { ...state.habitMarks, [action.habitId]: next } }
     }
 
@@ -361,34 +159,25 @@ function reducer(state: AppState, action: Action): AppState {
       const day = { ...(state.moods[action.date] ?? {}) }
       if (action.moodId === null) delete day[action.slot]
       else day[action.slot] = action.moodId
-
-      // An emptied day is removed rather than left as `{}`, so a month of
-      // tapping and untapping does not leave the save full of blank records.
       const moods = { ...state.moods }
       if (Object.keys(day).length) moods[action.date] = day
       else delete moods[action.date]
-
       return { ...state, moods }
     }
 
-    case 'CLEAR_DONE_TODOS': {
-      const cleared = new Set(state.todos.filter((t) => t.done).map((t) => t.id))
-      return {
-        ...state,
-        todos: state.todos.filter((t) => !t.done),
-        schedule: state.schedule.filter((e) => !(e.refType === 'todo' && cleared.has(e.refId))),
-      }
+    case 'SCHEDULE_TASK': {
+      // A quest sits on exactly one day; placing it again moves it.
+      const others = state.schedule.filter((e) => !(e.refId === action.refId))
+      return { ...state, schedule: [...others, makeEntry(action.refType, action.refId, action.date, action.block)] }
     }
 
-    case 'SCHEDULE_TASK': {
-      // A task sits on exactly one day. Placing it again moves it rather than
-      // adding a second copy — two placements of one to-do would share a single
-      // `done` flag, so ticking either would tick both.
-      const others = state.schedule.filter(
-        (e) => !(e.refType === action.refType && e.refId === action.refId),
-      )
-      const entry = makeEntry(action.refType, action.refId, action.date, action.block)
-      return { ...state, schedule: [...others, entry] }
+    case 'ADD_SCHEDULE_ENTRIES': {
+      if (!action.entries.length) return state
+      const ids = new Set(action.entries.map((e) => e.refId))
+      return {
+        ...state,
+        schedule: [...state.schedule.filter((e) => !ids.has(e.refId)), ...action.entries.map((e) => makeEntry('quest', e.refId, e.date, e.block))],
+      }
     }
 
     case 'MOVE_SCHEDULE_ENTRY':
@@ -404,130 +193,6 @@ function reducer(state: AppState, action: Action): AppState {
     case 'UNSCHEDULE':
       return { ...state, schedule: state.schedule.filter((e) => e.id !== action.entryId) }
 
-    case 'ADD_PLANNED_TODO': {
-      if (!action.title.trim()) return state
-      const todo = makeTodo(action.title)
-      const entry = makeEntry('todo', todo.id, action.date, action.block)
-      return {
-        ...state,
-        todos: [todo, ...state.todos],
-        schedule: [...state.schedule, entry],
-      }
-    }
-
-    case 'APPLY_PLAN': {
-      // One dispatch for the whole plan: every dated task gets its schedule
-      // entry created right alongside its to-do, so it shows up already
-      // placed on the Schedule tab instead of sitting in the backlog waiting
-      // to be dragged in by hand.
-      const todos: Todo[] = []
-      const entries: ScheduleEntry[] = []
-      for (const item of action.items) {
-        const title = item.title.trim()
-        if (!title) continue
-        const todo = makeTodo(title)
-        todos.push(todo)
-        if (item.placement) {
-          entries.push(makeEntry('todo', todo.id, item.placement.date, item.placement.block))
-        }
-      }
-      if (!todos.length) return state
-      return { ...state, todos: [...todos, ...state.todos], schedule: [...state.schedule, ...entries] }
-    }
-
-    case 'SAVE_SESSION': {
-      // Ignore trivial taps so a mis-click can't farm XP.
-      if (action.durationMs < 1000) return state
-      const now = new Date()
-      const session: FocusSession = {
-        id: crypto.randomUUID(),
-        kind: action.kind,
-        label: action.label.trim() || (action.kind === 'timer' ? 'Focus session' : 'Stopwatch session'),
-        goalId: action.goalId,
-        durationMs: action.durationMs,
-        targetMs: action.targetMs,
-        completed: action.completed,
-        startedAt: action.startedAt,
-        endedAt: now.toISOString(),
-        ...(action.plan?.length ? { plan: action.plan } : {}),
-      }
-      const xp = sessionXp(action.durationMs)
-      return withSyncedQuests({
-        ...state,
-        sessions: [session, ...state.sessions],
-        streak: advanceStreak(state.streak, now),
-        player: {
-          ...state.player,
-          xp: state.player.xp + xp,
-          coins: state.player.coins + Math.round(xp / 3),
-        },
-      })
-    }
-
-    case 'DELETE_SESSION':
-      // History only — XP already earned is not clawed back.
-      return { ...state, sessions: state.sessions.filter((s) => s.id !== action.sessionId) }
-
-    case 'VERIFY_QUEST': {
-      const quest = state.quests.find((q) => q.id === action.questId)
-      // Only ever pays out once per quest.
-      if (!quest || quest.verifiedBy) return state
-
-      const now = new Date()
-      const bonus = VERIFY_BONUS_XP[action.kind]
-      const quests = state.quests.map((q) =>
-        q.id === quest.id
-          ? {
-              ...q,
-              completed: true,
-              completedAt: q.completedAt ?? now.toISOString(),
-              verifiedBy: action.kind,
-              verifiedAt: now.toISOString(),
-              verificationNote: action.note,
-            }
-          : q,
-      )
-
-      // Verifying an unfinished quest completes it too, so it must also pay the
-      // quest's own XP — not just the bonus.
-      const baseXp = quest.completed ? 0 : quest.xp
-      const gained = baseXp + bonus
-
-      return withSyncedQuests({
-        ...state,
-        quests,
-        streak: advanceStreak(state.streak, now),
-        // Only photos count toward the level gate — a spoken confirmation is
-        // self-reported, so it still pays XP but never unlocks a level.
-        progression:
-          action.kind === 'photo'
-            ? { ...state.progression, proofs: state.progression.proofs + 1 }
-            : state.progression,
-        player: {
-          ...state.player,
-          xp: state.player.xp + gained,
-          coins: state.player.coins + Math.round(gained / 3),
-        },
-      })
-    }
-
-    case 'SET_QUEST_POOL': {
-      const goal = state.goals.find((g) => g.id === action.goalId)
-      if (!goal || goal.questPool) return state
-
-      const goals = state.goals.map((g) => (g.id === action.goalId ? { ...g, questPool: action.pool } : g))
-
-      // Drop this goal's unfinished quests for the current periods so the newly
-      // written ones show up now. Waiting until tomorrow would leave the user
-      // staring at the generic quests they just complained about. Completed
-      // quests stay — their XP is already banked.
-      const quests = state.quests.filter(
-        (q) => q.goalId !== action.goalId || q.completed || q.periodKey !== periodKey(q.period),
-      )
-
-      return withSyncedQuests({ ...state, goals, quests })
-    }
-
     case 'ADD_DECK': {
       const cards = action.cards.map((c) => ({
         id: crypto.randomUUID(),
@@ -536,12 +201,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...(c.subtopic ? { subtopic: c.subtopic } : {}),
       }))
       if (!cards.length) return state
-      const deck: Deck = {
-        id: crypto.randomUUID(),
-        topic: action.topic,
-        cards,
-        createdAt: new Date().toISOString(),
-      }
+      const deck: Deck = { id: crypto.randomUUID(), topic: action.topic, cards, createdAt: new Date().toISOString() }
       return { ...state, decks: [deck, ...state.decks] }
     }
 
@@ -555,9 +215,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         decks: state.decks.map((d) =>
-          d.id !== action.deckId
-            ? d
-            : { ...d, cards: d.cards.map((c) => (c.id === action.cardId ? { ...c, front, back } : c)) },
+          d.id !== action.deckId ? d : { ...d, cards: d.cards.map((c) => (c.id === action.cardId ? { ...c, front, back } : c)) },
         ),
       }
     }
@@ -565,28 +223,19 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DELETE_CARD':
       return {
         ...state,
-        decks: state.decks.map((d) =>
-          d.id !== action.deckId ? d : { ...d, cards: d.cards.filter((c) => c.id !== action.cardId) },
-        ),
+        decks: state.decks.map((d) => (d.id !== action.deckId ? d : { ...d, cards: d.cards.filter((c) => c.id !== action.cardId) })),
       }
 
     case 'ADD_CARD':
       return {
         ...state,
         decks: state.decks.map((d) =>
-          d.id !== action.deckId
-            ? d
-            : { ...d, cards: [...d.cards, { id: crypto.randomUUID(), front: 'New card', back: '' }] },
+          d.id !== action.deckId ? d : { ...d, cards: [...d.cards, { id: crypto.randomUUID(), front: 'New card', back: '' }] },
         ),
       }
 
     case 'ADD_REPORT': {
-      const report: ExplainReport = {
-        ...action.report,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-      }
-      // Capped so a long history cannot bloat the synced state blob.
+      const report: ExplainReport = { ...action.report, id: crypto.randomUUID(), createdAt: new Date().toISOString() }
       return { ...state, reports: [report, ...state.reports].slice(0, 50) }
     }
 
@@ -594,156 +243,106 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, reports: state.reports.filter((r) => r.id !== action.reportId) }
 
     case 'SET_OUTLOOK':
-      // Only ever one, replaced wholesale — an outlook is a snapshot of right
-      // now, and a stale one alongside it would just be noise.
       return { ...state, outlook: { ...action.outlook, createdAt: new Date().toISOString() } }
-
-    case 'BUY_MODEL': {
-      const model = findModel(action.modelId)
-      if (!model || state.collection.unlocked.includes(model.id)) return state
-
-      const { level } = levelFromXp(state.player.xp)
-      if (!isModelUnlocked(model, level)) return state
-      if (state.player.coins < model.price) return state
-
-      // Buying also wears it — nobody buys a look to leave it in the drawer.
-      return {
-        ...state,
-        player: { ...state.player, coins: state.player.coins - model.price },
-        collection: {
-          unlocked: [...state.collection.unlocked, model.id],
-          active: model.id,
-        },
-      }
-    }
-
-    case 'EQUIP_MODEL': {
-      if (action.modelId === null) {
-        return { ...state, collection: { ...state.collection, active: null } }
-      }
-      if (!state.collection.unlocked.includes(action.modelId)) return state
-      return { ...state, collection: { ...state.collection, active: action.modelId } }
-    }
 
     default:
       return state
   }
 }
 
-let eventCounter = 0
-function nextEventId(): string {
-  eventCounter += 1
-  return `evt-${Date.now()}-${eventCounter}`
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+const WRITING_UNAVAILABLE_KEY = 'questly:quest-writing-unavailable'
+
+function questWritingUnavailable(): boolean {
+  try {
+    return sessionStorage.getItem(WRITING_UNAVAILABLE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
-export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error'
+function markQuestWritingUnavailable(): void {
+  try {
+    sessionStorage.setItem(WRITING_UNAVAILABLE_KEY, '1')
+  } catch {
+    // Private mode: asked again next load, which is harmless.
+  }
+}
+
+function goalSignature(state: AppState): string {
+  return state.goals
+    .filter((g) => !g.archived)
+    .map((g) => g.id)
+    .sort()
+    .join(',')
+}
 
 const SAVE_DEBOUNCE_MS = 600
 
 export function useAppState(
   userId: string,
   initialState: AppState | null,
-  /** 0 disables the photo gate — used when the server has no verification key,
-   * so levelling can never become impossible. */
-  proofsRequired: number = PROOFS_PER_LEVEL,
+  {
+    onRewards,
+    onGoalsSaved,
+  }: {
+    /** A save unlocked something (first goal, designed card). */
+    onRewards?: (summary: RewardSummary) => void
+    /** Goals, or their written quests, reached the server; the board should refresh. */
+    onGoalsSaved?: () => void
+  } = {},
 ) {
-  const reducerWithGate = useMemo(() => makeReducer(proofsRequired), [proofsRequired])
-  const [state, dispatch] = useReducer(reducerWithGate, initialState, (init) =>
-    withSyncedQuests(hydrate(init)),
-  )
-  const [events, setEvents] = useState<AppEvent[]>([])
+  const [state, dispatch] = useReducer(reducer, initialState, (init) => hydrate(init))
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
-  const prevSnapshot = useRef({ xp: state.player.xp, level: state.progression.level, streak: state.streak.current })
-  const hasHydrated = useRef(false)
-  // The first effect run just mirrors what we already loaded from the server,
-  // so there is nothing new to push.
   const skipFirstSave = useRef(true)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingPoolRefresh = useRef(new Set<string>())
+  const callbacks = useRef({ onRewards, onGoalsSaved })
+  callbacks.current = { onRewards, onGoalsSaved }
+  // The goals the server last saw, so a save that adds or archives one can
+  // prompt the board to pick up (or drop) that goal's quests.
+  const savedGoals = useRef(goalSignature(state))
 
   useEffect(() => {
     saveCachedState(userId, state)
-
     if (skipFirstSave.current) {
       skipFirstSave.current = false
       return
     }
-
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSyncStatus('saving')
     saveTimer.current = setTimeout(() => {
+      const signature = goalSignature(state)
       saveStateRemote(state)
-        .then(() => setSyncStatus('saved'))
+        .then(async (result) => {
+          setSyncStatus('saved')
+          if (result?.rewards) callbacks.current.onRewards?.(result.rewards)
+          const goalsChanged = signature !== savedGoals.current
+          savedGoals.current = signature
+          // A goal that just got its written quests: swap today's template
+          // quests for the written ones, now that the server has the pool.
+          const goals = [...pendingPoolRefresh.current]
+          pendingPoolRefresh.current.clear()
+          for (const goalId of goals) {
+            try {
+              await refreshGoalQuests(goalId)
+            } catch {
+              // The next period picks up the written quests anyway.
+            }
+          }
+          if (goals.length || goalsChanged) callbacks.current.onGoalsSaved?.()
+        })
         .catch(() => setSyncStatus('error'))
     }, SAVE_DEBOUNCE_MS)
-
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
   }, [state, userId])
 
-  // Re-check for newly-due quests when the tab regains focus (e.g. across midnight).
-  useEffect(() => {
-    const onFocus = () => dispatch({ type: 'SYNC_QUESTS' })
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [])
-
-  useEffect(() => {
-    if (!hasHydrated.current) {
-      hasHydrated.current = true
-      prevSnapshot.current = { xp: state.player.xp, level: state.progression.level, streak: state.streak.current }
-      return
-    }
-
-    const prev = prevSnapshot.current
-    const newEvents: AppEvent[] = []
-    const xpDelta = state.player.xp - prev.xp
-    // The claimed level, not what XP alone would allow — a gated level-up only
-    // celebrates once the proof actually lands.
-    const level = state.progression.level
-
-    if (xpDelta > 0) {
-      newEvents.push({ id: nextEventId(), type: 'xp', amount: xpDelta })
-      if (state.streak.current > prev.streak && state.streak.current > 1) {
-        newEvents.push({ id: nextEventId(), type: 'streak', days: state.streak.current })
-      }
-      const newlyUnlocked = evaluateAchievements(state)
-      if (newlyUnlocked.length) {
-        const stamp = new Date().toISOString()
-        dispatch({
-          type: 'HYDRATE',
-          state: {
-            ...state,
-            unlockedAchievements: newlyUnlocked.reduce(
-              (acc, id) => ({ ...acc, [id]: stamp }),
-              { ...state.unlockedAchievements },
-            ),
-          },
-        })
-        for (const id of newlyUnlocked) newEvents.push({ id: nextEventId(), type: 'achievement', achievementId: id })
-      }
-
-    }
-
-    // Outside the XP branch: a level can be claimed by submitting proof, which
-    // is a separate moment from earning the XP that unlocked it.
-    if (level > prev.level) {
-      newEvents.push({ id: nextEventId(), type: 'levelup', level })
-      const before = rankForLevel(prev.level)
-      const after = rankForLevel(level)
-      if (after.id !== before.id) {
-        newEvents.push({ id: nextEventId(), type: 'rank', rankId: after.id })
-      }
-    }
-
-    if (newEvents.length) setEvents((prevEvents) => [...prevEvents, ...newEvents])
-    prevSnapshot.current = { xp: state.player.xp, level, streak: state.streak.current }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.player.xp, state.streak.current, state.progression.level])
-
-  // Goals created before the server could write quests, or while it had no key,
-  // are picked up here. Attempts are remembered so a failing server is not hit
-  // once per render.
+  // Goals created before the server could write quests, or while it had no
+  // key, are picked up here. Attempts are remembered so a failing server is
+  // not asked again on every render.
   const poolAttempts = useRef(new Set<string>())
   const unmounted = useRef(false)
   useEffect(
@@ -754,267 +353,62 @@ export function useAppState(
   )
 
   useEffect(() => {
-    const pending = state.goals.filter(
-      (g) => !g.archived && !g.questPool && !poolAttempts.current.has(g.id),
-    )
+    if (questWritingUnavailable()) return
+    const pending = state.goals.filter((g) => !g.archived && !g.questPool && !poolAttempts.current.has(g.id))
     if (!pending.length) return
-
-    // Deliberately no cleanup that aborts this loop. Each pool that arrives
-    // changes state.goals, which re-runs the effect — and an abort-on-rerun
-    // would throw away every goal after the first while still marking them
-    // attempted, so with several goals only one would ever be written. The
-    // re-run finds nothing pending because the ids are already recorded, so
-    // letting the loop finish costs nothing and duplicates no work.
     void (async () => {
       for (const goal of pending) {
         poolAttempts.current.add(goal.id)
         try {
-          const { pool } = await generateQuestPoolRemote({
-            title: goal.title,
-            detail: goal.detail,
-            category: goal.category,
-          })
-          if (!unmounted.current) dispatch({ type: 'SET_QUEST_POOL', goalId: goal.id, pool })
-        } catch {
-          // No key, or the model failed. The generic templates still apply.
+          const { pool } = await generateQuestPoolRemote({ title: goal.title, detail: goal.detail, category: goal.category })
+          if (unmounted.current) return
+          pendingPoolRefresh.current.add(goal.id)
+          dispatch({ type: 'SET_QUEST_POOL', goalId: goal.id, pool })
+        } catch (err) {
+          // No key, or the model failed. The plain wording still applies. A
+          // server with no key says so with a 503; it is not asked again this
+          // session.
+          if (err instanceof ApiError && err.status === 503) {
+            markQuestWritingUnavailable()
+            return
+          }
         }
       }
     })()
   }, [state.goals])
 
-  const dismissEvent = useCallback((id: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== id))
-  }, [])
-
-  const onboard = useCallback(
-    (name: string, character: CharacterId, goals: NewGoalInput[]) => {
-      dispatch({ type: 'ONBOARD', name, character, goals })
-    },
-    [],
-  )
-
-  const addGoal = useCallback((title: string, category: GoalCategory) => {
-    dispatch({ type: 'ADD_GOAL', title, category })
-  }, [])
-
-  const archiveGoal = useCallback((goalId: string) => {
-    dispatch({ type: 'ARCHIVE_GOAL', goalId })
-  }, [])
-
-  const completeQuest = useCallback((questId: string) => {
-    dispatch({ type: 'COMPLETE_QUEST', questId })
-  }, [])
-
-  const uncompleteQuest = useCallback((questId: string) => {
-    dispatch({ type: 'UNCOMPLETE_QUEST', questId })
-  }, [])
-
-  const addTodo = useCallback((title: string) => {
-    dispatch({ type: 'ADD_TODO', title })
-  }, [])
-
-  const toggleTodo = useCallback((todoId: string) => {
-    dispatch({ type: 'TOGGLE_TODO', todoId })
-  }, [])
-
-  const deleteTodo = useCallback((todoId: string) => {
-    dispatch({ type: 'DELETE_TODO', todoId })
-  }, [])
-
-  const clearDoneTodos = useCallback(() => {
-    dispatch({ type: 'CLEAR_DONE_TODOS' })
-  }, [])
-
-  const renamePlayer = useCallback((name: string) => {
-    dispatch({ type: 'RENAME_PLAYER', name })
-  }, [])
-
-  const grantChallengeReward = useCallback((challengeId: string, xp: number) => {
-    dispatch({ type: 'GRANT_CHALLENGE_REWARD', challengeId, xp })
-  }, [])
-
-  const setCard = useCallback((card: CardDesign | null) => {
-    dispatch({ type: 'SET_CARD', card })
-  }, [])
-
-  const addHabit = useCallback((name: string, color: string) => {
-    dispatch({ type: 'ADD_HABIT', name, color })
-  }, [])
-
-  const renameHabit = useCallback((habitId: string, name: string) => {
-    dispatch({ type: 'RENAME_HABIT', habitId, name })
-  }, [])
-
-  const recolorHabit = useCallback((habitId: string, color: string) => {
-    dispatch({ type: 'RECOLOR_HABIT', habitId, color })
-  }, [])
-
-  const deleteHabit = useCallback((habitId: string) => {
-    dispatch({ type: 'DELETE_HABIT', habitId })
-  }, [])
-
-  const toggleHabitMark = useCallback((habitId: string, date: string) => {
-    dispatch({ type: 'TOGGLE_HABIT_MARK', habitId, date })
-  }, [])
-
-  const setMood = useCallback((date: string, slot: MoodSlot, moodId: string | null) => {
-    dispatch({ type: 'SET_MOOD', date, slot, moodId })
-  }, [])
-
-  const scheduleTask = useCallback(
-    (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => {
-      dispatch({ type: 'SCHEDULE_TASK', refType, refId, date, block })
-    },
-    [],
-  )
-
-  const moveScheduleEntry = useCallback((entryId: string, date: string, block?: string | null) => {
-    dispatch({ type: 'MOVE_SCHEDULE_ENTRY', entryId, date, block })
-  }, [])
-
-  const unschedule = useCallback((entryId: string) => {
-    dispatch({ type: 'UNSCHEDULE', entryId })
-  }, [])
-
-  const addPlannedTodo = useCallback((title: string, date: string, block?: string) => {
-    dispatch({ type: 'ADD_PLANNED_TODO', title, date, block })
-  }, [])
-
-  const applyPlan = useCallback((items: PlanItemInput[]) => {
-    dispatch({ type: 'APPLY_PLAN', items })
-  }, [])
-
-  const saveSession = useCallback(
-    (input: {
-      kind: SessionKind
-      label: string
-      plan: PlanItem[]
-      goalId: string | null
-      durationMs: number
-      targetMs: number | null
-      completed: boolean
-      startedAt: string
-    }) => {
-      dispatch({ type: 'SAVE_SESSION', ...input })
-    },
-    [],
-  )
-
-  const deleteSession = useCallback((sessionId: string) => {
-    dispatch({ type: 'DELETE_SESSION', sessionId })
-  }, [])
-
-  const verifyQuest = useCallback((questId: string, kind: VerificationKind, note: string) => {
-    dispatch({ type: 'VERIFY_QUEST', questId, kind, note })
-  }, [])
-
-  const addDeck = useCallback((topic: string, cards: { front: string; back: string; subtopic?: string }[]) => {
-    dispatch({ type: 'ADD_DECK', topic, cards })
-  }, [])
-
-  const deleteDeck = useCallback((deckId: string) => {
-    dispatch({ type: 'DELETE_DECK', deckId })
-  }, [])
-
-  const updateCard = useCallback((deckId: string, cardId: string, front: string, back: string) => {
-    dispatch({ type: 'UPDATE_CARD', deckId, cardId, front, back })
-  }, [])
-
-  const deleteCard = useCallback((deckId: string, cardId: string) => {
-    dispatch({ type: 'DELETE_CARD', deckId, cardId })
-  }, [])
-
-  const addCard = useCallback((deckId: string) => {
-    dispatch({ type: 'ADD_CARD', deckId })
-  }, [])
-
-  const addReport = useCallback((report: Omit<ExplainReport, 'id' | 'createdAt'>) => {
-    dispatch({ type: 'ADD_REPORT', report })
-  }, [])
-
-  const deleteReport = useCallback((reportId: string) => {
-    dispatch({ type: 'DELETE_REPORT', reportId })
-  }, [])
-
-  const setOutlook = useCallback((outlook: Omit<SuccessOutlook, 'createdAt'>) => {
-    dispatch({ type: 'SET_OUTLOOK', outlook })
-  }, [])
-
-  const buyModel = useCallback((modelId: string) => {
-    dispatch({ type: 'BUY_MODEL', modelId })
-  }, [])
-
-  const equipModel = useCallback((modelId: string | null) => {
-    dispatch({ type: 'EQUIP_MODEL', modelId })
-  }, [])
-
-  const levelInfo = useMemo(() => {
-    const xpInfo = levelFromXp(state.player.xp)
-    const needed = proofsOutstanding(state.progression, xpInfo.level, proofsRequired)
-    return {
-      // The level actually held. XP may have run ahead of it.
-      level: state.progression.level,
-      xpIntoLevel: xpInfo.xpIntoLevel,
-      xpForNext: xpInfo.xpForNext,
-      /** True when XP is banked but the level is locked behind photo proof. */
-      awaitingProof: needed > 0,
-      proofsNeeded: needed,
-      proofsBanked: state.progression.proofs,
-      proofsRequired,
-    }
-  }, [state.player.xp, state.progression, proofsRequired])
-
-  const achievementsWithStatus = useMemo(
-    () =>
-      ACHIEVEMENTS.map((a) => ({
-        ...a,
-        unlockedAt: state.unlockedAchievements[a.id] ?? null,
-      })),
-    [state.unlockedAchievements],
-  )
+  const act = useCallback(<T extends Action>(action: T) => dispatch(action), [])
 
   return {
     state,
     syncStatus,
-    levelInfo,
-    achievements: achievementsWithStatus,
-    events,
-    dismissEvent,
-    onboard,
-    addGoal,
-    archiveGoal,
-    completeQuest,
-    uncompleteQuest,
-    addTodo,
-    toggleTodo,
-    deleteTodo,
-    clearDoneTodos,
-    renamePlayer,
-    setCard,
-    grantChallengeReward,
-    addHabit,
-    renameHabit,
-    recolorHabit,
-    deleteHabit,
-    toggleHabitMark,
-    setMood,
-    scheduleTask,
-    moveScheduleEntry,
-    unschedule,
-    applyPlan,
-    addPlannedTodo,
-    saveSession,
-    deleteSession,
-    verifyQuest,
-    addDeck,
-    deleteDeck,
-    updateCard,
-    deleteCard,
-    addCard,
-    addReport,
-    deleteReport,
-    setOutlook,
-    buyModel,
-    equipModel,
+    onboard: useCallback((name: string, character: CharacterId, goals: NewGoalInput[]) => act({ type: 'ONBOARD', name, character, goals }), [act]),
+    addGoal: useCallback((title: string, category: GoalCategory, detail?: string) => act({ type: 'ADD_GOAL', title, category, detail }), [act]),
+    archiveGoal: useCallback((goalId: string) => act({ type: 'ARCHIVE_GOAL', goalId }), [act]),
+    renamePlayer: useCallback((name: string) => act({ type: 'RENAME_PLAYER', name }), [act]),
+    setCard: useCallback((card: CardDesign | null) => act({ type: 'SET_CARD', card }), [act]),
+    addHabit: useCallback((name: string, color: string) => act({ type: 'ADD_HABIT', name, color }), [act]),
+    renameHabit: useCallback((habitId: string, name: string) => act({ type: 'RENAME_HABIT', habitId, name }), [act]),
+    recolorHabit: useCallback((habitId: string, color: string) => act({ type: 'RECOLOR_HABIT', habitId, color }), [act]),
+    deleteHabit: useCallback((habitId: string) => act({ type: 'DELETE_HABIT', habitId }), [act]),
+    toggleHabitMark: useCallback((habitId: string, date: string) => act({ type: 'TOGGLE_HABIT_MARK', habitId, date }), [act]),
+    setMood: useCallback((date: string, slot: MoodSlot, moodId: string | null) => act({ type: 'SET_MOOD', date, slot, moodId }), [act]),
+    scheduleTask: useCallback(
+      (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => act({ type: 'SCHEDULE_TASK', refType, refId, date, block }),
+      [act],
+    ),
+    addScheduleEntries: useCallback((entries: { refId: string; date: string; block?: string }[]) => act({ type: 'ADD_SCHEDULE_ENTRIES', entries }), [act]),
+    moveScheduleEntry: useCallback((entryId: string, date: string, block?: string | null) => act({ type: 'MOVE_SCHEDULE_ENTRY', entryId, date, block }), [act]),
+    unschedule: useCallback((entryId: string) => act({ type: 'UNSCHEDULE', entryId }), [act]),
+    addDeck: useCallback((topic: string, cards: { front: string; back: string; subtopic?: string }[]) => act({ type: 'ADD_DECK', topic, cards }), [act]),
+    deleteDeck: useCallback((deckId: string) => act({ type: 'DELETE_DECK', deckId }), [act]),
+    updateCard: useCallback((deckId: string, cardId: string, front: string, back: string) => act({ type: 'UPDATE_CARD', deckId, cardId, front, back }), [act]),
+    deleteCard: useCallback((deckId: string, cardId: string) => act({ type: 'DELETE_CARD', deckId, cardId }), [act]),
+    addCard: useCallback((deckId: string) => act({ type: 'ADD_CARD', deckId }), [act]),
+    addReport: useCallback((report: Omit<ExplainReport, 'id' | 'createdAt'>) => act({ type: 'ADD_REPORT', report }), [act]),
+    deleteReport: useCallback((reportId: string) => act({ type: 'DELETE_REPORT', reportId }), [act]),
+    setOutlook: useCallback((outlook: Omit<SuccessOutlook, 'createdAt'>) => act({ type: 'SET_OUTLOOK', outlook }), [act]),
   }
 }
+
+export type Notebook = ReturnType<typeof useAppState>

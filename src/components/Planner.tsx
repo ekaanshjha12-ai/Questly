@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronLeft, ChevronRight, Plus, X, CalendarDays, GripVertical, Search } from 'lucide-react'
 import type { AppState, PlannerView, ScheduleEntry } from '../types'
-import { periodKey as questPeriodKey, dailyKey } from '../lib/period'
+import type { GameQuest } from '../lib/api'
+import { dailyKey } from '../lib/period'
 import {
   DAY_BLOCKS,
   WEEKDAY_LABELS,
@@ -15,12 +16,15 @@ import {
 
 interface Props {
   state: AppState
+  /** The quest board: open quests and what was finished today. */
+  quests: GameQuest[]
   onSchedule: (refType: 'todo' | 'quest', refId: string, date: string, block?: string) => void
   onMove: (entryId: string, date: string, block?: string | null) => void
   onUnschedule: (entryId: string) => void
+  /** Writes a new optional quest and places it. */
   onAddPlanned: (title: string, date: string, block?: string) => void
-  onToggleTodo: (todoId: string) => void
-  onToggleQuest: (questId: string) => void
+  /** Ticks a quest done where a tick completes it; otherwise opens it. */
+  onToggleQuest: (quest: GameQuest) => void
 }
 
 interface ResolvedTask {
@@ -47,10 +51,10 @@ type BacklogFilter = 'all' | 'quest' | 'todo'
 const FILTERS: { id: BacklogFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'quest', label: 'Quests' },
-  { id: 'todo', label: 'To-dos' },
+  { id: 'todo', label: 'Optional' },
 ]
 
-const PERIOD_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' } as const
+const TYPE_LABEL = { main: 'Main quest', side: 'Side quest', daily: 'Daily quest', club: 'Club quest', challenge: 'Challenge', optional: 'Optional' } as const
 
 /**
  * The tasks still waiting for a place, as a searchable list that scrolls in a
@@ -346,11 +350,11 @@ function SlotCell({
 
 export default function Planner({
   state,
+  quests,
   onSchedule,
   onMove,
   onUnschedule,
   onAddPlanned,
-  onToggleTodo,
   onToggleQuest,
 }: Props) {
   const [view, setView] = useState<PlannerView>('daily')
@@ -358,16 +362,13 @@ export default function Planner({
   const [adding, setAdding] = useState<{ date: string; block?: string; label: string } | null>(null)
   const [draft, setDraft] = useState('')
 
-  const todosById = useMemo(() => new Map(state.todos.map((t) => [t.id, t])), [state.todos])
-  const questsById = useMemo(() => new Map(state.quests.map((q) => [q.id, q])), [state.quests])
+  const questsById = useMemo(() => new Map(quests.map((q) => [q.id, q])), [quests])
 
+  // To-dos became optional quests and kept their ids, so a placement of either
+  // kind resolves against the same board.
   function resolve(entry: ScheduleEntry): ResolvedTask | null {
-    if (entry.refType === 'todo') {
-      const todo = todosById.get(entry.refId)
-      return todo ? { title: todo.title, done: todo.done } : null
-    }
     const quest = questsById.get(entry.refId)
-    return quest ? { title: quest.title, done: quest.completed } : null
+    return quest ? { title: quest.title, done: quest.status === 'completed' } : null
   }
 
   // Every placement, keyed by the day it sits on. All three views read this same
@@ -383,13 +384,13 @@ export default function Planner({
     }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.schedule, todosById, questsById])
+  }, [state.schedule, questsById])
 
   // Scheduled anywhere, not just in the period on screen — otherwise a task
   // already placed on another day would offer itself for placing again.
   const scheduledRefIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const entry of state.schedule) ids.add(`${entry.refType}:${entry.refId}`)
+    for (const entry of state.schedule) ids.add(entry.refId)
     return ids
   }, [state.schedule])
 
@@ -397,32 +398,20 @@ export default function Planner({
   // sitting somewhere is absent from every view's list rather than offering
   // itself for a second placement — moving it is done by dragging the chip.
   const backlog = useMemo(() => {
-    const currentQuestKeys = {
-      daily: questPeriodKey('daily'),
-      weekly: questPeriodKey('weekly'),
-      monthly: questPeriodKey('monthly'),
-    }
     const items: BacklogItem[] = []
-
-    for (const todo of state.todos) {
-      if (todo.done) continue
-      if (scheduledRefIds.has(`todo:${todo.id}`)) continue
-      items.push({ refType: 'todo', refId: todo.id, title: todo.title, tag: 'To-do', detail: '' })
-    }
-    for (const quest of state.quests) {
-      if (quest.completed) continue
-      if (quest.periodKey !== currentQuestKeys[quest.period]) continue
-      if (scheduledRefIds.has(`quest:${quest.id}`)) continue
+    for (const quest of quests) {
+      if (quest.status !== 'active' && quest.status !== 'in_progress' && quest.status !== 'upcoming') continue
+      if (scheduledRefIds.has(quest.id)) continue
       items.push({
-        refType: 'quest',
+        refType: quest.type === 'optional' ? 'todo' : 'quest',
         refId: quest.id,
         title: quest.title,
-        tag: 'Quest',
-        detail: `${PERIOD_LABEL[quest.period]} · ${quest.xp} XP`,
+        tag: TYPE_LABEL[quest.type],
+        detail: `${quest.xp} XP`,
       })
     }
     return items
-  }, [state.todos, state.quests, scheduledRefIds])
+  }, [quests, scheduledRefIds])
 
   /** `block` undefined on a move means "keep the time it already had" — dragging
    * between weekday columns should not silently clear the hour. Dropping into a
@@ -436,8 +425,8 @@ export default function Planner({
   }
 
   function toggleEntry(entry: ScheduleEntry) {
-    if (entry.refType === 'todo') onToggleTodo(entry.refId)
-    else onToggleQuest(entry.refId)
+    const quest = questsById.get(entry.refId)
+    if (quest) onToggleQuest(quest)
   }
 
   function submitAdd(e: React.FormEvent) {
@@ -478,7 +467,7 @@ export default function Planner({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold text-slate-100">Schedule</h2>
+        <h2 className="sr-only">Schedule</h2>
         <div className="flex gap-1 rounded-xl border border-ink-600 bg-ink-850/70 p-1">
           {VIEW_TABS.map((tab) => (
             <button

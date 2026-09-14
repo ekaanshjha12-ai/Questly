@@ -18,11 +18,26 @@ import ConversationView, { type ConversationTarget } from './Conversation'
  * conversation from someone new waits under Requests rather than landing
  * among your chats, until you accept or reply.
  */
-export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName: string }) {
-  const [open, setOpen] = useState<ConversationTarget | null>(null)
+export default function MessagesScreen({
+  inbox,
+  myName,
+  conversationId = null,
+  onConversationClosed,
+}: {
+  inbox: Inbox
+  myName: string
+  /** A conversation named in the address — a notification's link. */
+  conversationId?: string | null
+  onConversationClosed?: () => void
+}) {
+  const [open, setOpen] = useState<ConversationTarget | null>(() => (conversationId ? { id: conversationId } : null))
   const [finding, setFinding] = useState(false)
   const [card, setCard] = useState<string | null>(null)
   const phone = useMediaQuery(PHONE)
+
+  useEffect(() => {
+    if (conversationId) setOpen((current) => (current && 'id' in current && current.id === conversationId ? current : { id: conversationId }))
+  }, [conversationId])
 
   // Fresh on arrival, rather than whatever the last poll saw.
   useEffect(() => {
@@ -39,8 +54,8 @@ export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName
           // also clears the notch above and the Focus / Social dock below.
           style={{
             height: phone
-              ? 'calc(100dvh - 17rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))'
-              : 'calc(100dvh - 12.5rem)',
+              ? 'calc(100dvh - 15.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))'
+              : 'calc(100dvh - 13rem)',
           }}
         >
           <ConversationView
@@ -48,6 +63,7 @@ export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName
             target={open}
             onBack={() => {
               setOpen(null)
+              onConversationClosed?.()
               void inbox.refresh()
             }}
             onOpenCard={setCard}

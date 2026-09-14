@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  ChevronRight,
   Target,
   Timer,
   Zap,
@@ -14,22 +15,15 @@ import {
   Quote,
   RefreshCw,
 } from 'lucide-react'
-import type { AppState, SuccessOutlook } from '../types'
-import { ApiError, analyseOutlook } from '../lib/api'
-import { computeStats, evidenceFor, formatFocusTotal, goalProgress } from '../lib/progress'
-import Achievements from './Achievements'
-
-interface AchievementView {
-  id: string
-  title: string
-  description: string
-  icon: string
-  unlockedAt: string | null
-}
+import type { SuccessOutlook } from '../types'
+import { ApiError, analyseOutlook, game, type ProgressStatsResponse } from '../lib/api'
+import { evidenceFor, formatFocusTotal } from '../lib/progress'
+import { Link } from '../app/router'
+import { useGame } from '../game/GameProvider'
+import { ErrorState, LoadingState } from './ui/States'
 
 interface Props {
-  state: AppState
-  achievements: AchievementView[]
+  outlook: SuccessOutlook | null
   onSetOutlook: (outlook: Omit<SuccessOutlook, 'createdAt'>) => void
 }
 
@@ -56,10 +50,10 @@ function StatTile({
   accent: string
 }) {
   return (
-    <div className="rounded-2xl border border-ink-600 bg-ink-850/60 p-3.5">
+    <div className="panel p-3.5">
       <div className="flex items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} />
-        <p className="min-w-0 truncate text-[11px] text-slate-400">{label}</p>
+        <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: accent }} aria-hidden />
+        <p className="eyebrow min-w-0 truncate">{label}</p>
       </div>
       <p className="mt-1.5 font-display text-2xl font-bold leading-none text-slate-50">
         {value}
@@ -140,15 +134,30 @@ const CONFIDENCE_NOTE: Record<SuccessOutlook['confidence'], string> = {
   high: 'Based on a long, consistent record.',
 }
 
-export default function ProgressScreen({ state, achievements, onSetOutlook }: Props) {
+export default function ProgressScreen({ outlook, onSetOutlook }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<ProgressStatsResponse | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const achievementCount = useGame().snapshot?.achievements
 
-  const stats = useMemo(() => computeStats(state), [state])
-  const goals = useMemo(() => goalProgress(state), [state])
-  const evidence = useMemo(() => evidenceFor(stats), [stats])
+  const load = useCallback(() => {
+    setLoadError(null)
+    game
+      .stats()
+      .then(setData)
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Could not load your progress.'))
+  }, [])
+  useEffect(load, [load])
+
+  const evidence = useMemo(() => (data ? evidenceFor(data.stats) : null), [data])
+
+  if (!data || !evidence) {
+    return loadError ? <ErrorState message={loadError} onRetry={load} /> : <LoadingState lines={4} label="Loading your progress" />
+  }
+
+  const { stats, goals } = data
   const focus = formatFocusTotal(stats.totalFocusMs)
-  const outlook = state.outlook
 
   async function analyse() {
     setError(null)
@@ -174,12 +183,10 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
 
   return (
     <div className="space-y-5">
-      <h2 className="font-display text-lg font-semibold text-slate-100">Progress</h2>
-
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatTile
           icon={Target}
-          label="Success Probability"
+          label="Outlook"
           value={outlook ? `${outlook.probability}` : '—'}
           unit={outlook ? '%' : undefined}
           accent={outlook ? scoreColor(outlook.probability) : 'rgb(var(--slate-500))'}
@@ -197,7 +204,7 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
         <StatTile icon={Star} label="Level" value={String(stats.level)} accent="rgb(var(--gold-400))" />
       </div>
 
-      <section className="rounded-2xl border border-ink-600 bg-ink-850/60 p-4 sm:p-5">
+      <section className="panel p-4 sm:p-5">
         {!outlook ? (
           <div className="text-center">
             <Target className="mx-auto h-7 w-7 text-slate-600" />
@@ -322,9 +329,18 @@ export default function ProgressScreen({ state, achievements, onSetOutlook }: Pr
         )}
       </section>
 
-      <div className="border-t border-ink-700/60 pt-5">
-        <Achievements achievements={achievements} />
-      </div>
+      <Link to="/profile/achievements" className="panel flex min-h-[56px] items-center gap-3 px-4 hover:border-ink-500">
+        <Trophy className="h-5 w-5 text-reward-400" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-100">Achievements</span>
+          {achievementCount && (
+            <span className="block text-xs text-slate-400">
+              {achievementCount.unlocked} of {achievementCount.total} unlocked
+            </span>
+          )}
+        </span>
+        <ChevronRight className="h-4 w-4 text-slate-500" aria-hidden />
+      </Link>
     </div>
   )
 }

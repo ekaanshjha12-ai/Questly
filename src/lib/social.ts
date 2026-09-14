@@ -1,7 +1,6 @@
 import type { AppState } from '../types'
-import type { PostKind } from './api'
+import type { GameSnapshot, PostKind } from './api'
 import { dailyKey } from './period'
-import { ACHIEVEMENTS } from './achievements'
 
 /**
  * The social side's shared pieces: post kinds, and the things from today worth
@@ -79,29 +78,39 @@ export interface ShareMoment {
  * coming over here offers it back as something to post, so sharing progress is
  * one tap rather than retyping what the app already knows.
  */
-export function shareMoments(state: AppState, now: Date = new Date()): ShareMoment[] {
+export function shareMoments(state: AppState, snapshot: GameSnapshot | null, now: Date = new Date()): ShareMoment[] {
   const today = dailyKey(now)
   const moments: ShareMoment[] = []
 
-  const quests = state.quests.filter((q) => q.completedAt && dailyKey(new Date(q.completedAt)) === today)
-  if (quests.length) {
-    const xp = quests.reduce((sum, q) => sum + q.xp, 0)
-    const names = quests.slice(0, 3).map((q) => `• ${q.title}`).join('\n')
-    moments.push({
-      id: 'quests',
-      kind: 'achievement',
-      label: `${quests.length} quest${quests.length === 1 ? '' : 's'} done`,
-      text: `Finished ${quests.length} quest${quests.length === 1 ? '' : 's'} today (+${xp} XP)\n${names}`,
-    })
-  }
+  if (snapshot) {
+    // The board holds what was finished today.
+    const quests = snapshot.quests.filter((q) => q.status === 'completed')
+    if (quests.length) {
+      const xp = quests.reduce((sum, q) => sum + q.xpPaid, 0)
+      const names = quests.slice(0, 3).map((q) => `• ${q.title}`).join('\n')
+      moments.push({
+        id: 'quests',
+        kind: 'achievement',
+        label: `${quests.length} quest${quests.length === 1 ? '' : 's'} done`,
+        text: `Finished ${quests.length} quest${quests.length === 1 ? '' : 's'} today${xp ? ` (+${xp} XP)` : ''}\n${names}`,
+      })
+    }
 
-  const focusMs = state.sessions
-    .filter((s) => s.endedAt && dailyKey(new Date(s.endedAt)) === today)
-    .reduce((sum, s) => sum + Math.max(0, s.durationMs), 0)
-  const minutes = Math.round(focusMs / 60000)
-  if (minutes >= 10) {
-    const label = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m focused` : `${minutes} min focused`
-    moments.push({ id: 'focus', kind: 'progress', label, text: `Put in ${label} of deep work today.` })
+    const minutes = Math.round(snapshot.focusTotals.todayMs / 60000)
+    if (minutes >= 10) {
+      const label = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m focused` : `${minutes} min focused`
+      moments.push({ id: 'focus', kind: 'progress', label, text: `Put in ${label} of deep work today.` })
+    }
+
+    for (const a of snapshot.achievements.recent) {
+      if (!a.unlockedAt || dailyKey(new Date(a.unlockedAt)) !== today) continue
+      moments.push({ id: `ach-${a.id}`, kind: 'achievement', label: a.title, text: `Unlocked "${a.title}" — ${a.description.toLowerCase()}` })
+    }
+
+    const streak = snapshot.progress.streak
+    if (streak.current >= 2 && streak.activeToday) {
+      moments.push({ id: 'streak', kind: 'progress', label: `${streak.current}-day streak`, text: `${streak.current} days in a row and counting.` })
+    }
   }
 
   const habits = state.habits.filter((h) => !h.archived && state.habitMarks[h.id]?.includes(today))
@@ -111,23 +120,6 @@ export function shareMoments(state: AppState, now: Date = new Date()): ShareMome
       kind: 'progress',
       label: `${habits.length} habit${habits.length === 1 ? '' : 's'} ticked`,
       text: `Kept up ${habits.length} habit${habits.length === 1 ? '' : 's'} today: ${habits.map((h) => h.name).join(', ')}.`,
-    })
-  }
-
-  for (const [id, at] of Object.entries(state.unlockedAchievements)) {
-    if (dailyKey(new Date(at)) !== today) continue
-    const meta = ACHIEVEMENTS.find((a) => a.id === id)
-    if (meta) {
-      moments.push({ id: `ach-${id}`, kind: 'achievement', label: `${meta.icon} ${meta.title}`, text: `Unlocked "${meta.title}" — ${meta.description.toLowerCase()}.` })
-    }
-  }
-
-  if (state.streak.current >= 2 && state.streak.lastCompletedDay === today) {
-    moments.push({
-      id: 'streak',
-      kind: 'progress',
-      label: `🔥 ${state.streak.current}-day streak`,
-      text: `${state.streak.current} days in a row and counting.`,
     })
   }
 

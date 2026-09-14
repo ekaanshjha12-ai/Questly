@@ -1,46 +1,53 @@
-import { useCallback, useEffect, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Swords, Loader2, LogOut, Cloud, CloudOff, RefreshCw, ArrowLeft } from 'lucide-react'
-import { useAppState, type SyncStatus } from './hooks/useAppState'
-import type { AppState } from './types'
-import { ApiError, fetchState, logout as logoutRequest, me, type AuthUser } from './lib/api'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useAppState, type Notebook } from './hooks/useAppState'
+import type { AppState, PlanItemInput } from './types'
+import { ApiError, fetchState, game as gameApi, logout as logoutRequest, me, type AuthUser, type Challenge, type GameQuest } from './lib/api'
 import { clearCachedState, forgetUser, loadCachedState, recallUser, rememberUser } from './lib/storage'
 import AuthScreen from './components/AuthScreen'
-import Onboarding from './components/Onboarding'
-import Dashboard from './components/Dashboard'
-import GoalsManager from './components/GoalsManager'
-import ProgressScreen from './components/ProgressScreen'
-import AvatarScreen from './components/AvatarScreen'
-import TodoList from './components/TodoList'
-import Planner from './components/Planner'
-import FocusScreen from './components/FocusScreen'
-import StudyScreen from './components/StudyScreen'
-import { VerifyModalHost } from './components/VerifyModal'
-import { useFocusClock } from './hooks/useFocusClock'
-import { useNoise } from './hooks/useNoise'
-import SoundsScreen, { LevelBars } from './components/SoundsScreen'
-import { MUSIC } from './lib/music'
-import { SOUNDS } from './lib/noise'
-import AiPlanner from './components/AiPlanner'
-import InstallPrompt, { InstallButton } from './components/InstallPrompt'
-import GuideTour, { hasSeenTour } from './components/GuideTour'
-import HomeScreen, { type View } from './components/HomeScreen'
-import Celebration from './components/Celebration'
-import AdminSetup from './components/AdminSetup'
-import AdminConsole from './components/AdminConsole'
-import ThemeButton from './components/ThemeButton'
-import PersonaliseScreen from './components/PersonaliseScreen'
-import HabitTracker from './components/HabitTracker'
 import SignupFlow from './components/SignupFlow'
-import ModeToggle, { ModeDock } from './components/ModeToggle'
-import { PHONE, useMediaQuery } from './hooks/useMediaQuery'
-import SocialHome from './components/social/SocialHome'
-import { useMode, type AppMode } from './hooks/useMode'
+import InstallPrompt from './components/InstallPrompt'
+import Celebration from './components/Celebration'
+import { ToastProvider, messageOf, useToast } from './components/ui/Toast'
+import { LoadingState } from './components/ui/States'
+import { GameProvider, useGame } from './game/GameProvider'
+import { match, RouterProvider, useRouter } from './app/router'
+import AppShell, { BackLink, PageHeader } from './app/AppShell'
+import { NowPlayingProvider } from './app/NowPlaying'
+import HomeScreen from './screens/home/HomeScreen'
+import QuestBoardScreen from './screens/quests/QuestBoardScreen'
+import RewardLayer from './screens/rewards/RewardLayer'
+import { useNoise } from './hooks/useNoise'
+import { useTheme } from './hooks/useTheme'
 import { useChallenges } from './hooks/useChallenges'
 import { useMessages } from './hooks/useMessages'
-import { formatClock } from './lib/time'
 import { useCelebrations } from './lib/prefs'
-import { ToastStack, LevelUpModal } from './components/EventToasts'
+import { MUSIC } from './lib/music'
+import { SOUNDS } from './lib/noise'
+
+// Screens away from the hub load when first opened, so the first paint carries
+// only the shell, Home and the Quest Board.
+const Onboarding = lazy(() => import('./components/Onboarding'))
+const AdminSetup = lazy(() => import('./components/AdminSetup'))
+const AdminConsole = lazy(() => import('./components/AdminConsole'))
+const FocusModeScreen = lazy(() => import('./screens/focus/FocusModeScreen'))
+const SocialHome = lazy(() => import('./components/social/SocialHome'))
+const ChallengesScreen = lazy(() => import('./components/ChallengesScreen'))
+const Leaderboard = lazy(() => import('./components/Leaderboard'))
+const ProfileScreen = lazy(() => import('./screens/profile/ProfileScreen'))
+const WardrobeScreen = lazy(() => import('./screens/profile/WardrobeScreen'))
+const AchievementsScreen = lazy(() => import('./screens/profile/AchievementsScreen'))
+const XpHistoryScreen = lazy(() => import('./screens/profile/XpHistoryScreen'))
+const ProgressScreen = lazy(() => import('./components/ProgressScreen'))
+const ChronicleLogScreen = lazy(() => import('./screens/notifications/ChronicleLogScreen'))
+const Planner = lazy(() => import('./components/Planner'))
+const HabitTracker = lazy(() => import('./components/HabitTracker'))
+const StudyScreen = lazy(() => import('./components/StudyScreen'))
+const AiPlanner = lazy(() => import('./components/AiPlanner'))
+const GoalsManager = lazy(() => import('./components/GoalsManager'))
+const SoundsScreen = lazy(() => import('./components/SoundsScreen'))
+const PersonaliseScreen = lazy(() => import('./components/PersonaliseScreen'))
+const CardDesigner = lazy(() => import('./components/PersonaliseScreen').then((m) => ({ default: m.CardDesigner })))
 
 type Boot =
   | { phase: 'loading' }
@@ -48,49 +55,21 @@ type Boot =
   | { phase: 'ready'; user: AuthUser; initialState: AppState | null }
   | { phase: 'error'; message: string }
 
-function SyncBadge({ status }: { status: SyncStatus }) {
-  if (status === 'idle') return null
-  const map = {
-    saving: { icon: RefreshCw, text: 'Saving…', className: 'text-slate-400', spin: true },
-    saved: { icon: Cloud, text: 'Saved', className: 'text-slate-500', spin: false },
-    error: { icon: CloudOff, text: 'Offline — changes not saved', className: 'text-ember-400', spin: false },
-  } as const
-  const { icon: Icon, text, className, spin } = map[status]
+function FullScreenMessage({ children }: { children: ReactNode }) {
+  return <div className="flex min-h-dvh items-center justify-center px-4 text-center text-sm text-slate-400">{children}</div>
+}
+
+function Spinner() {
   return (
-    <span className={`flex items-center gap-1 text-[11px] ${className}`} title={text}>
-      <Icon className={`h-3 w-3 ${spin ? 'animate-spin' : ''}`} />
-      <span className="hidden sm:inline">{text}</span>
-    </span>
+    <FullScreenMessage>
+      <Loader2 className="h-5 w-5 animate-spin text-gold-400" aria-label="Loading" />
+    </FullScreenMessage>
   )
 }
 
 /**
- * Switching modes slides the screen the way the switch moved: Social comes in
- * from the right, Focus from the left, so the change has a direction you can
- * feel rather than a flash. With reduced motion it is a plain crossfade.
- */
-const MODE_SLIDE = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 40 }),
-  center: { opacity: 1, x: 0, transition: { duration: 0.26, ease: [0.22, 1, 0.36, 1] } },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -40, transition: { duration: 0.14, ease: 'easeIn' } }),
-}
-const MODE_FADE = {
-  enter: { opacity: 0 },
-  center: { opacity: 1, transition: { duration: 0.15 } },
-  exit: { opacity: 0, transition: { duration: 0.1 } },
-}
-
-function FullScreenMessage({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-slate-400">{children}</div>
-}
-
-/**
- * Path-based screens that sit outside the signed-in app.
- *
- * Read once at module scope rather than through a router: there are two of
- * them, neither navigates client-side, and a routing library for that is a
- * dependency bought for nothing. The server already serves index.html for any
- * non-API path, so these URLs resolve.
+ * Pages that sit outside the signed-in app. Read once: neither navigates
+ * client-side, and the server serves the app for any non-API path.
  */
 function standalonePath(): 'admin-setup' | 'admin' | null {
   const path = window.location.pathname.replace(/\/+$/, '')
@@ -100,8 +79,20 @@ function standalonePath(): 'admin-setup' | 'admin' | null {
 }
 
 export default function App() {
+  return (
+    <RouterProvider>
+      <ToastProvider>
+        <Root />
+      </ToastProvider>
+    </RouterProvider>
+  )
+}
+
+function Root() {
   const [route] = useState(standalonePath)
   const [boot, setBoot] = useState<Boot>({ phase: 'loading' })
+  // Keeps a system-theme choice following the device while the app is open.
+  useTheme()
 
   const loadForUser = useCallback(async (user: AuthUser) => {
     rememberUser({ id: user.id, email: user.email })
@@ -133,17 +124,15 @@ export default function App() {
           setBoot({ phase: 'anonymous' })
           return
         }
-
         // Anything else means the server could not be reached. If this device
         // has been signed in before, open that account from cache rather than
-        // showing a dead end — the whole point of installing the app.
+        // showing a dead end.
         const remembered = recallUser()
         const cached = remembered ? loadCachedState(remembered.id) : null
         if (remembered && cached) {
           setBoot({ phase: 'ready', user: remembered, initialState: cached })
           return
         }
-
         setBoot({
           phase: 'error',
           message: navigator.onLine
@@ -157,52 +146,37 @@ export default function App() {
     }
   }, [loadForUser, route])
 
-  if (route === 'admin-setup') return <AdminSetup />
   // The console gates itself: the API answers 404 to anyone who is not an admin.
-  if (route === 'admin') return <AdminConsole />
-
-  if (boot.phase === 'loading') {
-    return (
-      <FullScreenMessage>
-        <Loader2 className="h-5 w-5 animate-spin text-gold-400" />
-      </FullScreenMessage>
-    )
+  if (route === 'admin-setup' || route === 'admin') {
+    return <Suspense fallback={<Spinner />}>{route === 'admin' ? <AdminConsole /> : <AdminSetup />}</Suspense>
   }
 
-  if (boot.phase === 'error') {
-    return <FullScreenMessage>{boot.message}</FullScreenMessage>
-  }
-
-  if (boot.phase === 'anonymous') {
-    return <AuthScreen onAuthed={(user) => void loadForUser(user)} />
-  }
+  if (boot.phase === 'loading') return <Spinner />
+  if (boot.phase === 'error') return <FullScreenMessage>{boot.message}</FullScreenMessage>
+  if (boot.phase === 'anonymous') return <AuthScreen onAuthed={(user) => void loadForUser(user)} />
 
   // Accounts made before profiles existed finish one before anything else.
   // Strictly `false`: a user recalled from cache for an offline start has no
   // profile fields at all, and being offline must not lock them out.
   if (boot.user.profileComplete === false) {
-    return (
-      <SignupFlow
-        mode="complete"
-        initialName={boot.initialState?.player?.name ?? ''}
-        onCompleted={(user) => setBoot({ ...boot, user })}
-      />
-    )
+    return <SignupFlow mode="complete" initialName={boot.initialState?.player?.name ?? ''} onCompleted={(user) => setBoot({ ...boot, user })} />
   }
 
+  const onSignedOut = () => setBoot({ phase: 'anonymous' })
   return (
     // Remounting per user guarantees no state bleeds between accounts.
-    <AuthedApp
-      key={boot.user.id}
-      user={boot.user}
-      initialState={boot.initialState}
-      onSignedOut={() => setBoot({ phase: 'anonymous' })}
-      onUserChange={(user) => setBoot((current) => (current.phase === 'ready' ? { ...current, user } : current))}
-    />
+    <GameProvider key={boot.user.id} userId={boot.user.id} onSignedOut={onSignedOut}>
+      <SignedInApp
+        user={boot.user}
+        initialState={boot.initialState}
+        onSignedOut={onSignedOut}
+        onUserChange={(user) => setBoot((current) => (current.phase === 'ready' ? { ...current, user } : current))}
+      />
+    </GameProvider>
   )
 }
 
-function AuthedApp({
+function SignedInApp({
   user,
   initialState,
   onSignedOut,
@@ -211,114 +185,35 @@ function AuthedApp({
   user: AuthUser
   initialState: AppState | null
   onSignedOut: () => void
-  /** A profile edit in Personalise — new bio, new picture. */
   onUserChange: (user: AuthUser) => void
 }) {
-  const {
-    state,
-    syncStatus,
-    levelInfo,
-    achievements,
-    events,
-    dismissEvent,
-    onboard,
-    addGoal,
-    archiveGoal,
-    completeQuest,
-    uncompleteQuest,
-    addTodo,
-    toggleTodo,
-    deleteTodo,
-    clearDoneTodos,
-    renamePlayer,
-    setCard,
-    grantChallengeReward,
-    addHabit,
-    renameHabit,
-    recolorHabit,
-    deleteHabit,
-    toggleHabitMark,
-    setMood,
-    scheduleTask,
-    moveScheduleEntry,
-    unschedule,
-    applyPlan,
-    addPlannedTodo,
-    saveSession,
-    deleteSession,
-    verifyQuest,
-    addDeck,
-    deleteDeck,
-    updateCard,
-    deleteCard,
-    addCard,
-    addReport,
-    deleteReport,
-    setOutlook,
-    buyModel,
-    equipModel,
-  } = useAppState(user.id, initialState)
-  // Opens on the hub rather than inside a section, so the first thing on screen
-  // is a choice rather than someone else's idea of what matters today.
-  const [view, setView] = useState<View>('home')
-  const { mode, setMode } = useMode()
-  const reduceMotion = useReducedMotion()
-  // On a phone the switch sits at the foot of the screen instead of the header.
-  const phone = useMediaQuery(PHONE)
-  const switchMode = useCallback(
-    (next: AppMode) => {
-      if (next === mode) return
-      setMode(next)
-      window.scrollTo({ top: 0 })
-    },
-    [mode, setMode],
-  )
-
-  // Polled for the whole session, not just on the Challenges screen: an offer
-  // should show on the hub badge wherever you are, and a finished challenge's
-  // reward should land without having to go and look for it.
-  const challengeFeed = useChallenges({
-    enabled: user.profileComplete === true,
-    claimed: state.challengeRewards,
-    onReward: grantChallengeReward,
+  const game = useGame()
+  const toast = useToast()
+  const { path } = useRouter()
+  const notebook = useAppState(user.id, initialState, {
+    onRewards: game.applyRewards,
+    // New goals get their quests on the server's next look at the board.
+    onGoalsSaved: () => void game.refresh(),
   })
-  const inbox = useMessages({ enabled: user.profileComplete === true, fast: mode === 'social' })
-  // Offered once per account, after onboarding has produced the goals it talks about.
-  const [tourOpen, setTourOpen] = useState(false)
-  // Bumped on every forward step, which is what restarts the burst.
-  const [burst, setBurst] = useState<{ key: number; big: boolean }>({ key: 0, big: false })
-  // Switchable on the Personalise screen; the level-up modal still appears either way.
-  const [celebrate] = useCelebrations()
-  const [verifyingQuestId, setVerifyingQuestId] = useState<string | null>(null)
-  const verifyingQuest = state.quests.find((q) => q.id === verifyingQuestId) ?? null
+  const { state, syncStatus } = notebook
 
-  // Lives here rather than inside FocusScreen so a running timer survives
-  // switching tabs.
-  const clock = useFocusClock({ onSave: saveSession })
+  // Goals, habits, the planner and the card save in the background; say so
+  // when a save fails rather than letting the player assume it stuck.
+  useEffect(() => {
+    if (syncStatus === 'error') toast.error('Changes not saved', 'Questly could not reach the server. They will save with your next change once you are back online.')
+  }, [syncStatus, toast])
 
-  // Lives here rather than in a screen so sound keeps playing while the user
-  // moves between screens.
+  // Polled for the whole session: an offer should badge the navigation wherever
+  // you are, and a settled challenge's XP should show without going to look.
+  const challengeFeed = useChallenges({ enabled: user.profileComplete === true, onSettled: () => void game.refresh() })
+  const inbox = useMessages({ enabled: user.profileComplete === true, fast: path.startsWith('/social') })
+
+  // Lives here rather than in a screen so sound keeps playing between screens.
   const noise = useNoise()
   const nowPlaying =
     [MUSIC.find((m) => m.id === noise.music)?.name, SOUNDS.find((s) => s.id === noise.ambience)?.name].filter(Boolean).join(' + ') || null
 
-  // Fires on real forward movement only — a level or a rank, not every tick of
-  // XP. Confetti for routine progress stops meaning anything by the third time.
-  useEffect(() => {
-    const rank = events.find((e) => e.type === 'rank')
-    const levelup = events.find((e) => e.type === 'levelup')
-    if (!rank && !levelup) return
-    setBurst((b) => ({ key: b.key + 1, big: Boolean(rank) }))
-  }, [events])
-
-  // Opens once the goals exist, so the walkthrough can talk about them by name.
-  // Watching `onboarded` rather than firing inside the onboarding callback means
-  // someone who set goals on another device is still introduced to the app.
-  useEffect(() => {
-    if (state.onboarded && !hasSeenTour(user.id)) setTourOpen(true)
-  }, [state.onboarded, user.id])
-
-  async function handleSignOut() {
+  const handleSignOut = useCallback(async () => {
     try {
       await logoutRequest()
     } catch {
@@ -329,222 +224,284 @@ function AuthedApp({
     // session the user just signed out of.
     forgetUser()
     onSignedOut()
-  }
-
-  function toggleQuest(questId: string) {
-    const quest = state.quests.find((q) => q.id === questId)
-    if (!quest) return
-    if (quest.completed) uncompleteQuest(questId)
-    else completeQuest(questId)
-  }
+  }, [onSignedOut, user.id])
 
   if (!state.onboarded) {
-    return <Onboarding name={user.displayName ?? state.player.name} onComplete={onboard} />
+    return (
+      <Suspense fallback={<Spinner />}>
+        <Onboarding name={user.displayName ?? state.player.name} onComplete={notebook.onboard} />
+      </Suspense>
+    )
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-ink-700/60">
-        <div className="safe-header mx-auto flex max-w-2xl items-center gap-2 px-4 pb-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            aria-label="Home"
-            className="flex items-center gap-2"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-500 to-ember-500">
-              <Swords className="h-4.5 w-4.5 text-onAccent" />
-            </span>
-            <span className="font-display text-base font-bold tracking-wide text-gold-300">Questly</span>
-          </button>
-
-          <div className="ml-auto flex items-center gap-3">
-            {clock.running && (
-              <button
-                type="button"
-                onClick={() => setView('focus')}
-                title="Focus session running"
-                className="flex items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-2 py-1 text-[11px] font-semibold tabular-nums text-gold-300 transition-colors hover:bg-gold-500/20"
-              >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold-400" />
-                {formatClock(clock.mode === 'timer' ? clock.remainingMs : clock.elapsedMs)}
-              </button>
-            )}
-            {nowPlaying && (
-              <button
-                type="button"
-                onClick={() => {
-                  switchMode('focus')
-                  setView('sounds')
-                }}
-                title={`Playing ${nowPlaying}`}
-                aria-label={`Sounds: playing ${nowPlaying}`}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-gold-500/40 bg-gold-500/10 px-2 transition-colors hover:bg-gold-500/20"
-              >
-                <LevelBars getLevel={noise.getLevel} active className="h-3.5" />
-                <span className="hidden max-w-[7rem] truncate text-[11px] font-semibold text-gold-300 sm:inline">{nowPlaying}</span>
-              </button>
-            )}
-            <SyncBadge status={syncStatus} />
-            <InstallButton />
-            {!phone && (
-              <ModeToggle
-                mode={mode}
-                onChange={switchMode}
-                badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
-              />
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="page-foot mx-auto max-w-2xl space-y-5 px-4 pt-6 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
-        <AnimatePresence mode="wait" initial={false} custom={mode === 'social' ? 1 : -1}>
-          <motion.div
-            key={mode}
-            custom={mode === 'social' ? 1 : -1}
-            variants={reduceMotion ? MODE_FADE : MODE_SLIDE}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            className="space-y-5"
-          >
-        {mode === 'social' ? (
-          <SocialHome state={state} user={user} challenges={challengeFeed} inbox={inbox} onSetCard={setCard} />
-        ) : (
-          <>
-        {view !== 'home' && (
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="flex items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-850 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:text-slate-100"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Home
-          </button>
-        )}
-
-        {view === 'home' && <HomeScreen state={state} onGo={setView} nowPlaying={nowPlaying} />}
-        {view === 'sounds' && <SoundsScreen noise={noise} />}
-        {view === 'aiplan' && <AiPlanner onApplyPlan={applyPlan} onOpenPlanner={() => setView('schedule')} />}
-        {view === 'dashboard' && (
-          <Dashboard
-            state={state}
-            levelInfo={levelInfo}
-            onToggleQuest={toggleQuest}
-            onVerifyQuest={setVerifyingQuestId}
-            onOpenAvatar={() => setView('avatar')}
-          />
-        )}
-        {view === 'todos' && (
-          <TodoList
-            todos={state.todos}
-            onAdd={addTodo}
-            onToggle={toggleTodo}
-            onDelete={deleteTodo}
-            onClearDone={clearDoneTodos}
-          />
-        )}
-        {view === 'schedule' && (
-          <Planner
-            state={state}
-            onSchedule={scheduleTask}
-            onMove={moveScheduleEntry}
-            onUnschedule={unschedule}
-            onAddPlanned={addPlannedTodo}
-            onToggleTodo={toggleTodo}
-            onToggleQuest={toggleQuest}
-          />
-        )}
-        {view === 'focus' && <FocusScreen state={state} clock={clock} onDeleteSession={deleteSession} />}
-        {view === 'cards' && (
-          <StudyScreen
-            state={state}
-            onAddDeck={addDeck}
-            onDeleteDeck={deleteDeck}
-            onUpdateCard={updateCard}
-            onDeleteCard={deleteCard}
-            onAddCard={addCard}
-            onAddReport={addReport}
-            onDeleteReport={deleteReport}
-          />
-        )}
-        {view === 'goals' && <GoalsManager goals={state.goals} onAddGoal={addGoal} onArchiveGoal={archiveGoal} />}
-        {view === 'avatar' && (
-          <AvatarScreen
-            state={state}
-            levelInfo={levelInfo}
-            onBuyModel={buyModel}
-            onEquipModel={equipModel}
-          />
-        )}
-        {view === 'achievements' && (
-          <ProgressScreen state={state} achievements={achievements} onSetOutlook={setOutlook} />
-        )}
-        {view === 'habits' && (
-          <HabitTracker
-            state={state}
-            onAddHabit={addHabit}
-            onRenameHabit={renameHabit}
-            onRecolorHabit={recolorHabit}
-            onDeleteHabit={deleteHabit}
-            onToggleMark={toggleHabitMark}
-            onSetMood={setMood}
-          />
-        )}
-        {view === 'personalise' && (
-          <PersonaliseScreen
-            state={state}
+    <NowPlayingProvider value={{ label: nowPlaying, getLevel: noise.getLevel }}>
+      <AppShell immersive={path === '/focus'} socialBadge={inbox.unread + inbox.requests} challengeBadge={challengeFeed.incomingCount}>
+        <Suspense fallback={<LoadingState lines={3} label="Opening" />}>
+          <Routes
             user={user}
-            onRename={renamePlayer}
-            onSetCard={setCard}
+            notebook={notebook}
+            challengeFeed={challengeFeed}
+            inbox={inbox}
+            noise={noise}
+            nowPlaying={nowPlaying}
             onUserChange={onUserChange}
+            onSignOut={() => void handleSignOut()}
           />
-        )}
-
-          </>
-        )}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Sign out lives at the foot of the page, not in the header. It is the
-            one control here you almost never want and can least afford to hit
-            by accident, and it had been sitting a few pixels from the install
-            button in the top-right cluster. */}
-        <footer className="flex items-center justify-between gap-3 border-t border-ink-700/60 pt-4 text-[11px] text-slate-500">
-          <span className="min-w-0 truncate">{user.email}</span>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 font-medium transition-colors hover:bg-ink-800 hover:text-slate-200"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Sign out
-          </button>
-        </footer>
-      </main>
-
-      {phone && (
-        <ModeDock mode={mode} onChange={switchMode} badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0} />
-      )}
-
-      <VerifyModalHost
-        quest={verifyingQuest}
-        onClose={() => setVerifyingQuestId(null)}
-        onVerified={(kind, note) => {
-          if (verifyingQuestId) verifyQuest(verifyingQuestId, kind, note)
-        }}
-      />
-
-      {tourOpen && <GuideTour state={state} userId={user.id} onClose={() => setTourOpen(false)} />}
-
-      <ThemeButton />
+        </Suspense>
+      </AppShell>
+      <RewardLayer />
+      <LevelConfetti />
       <InstallPrompt />
+    </NowPlayingProvider>
+  )
+}
 
-      {celebrate && burst.key > 0 && <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />}
-
-      <ToastStack events={events} onDismiss={dismissEvent} />
-      <LevelUpModal events={events} onDismiss={dismissEvent} />
+/** A page reached from a hub: a back link, a title, then the tool. */
+function ToolPage({ title, subtitle, back, children }: { title: string; subtitle?: string; back: { to: string; label: string }; children: ReactNode }) {
+  return (
+    <div>
+      <PageHeader title={title} subtitle={subtitle} back={<BackLink to={back.to} label={back.label} />} />
+      {children}
     </div>
   )
+}
+
+const TO_QUESTS = { to: '/quests', label: 'Quests' }
+const TO_PROFILE = { to: '/profile', label: 'Profile' }
+
+function Routes({
+  user,
+  notebook,
+  challengeFeed,
+  inbox,
+  noise,
+  nowPlaying,
+  onUserChange,
+  onSignOut,
+}: {
+  user: AuthUser
+  notebook: Notebook
+  challengeFeed: ReturnType<typeof useChallenges>
+  inbox: ReturnType<typeof useMessages>
+  noise: ReturnType<typeof useNoise>
+  nowPlaying: string | null
+  onUserChange: (user: AuthUser) => void
+  onSignOut: () => void
+}) {
+  const game = useGame()
+  const toast = useToast()
+  const { path, navigate, back } = useRouter()
+  const { state } = notebook
+  const quests = game.snapshot?.quests ?? []
+
+  /** The planner's tick: a quest finished by ticking is completed; anything
+   * measured (focus minutes, counts, steps) opens so it can be done properly. */
+  const toggleQuest = useCallback(
+    async (quest: GameQuest) => {
+      if (quest.progress.kind !== 'check' || (quest.status !== 'active' && quest.status !== 'in_progress')) {
+        navigate(`/quests/${encodeURIComponent(quest.id)}`)
+        return
+      }
+      try {
+        await game.completeQuest(quest.id)
+      } catch (err) {
+        toast.error(messageOf(err, 'Could not complete that quest.'))
+      }
+    },
+    [game, navigate, toast],
+  )
+
+  const addPlanned = useCallback(
+    async (title: string, date: string, block?: string) => {
+      try {
+        const quest = await game.createQuest({ type: 'optional', title, durationMin: 15 })
+        notebook.scheduleTask('todo', quest.id, date, block)
+      } catch (err) {
+        toast.error(messageOf(err, 'Could not add that quest.'))
+      }
+    },
+    [game, notebook, toast],
+  )
+
+  const applyPlan = useCallback(
+    async (items: PlanItemInput[]) => {
+      const { quests: created } = await gameApi.createPlanQuests(items.map(({ title, kind }) => ({ title, kind })))
+      const placements = items.flatMap((item, i) => (item.placement && created[i] ? [{ refId: created[i].id, date: item.placement.date, block: item.placement.block }] : []))
+      notebook.addScheduleEntries(placements)
+      await game.refreshQuests().catch(() => undefined)
+    },
+    [game, notebook],
+  )
+
+  if (path === '/') return <HomeScreen name={state.player.name} challenges={challengeFeed.challenges} />
+  if (path === '/quests' || path === '/quests/new' || match('/quests/:id', path)) return <QuestBoardScreen goals={state.goals} />
+  if (path === '/focus') return <FocusModeScreen goals={state.goals} nowPlaying={nowPlaying} />
+  if (path === '/notifications') return <ChronicleLogScreen />
+
+  if (path === '/sounds') {
+    return (
+      <ToolPage title="Sounds" subtitle="Music and ambience that keeps playing across Questly" back={TO_QUESTS}>
+        <SoundsScreen noise={noise} />
+      </ToolPage>
+    )
+  }
+  if (path === '/planner') {
+    return (
+      <ToolPage title="Planner" subtitle="Place your quests on the days you will do them" back={TO_QUESTS}>
+        <Planner
+          state={state}
+          quests={quests}
+          onSchedule={notebook.scheduleTask}
+          onMove={notebook.moveScheduleEntry}
+          onUnschedule={notebook.unschedule}
+          onAddPlanned={(title, date, block) => void addPlanned(title, date, block)}
+          onToggleQuest={(quest) => void toggleQuest(quest)}
+        />
+      </ToolPage>
+    )
+  }
+  if (path === '/habits') {
+    return (
+      <ToolPage title="Habits" subtitle="Streaks, moods and what you did each day" back={TO_QUESTS}>
+        <HabitTracker
+          state={state}
+          onAddHabit={notebook.addHabit}
+          onRenameHabit={notebook.renameHabit}
+          onRecolorHabit={notebook.recolorHabit}
+          onDeleteHabit={notebook.deleteHabit}
+          onToggleMark={notebook.toggleHabitMark}
+          onSetMood={notebook.setMood}
+        />
+      </ToolPage>
+    )
+  }
+  if (path === '/study') {
+    return (
+      <ToolPage title="Study" subtitle="Flashcards, and explaining it back" back={TO_QUESTS}>
+        <StudyScreen
+          state={state}
+          onAddDeck={notebook.addDeck}
+          onDeleteDeck={notebook.deleteDeck}
+          onUpdateCard={notebook.updateCard}
+          onDeleteCard={notebook.deleteCard}
+          onAddCard={notebook.addCard}
+          onAddReport={notebook.addReport}
+          onDeleteReport={notebook.deleteReport}
+        />
+      </ToolPage>
+    )
+  }
+  if (path === '/ai-plan') {
+    return (
+      <ToolPage title="AI Planner" subtitle="Describe a goal, answer a few questions, get a dated plan" back={TO_QUESTS}>
+        <AiPlanner onApplyPlan={applyPlan} onOpenPlanner={() => navigate('/planner')} />
+      </ToolPage>
+    )
+  }
+  if (path === '/goals') {
+    return (
+      <ToolPage title="Goals" subtitle="What your quests are working towards" back={TO_QUESTS}>
+        <GoalsManager goals={state.goals} onAddGoal={notebook.addGoal} onArchiveGoal={notebook.archiveGoal} />
+      </ToolPage>
+    )
+  }
+
+  if (path === '/social' || path.startsWith('/social/') || match('/u/:username', path)) {
+    return (
+      <div>
+        <PageHeader title="Adventure Log" subtitle="What everyone is working on" />
+        <SocialHome state={state} user={user} inbox={inbox} />
+      </div>
+    )
+  }
+
+  const duel = match('/challenges/:id', path)
+  if (path === '/challenges' || duel) {
+    return (
+      <div>
+        <PageHeader title="Challenges" subtitle="Duel someone. Finish what you agreed. Earn XP." />
+        <ChallengesScreen
+          myName={state.player.name}
+          challenges={challengeFeed.challenges}
+          error={challengeFeed.error}
+          onRefresh={challengeFeed.refresh}
+          onUpsert={(c: Challenge) => {
+            challengeFeed.upsert(c)
+            if (c.status === 'completed') void game.refresh()
+          }}
+          openId={duel?.id ?? null}
+          onOpenChange={(id) => (id ? navigate(`/challenges/${encodeURIComponent(id)}`, { keepScroll: true }) : back('/challenges'))}
+        />
+      </div>
+    )
+  }
+  if (path === '/leaderboard') {
+    return (
+      <ToolPage title="Leaderboard" subtitle="Ranked by XP" back={{ to: '/challenges', label: 'Challenges' }}>
+        <Leaderboard myName={state.player.name} />
+      </ToolPage>
+    )
+  }
+
+  if (path === '/profile') return <ProfileScreen user={user} goals={state.goals} challenges={challengeFeed.challenges} />
+  if (path === '/profile/wardrobe') return <WardrobeScreen />
+  if (path === '/profile/achievements') return <AchievementsScreen />
+  if (path === '/profile/history') return <XpHistoryScreen />
+  if (path === '/profile/progress') {
+    return (
+      <ToolPage title="Progress" subtitle="Your record, and an honest read on where it leads" back={TO_PROFILE}>
+        <ProgressScreen outlook={state.outlook} onSetOutlook={notebook.setOutlook} />
+      </ToolPage>
+    )
+  }
+  if (path === '/profile/card') {
+    return (
+      <ToolPage title="Questly Card" subtitle="What other players see when they open you" back={TO_PROFILE}>
+        <CardDesigner state={state} user={user} progress={game.snapshot?.progress ?? null} look={game.snapshot?.look ?? null} onSetCard={notebook.setCard} />
+      </ToolPage>
+    )
+  }
+  if (path === '/profile/settings') {
+    return (
+      <ToolPage title="Settings" subtitle="Profile, look and feel, account and data" back={TO_PROFILE}>
+        <PersonaliseScreen state={state} user={user} onRename={notebook.renamePlayer} onUserChange={onUserChange} onSignOut={onSignOut} />
+      </ToolPage>
+    )
+  }
+
+  return <NotFound />
+}
+
+function NotFound() {
+  const { navigate } = useRouter()
+  return (
+    <div className="pt-16 text-center">
+      <p className="eyebrow">Uncharted</p>
+      <h1 className="page-title mt-2">This path leads nowhere</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm text-slate-400">The page you were looking for does not exist, or has moved.</p>
+      <button type="button" onClick={() => navigate('/', { replace: true })} className="btn-primary mt-6">
+        Back to the hub
+      </button>
+    </div>
+  )
+}
+
+/** Confetti for a level-up, unless switched off in Settings. */
+function LevelConfetti() {
+  const { celebrations } = useGame()
+  const [enabled] = useCelebrations()
+  const [burst, setBurst] = useState<{ key: number; big: boolean }>({ key: 0, big: false })
+  const seen = useRef(new Set<string>())
+
+  useEffect(() => {
+    for (const c of celebrations) {
+      if (c.type !== 'level' || seen.current.has(c.id)) continue
+      seen.current.add(c.id)
+      setBurst((b) => ({ key: b.key + 1, big: c.rankChanged }))
+    }
+  }, [celebrations])
+
+  if (!enabled || burst.key === 0) return null
+  return <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />
 }

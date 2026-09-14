@@ -1,5 +1,5 @@
 import type { AppState, CardDesign, CardField, CardItem, CardStroke } from '../types'
-import type { AuthUser, PublicPlayer } from './api'
+import type { AuthUser, Look, Progress, PublicPlayer } from './api'
 import { avatarUrl, playerAvatarUrl } from './api'
 import { rankForLevel } from '../data/ranks'
 import { ageFromBirthdate, birthdayLabel } from './profile'
@@ -47,6 +47,7 @@ export function findBackground(id: string, rankColor: string): CardBackground {
 }
 
 export const FIELD_LABELS: Record<CardField, string> = {
+  hero: 'Character',
   avatar: 'Picture',
   name: 'Name',
   username: 'Username',
@@ -85,7 +86,7 @@ export function defaultCard(): CardDesign {
     background: 'rank',
     items: [
       field('rank', 0.5, 0.075),
-      field('avatar', 0.5, 0.29),
+      field('hero', 0.5, 0.29),
       field('name', 0.5, 0.5),
       field('username', 0.5, 0.565),
       field('bio', 0.5, 0.68),
@@ -164,24 +165,32 @@ export interface CardData {
   rankIcon: string
   rankColor: string
   avatar: string | null
+  /** The pixel character, as worn. */
+  look: Look | null
 }
 
-export function cardData(state: AppState, user: AuthUser, avatarOverride?: string | null): CardData {
-  const rank = rankForLevel(state.progression.level)
+export function cardData(
+  state: AppState,
+  user: AuthUser,
+  { progress = null, look = null, avatarOverride }: { progress?: Progress | null; look?: Look | null; avatarOverride?: string | null } = {},
+): CardData {
+  const level = progress?.level ?? 1
+  const rank = rankForLevel(level)
   return {
-    name: state.player.name || user.displayName || 'Adventurer',
+    name: user.displayName || state.player.name || 'Adventurer',
     age: user.birthdate ? ageFromBirthdate(user.birthdate) : null,
     username: user.username ?? null,
     bio: user.bio ?? null,
     birthday: birthdayLabel(user.birthdate),
     joined: new Date(state.player.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
     email: user.email,
-    xp: state.player.xp,
-    level: state.progression.level,
+    xp: progress?.xp ?? 0,
+    level,
     rankName: rank.name,
-    rankIcon: rank.icon,
+    rankIcon: '◆',
     rankColor: rank.color,
     avatar: avatarOverride ?? avatarUrl(user.avatarVersion),
+    look,
   }
 }
 
@@ -201,8 +210,9 @@ export function publicCardData(player: PublicPlayer): CardData {
     xp: player.xp,
     level: player.level,
     rankName: rank.name,
-    rankIcon: rank.icon,
+    rankIcon: '◆',
     rankColor: rank.color,
     avatar: playerAvatarUrl(player.username, player.avatarVersion),
+    look: player.look ?? null,
   }
 }

@@ -1,223 +1,267 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Silkscreen&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /**
- * Theming works by redefining the colour scales themselves rather than by
- * rewriting components. Every `bg-ink-850` and `text-slate-400` already in the
- * app resolves through these variables, so a theme is a change of values here
- * and nowhere else.
+ * Questly's look: a premium indie RPG.
  *
- * The scales keep their meaning across both themes rather than simply
- * inverting:
- *   ink-950  the page itself        ink-900/850  a raised surface
- *   ink-800..500  dividers and borders, increasing in strength
- *   slate-50..200 strongest text    slate-400..600  progressively quieter
+ * Near-black charcoal for the world, parchment for contracts and notices,
+ * emerald for "act on this", amber for rewards, and four rarity colours. The
+ * scales resolve through variables so a theme is a change of values here and
+ * nowhere else. The token names are historical — `gold` is the primary accent
+ * (emerald), `ember` its partner — and are kept because hundreds of utilities
+ * already use them; they describe a role, not a hue.
  *
- * So a card is always *nearer the viewer* than the page — lighter in the dark
- * theme, whiter in the light one — and slate always runs loud to quiet. That is
- * why the numbers do not flip: the token names describe a role, not a lightness.
+ *   ink-950  the page          ink-900/850  panels, raised panels
+ *   ink-800..500  insets, dividers and borders, strengthening
+ *   slate-50..200 strongest text     slate-400..600 progressively quieter
  */
 
-/**
- * Light: white, black and green.
- *
- * The neutrals are true neutrals — no tint. Everything that is not a colour
- * decision is black, white or a grey between them, and green is the only hue on
- * the page. That is what keeps the green meaningful: when the surfaces were
- * green-tinted too, an accent had nothing to stand out against.
- *
- * The page sits a step below white so the cards, which are white, have
- * something to rise off. Depth is still shadow, now plain black shadow.
- */
 :root,
-:root[data-theme='light'] {
-  color-scheme: light;
-
-  --ink-950: 230 230 230;
-  --ink-900: 255 255 255;
-  --ink-850: 250 250 250;
-  --ink-800: 241 241 241;
-  --ink-700: 226 226 226;
-  --ink-600: 210 210 210;
-  --ink-500: 176 176 176;
-
-  --slate-50: 10 10 10;
-  --slate-100: 23 23 23;
-  --slate-200: 38 38 38;
-  --slate-300: 64 64 64;
-  --slate-400: 96 96 96;
-  --slate-500: 124 124 124;
-  --slate-600: 163 163 163;
-
-  /* Green. 300 and 400 carry text, so they are the deep greens that stay
-     legible on white; 500 and 600 are fills and stay bright. */
-  --gold-300: 22 101 52;
-  --gold-400: 21 128 61;
-  --gold-500: 74 222 128;
-  --gold-600: 34 197 94;
-
-  --ember-400: 22 101 52;
-  --ember-500: 34 197 94;
-  --ember-600: 22 163 74;
-
-  /* The neutral accent: black here, white in the dark theme. It marks things
-     as done or selected without spending the green on them, so green keeps
-     meaning "act on this". */
-  --mystic-100: 10 10 10;
-  --mystic-200: 23 23 23;
-  --mystic-300: 38 38 38;
-  --mystic-400: 64 64 64;
-  --mystic-500: 23 23 23;
-  --mystic-600: 10 10 10;
-
-  --emerald-400: 21 128 61;
-  --blue-400: 64 64 64;
-
-  --on-accent: 0 0 0;
-
-  --glow-gold: rgba(74, 222, 128, 0.4);
-  --glow-mystic: rgba(0, 0, 0, 0.12);
-
-  /* One green pool and one white one. The page reads as a lit grey field with a
-     hint of the accent, not as a green background. */
-  --wash-gold: rgba(74, 222, 128, 0.16);
-  --wash-ember: rgba(34, 197, 94, 0.07);
-  --wash-mystic: rgba(255, 255, 255, 0.7);
-
-  --scrollbar-thumb: 190 190 190;
-
-  --clay-lift: rgba(0, 0, 0, 0.4);
-  --clay-contact: rgba(0, 0, 0, 0.28);
-  --clay-far: rgba(0, 0, 0, 0.32);
-  --clay-inset: rgba(0, 0, 0, 0.24);
-  --clay-sheen: rgba(255, 255, 255, 1);
-  --clay-top: rgba(255, 255, 255, 0.7);
-  --clay-bottom: rgba(0, 0, 0, 0.07);
-  --extrude-accent: rgb(22 163 74);
-  --extrude-neutral: rgb(196 196 196);
-  --extrude-card: rgb(200 200 200);
-  --extrude-row: rgb(212 212 212);
-  --icon-shadow: rgba(0, 0, 0, 0.4);
-  --icon-sheen: rgba(255, 255, 255, 0.9);
-  --clay-border: rgba(0, 0, 0, 0.08);
-}
-
-/**
- * Dark: black, white and green.
- *
- * Near-black rather than pure black for the surfaces, so a card can be lighter
- * than the page and still read as black — pure #000 everywhere leaves nothing
- * for depth to work with. Text is plain white. Shadow does less on a dark
- * ground, so the lit top edge carries more of the depth.
- */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ink-950: 11 11 11;
-  --ink-900: 20 20 20;
-  --ink-850: 24 24 24;
-  --ink-800: 32 32 32;
-  --ink-700: 44 44 44;
-  --ink-600: 58 58 58;
-  --ink-500: 84 84 84;
+  --ink-950: 9 11 12;
+  --ink-900: 15 18 20;
+  --ink-850: 20 24 27;
+  --ink-800: 27 32 36;
+  --ink-700: 38 44 49;
+  --ink-600: 50 58 64;
+  --ink-500: 74 84 91;
 
-  --slate-50: 255 255 255;
-  --slate-100: 245 245 245;
-  --slate-200: 229 229 229;
-  --slate-300: 200 200 200;
-  --slate-400: 163 163 163;
-  --slate-500: 128 128 128;
-  --slate-600: 92 92 92;
+  --slate-50: 246 242 232;
+  --slate-100: 234 229 217;
+  --slate-200: 216 210 196;
+  --slate-300: 190 184 170;
+  --slate-400: 156 151 139;
+  --slate-500: 122 118 108;
+  --slate-600: 92 89 82;
 
-  --gold-300: 187 247 208;
-  --gold-400: 134 239 172;
-  --gold-500: 74 222 128;
-  --gold-600: 34 197 94;
+  /* Emerald: the call to action. */
+  --gold-300: 134 239 190;
+  --gold-400: 52 211 153;
+  --gold-500: 16 185 129;
+  --gold-600: 5 150 105;
 
-  --ember-400: 74 222 128;
-  --ember-500: 34 197 94;
-  --ember-600: 22 163 74;
+  --ember-400: 110 231 183;
+  --ember-500: 18 170 118;
+  --ember-600: 4 120 87;
 
-  /* White for text; a mid grey for fills, because "done" boxes draw a white
-     tick on top of mystic-500 and a white fill would swallow it. */
-  --mystic-100: 255 255 255;
-  --mystic-200: 245 245 245;
-  --mystic-300: 229 229 229;
-  --mystic-400: 212 212 212;
-  --mystic-500: 72 72 72;
-  --mystic-600: 52 52 52;
+  /* Amber: rewards, XP, anything earned. */
+  --reward-300: 253 226 160;
+  --reward-400: 244 196 90;
+  --reward-500: 226 166 52;
+  --reward-600: 176 122 24;
 
-  --emerald-400: 74 222 128;
-  --blue-400: 212 212 212;
+  /* Parchment surfaces and the ink written on them. */
+  --parch-50: 251 246 234;
+  --parch-100: 243 233 210;
+  --parch-200: 230 214 182;
+  --parch-300: 204 183 144;
+  --parch-ink: 43 34 22;
+  --parch-soft: 112 94 68;
 
-  --on-accent: 0 0 0;
+  --rarity-common: 160 167 171;
+  --rarity-rare: 86 163 235;
+  --rarity-epic: 172 120 240;
+  --rarity-legendary: 236 173 64;
 
-  --glow-gold: rgba(74, 222, 128, 0.35);
-  --glow-mystic: rgba(255, 255, 255, 0.12);
+  --danger-400: 248 113 113;
+  --danger-500: 220 68 68;
+  --danger-600: 176 42 42;
+  --info-400: 110 168 250;
+  --arcane-400: 176 146 250;
 
-  --wash-gold: rgba(74, 222, 128, 0.1);
-  --wash-ember: rgba(34, 197, 94, 0.05);
-  --wash-mystic: rgba(255, 255, 255, 0.03);
+  /* The quiet neutral accent for "done" and "selected". */
+  --mystic-100: 246 242 232;
+  --mystic-200: 234 229 217;
+  --mystic-300: 216 210 196;
+  --mystic-400: 190 184 170;
+  --mystic-500: 64 72 78;
+  --mystic-600: 48 56 62;
 
-  --scrollbar-thumb: 64 64 64;
+  --emerald-400: 52 211 153;
+  --blue-400: 110 168 250;
 
-  --clay-lift: rgba(0, 0, 0, 0.85);
-  --clay-contact: rgba(0, 0, 0, 0.65);
-  --clay-far: rgba(0, 0, 0, 0.75);
-  --clay-inset: rgba(0, 0, 0, 0.5);
-  --clay-sheen: rgba(255, 255, 255, 0.08);
+  --on-accent: 3 20 13;
+
+  --glow-gold: rgba(16, 185, 129, 0.35);
+  --glow-reward: rgba(226, 166, 52, 0.45);
+  --glow-mystic: rgba(246, 242, 232, 0.1);
+
+  --scrollbar-thumb: 50 58 64;
+
+  /* Surface lighting, used by the panel and legacy card treatments. */
+  --surface-top: rgba(255, 255, 255, 0.035);
+  --surface-bottom: rgba(0, 0, 0, 0.18);
+  --surface-sheen: rgba(255, 255, 255, 0.05);
+  --surface-shadow: rgba(0, 0, 0, 0.55);
+  --surface-border: rgba(255, 255, 255, 0.07);
+  --inset-shadow: rgba(0, 0, 0, 0.45);
+
+  /* Kept for components that still read them directly. */
+  --clay-lift: rgba(0, 0, 0, 0.55);
+  --clay-contact: rgba(0, 0, 0, 0.4);
+  --clay-far: rgba(0, 0, 0, 0.45);
+  --clay-inset: rgba(0, 0, 0, 0.45);
+  --clay-sheen: rgba(255, 255, 255, 0.05);
   --clay-top: rgba(255, 255, 255, 0.035);
-  --clay-bottom: rgba(0, 0, 0, 0.35);
-  --extrude-accent: rgb(22 140 66);
-  --extrude-neutral: rgb(6 6 6);
-  --extrude-card: rgb(0 0 0);
-  --extrude-row: rgb(4 4 4);
-  --icon-shadow: rgba(0, 0, 0, 0.8);
-  --icon-sheen: rgba(255, 255, 255, 0.14);
+  --clay-bottom: rgba(0, 0, 0, 0.18);
+  --extrude-accent: rgb(4 110 76);
+  --extrude-neutral: rgb(5 6 7);
+  --extrude-card: rgb(4 5 6);
+  --extrude-row: rgb(6 7 8);
+  --icon-shadow: rgba(0, 0, 0, 0.7);
+  --icon-sheen: rgba(255, 255, 255, 0.08);
   --clay-border: rgba(255, 255, 255, 0.07);
+
+  --page-vignette: radial-gradient(ellipse 120% 70% at 50% -10%, rgba(16, 185, 129, 0.07), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 100% 100%, rgba(226, 166, 52, 0.04), transparent 65%);
+}
+
+/**
+ * Day: the same world on parchment. Cream pages, dark ink, forest green and
+ * burnished gold, so the identity holds when the lights come up.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ink-950: 236 228 211;
+  --ink-900: 248 243 231;
+  --ink-850: 252 248 238;
+  --ink-800: 241 233 216;
+  --ink-700: 224 212 188;
+  --ink-600: 206 191 162;
+  --ink-500: 170 152 120;
+
+  --slate-50: 32 26 17;
+  --slate-100: 43 35 24;
+  --slate-200: 62 52 37;
+  --slate-300: 88 75 56;
+  --slate-400: 112 97 75;
+  --slate-500: 138 122 98;
+  --slate-600: 170 155 130;
+
+  --gold-300: 21 94 64;
+  --gold-400: 22 118 80;
+  --gold-500: 26 140 94;
+  --gold-600: 20 110 74;
+
+  --ember-400: 21 94 64;
+  --ember-500: 26 140 94;
+  --ember-600: 20 110 74;
+
+  --reward-300: 146 98 14;
+  --reward-400: 166 112 18;
+  --reward-500: 196 136 30;
+  --reward-600: 150 100 16;
+
+  --parch-50: 255 252 244;
+  --parch-100: 250 242 222;
+  --parch-200: 238 224 192;
+  --parch-300: 214 194 154;
+  --parch-ink: 43 34 22;
+  --parch-soft: 112 94 68;
+
+  --rarity-common: 118 124 128;
+  --rarity-rare: 36 110 190;
+  --rarity-epic: 128 72 206;
+  --rarity-legendary: 186 122 20;
+
+  --danger-400: 196 50 50;
+  --danger-500: 196 50 50;
+  --danger-600: 160 36 36;
+  --info-400: 36 100 190;
+  --arcane-400: 110 72 196;
+
+  --mystic-100: 32 26 17;
+  --mystic-200: 43 35 24;
+  --mystic-300: 62 52 37;
+  --mystic-400: 88 75 56;
+  --mystic-500: 62 52 37;
+  --mystic-600: 43 35 24;
+
+  --emerald-400: 22 118 80;
+  --blue-400: 36 100 190;
+
+  --on-accent: 250 246 236;
+
+  --glow-gold: rgba(26, 140, 94, 0.3);
+  --glow-reward: rgba(196, 136, 30, 0.35);
+  --glow-mystic: rgba(43, 35, 24, 0.1);
+
+  --scrollbar-thumb: 206 191 162;
+
+  --surface-top: rgba(255, 255, 255, 0.5);
+  --surface-bottom: rgba(120, 90, 40, 0.04);
+  --surface-sheen: rgba(255, 255, 255, 0.8);
+  --surface-shadow: rgba(80, 60, 20, 0.18);
+  --surface-border: rgba(80, 60, 20, 0.14);
+  --inset-shadow: rgba(80, 60, 20, 0.16);
+
+  --clay-lift: rgba(80, 60, 20, 0.2);
+  --clay-contact: rgba(80, 60, 20, 0.16);
+  --clay-far: rgba(80, 60, 20, 0.16);
+  --clay-inset: rgba(80, 60, 20, 0.16);
+  --clay-sheen: rgba(255, 255, 255, 0.8);
+  --clay-top: rgba(255, 255, 255, 0.5);
+  --clay-bottom: rgba(120, 90, 40, 0.04);
+  --extrude-accent: rgb(18 96 64);
+  --extrude-neutral: rgb(206 191 162);
+  --extrude-card: rgb(214 200 172);
+  --extrude-row: rgb(222 210 186);
+  --icon-shadow: rgba(80, 60, 20, 0.25);
+  --icon-sheen: rgba(255, 255, 255, 0.8);
+  --clay-border: rgba(80, 60, 20, 0.14);
+
+  --page-vignette: radial-gradient(ellipse 120% 70% at 50% -10%, rgba(26, 140, 94, 0.08), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 100% 100%, rgba(196, 136, 30, 0.06), transparent 65%);
 }
 
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   @apply bg-ink-950 text-slate-100 font-body antialiased;
-  /* Offset pools rather than one even tint: a flat wash reads as a coloured
-     background, offset pools read as a lit surface. */
-  background-image:
-    radial-gradient(ellipse 80% 50% at 15% 0%, var(--wash-gold), transparent 62%),
-    radial-gradient(ellipse 70% 55% at 90% 20%, var(--wash-mystic), transparent 65%),
-    radial-gradient(ellipse 90% 60% at 50% 105%, var(--wash-ember), transparent 68%);
+  background-image: var(--page-vignette);
   background-attachment: fixed;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Film grain over everything, very faint: surfaces read as material rather
+   than flat colour. One fixed layer, composited once. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 /**
  * The cursor.
  *
  * The images live in src/lib/cursors.ts, which writes the chosen set into two
- * variables; this only says where each one applies. Without JavaScript, or
- * before it runs, both fall back to the system cursor.
- *
- * It stays a real CSS cursor in every set — never an element chasing the mouse,
- * which always trails the true pointer by a frame or two. Animation is a
- * separate layer around it (.fx-* below).
- *
- * Gated on a real pointing device. On a phone there is no cursor to restyle,
- * and `cursor: pointer` on touch has its own side effects.
+ * variables; this only says where each one applies. Gated on a real pointing
+ * device — on a phone there is no cursor to restyle.
  */
 @media (hover: hover) and (pointer: fine) {
   body {
     cursor: var(--cursor-default, auto);
   }
 
-  /* Anything you can press gets the set's "live" image, so the cursor itself
-     tells you the thing under it will respond. */
   a,
   button,
   summary,
@@ -232,8 +276,6 @@ body {
     cursor: var(--cursor-pointer, pointer);
   }
 
-  /* A dead control should not claim to be pressable. `:disabled` beats the rule
-     above on specificity, which is why it sits here rather than earlier. */
   button:disabled,
   select:disabled,
   input:disabled,
@@ -241,8 +283,6 @@ body {
     cursor: not-allowed;
   }
 
-  /* Text entry keeps the system caret in every set — a custom image over a text
-     field hides where the insertion point actually is. */
   input[type='text'],
   input[type='email'],
   input[type='password'],
@@ -251,6 +291,7 @@ body {
   input[type='url'],
   input[type='date'],
   input[type='time'],
+  input[type='datetime-local'],
   textarea,
   [contenteditable='true'] {
     cursor: text;
@@ -258,12 +299,8 @@ body {
 }
 
 /**
- * Cursor effects, spawned by src/lib/cursorFx.ts.
- *
- * Every particle is one span running one keyframe, with its start, end, spin
- * and colour passed in as variables — so there is a single animation for every
- * shape and direction, and the browser composites it without touching layout.
- * Only transform and opacity move.
+ * Cursor effects, spawned by src/lib/cursorFx.ts. One animation for every
+ * particle; only transform and opacity move.
  */
 .fx-layer {
   position: fixed;
@@ -297,8 +334,6 @@ body {
   }
 }
 
-/* A hairline of shadow on each shape, so a white spark still shows on the
-   white theme and a black pixel on the dark one. */
 .fx-dot {
   border-radius: 9999px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
@@ -334,7 +369,6 @@ body {
   clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
 }
 
-/* The ring that opens under every click. */
 .fx-ring {
   position: absolute;
   left: 0;
@@ -379,246 +413,262 @@ body {
   background-color: color-mix(in srgb, var(--c) 16%, transparent);
 }
 
-/**
- * The clay treatment.
- *
- * Three things together make a flat rectangle read as a moulded object: a wide
- * soft shadow for the light it blocks, a tight one where it meets the page, and
- * a highlight along the top edge where it faces the source. Any one alone reads
- * as a drop shadow; all three read as depth.
- *
- * Applied by attribute selector so it follows the markup already in the app
- * rather than needing a class on every card. The :not() guards are
- * load-bearing — `position: relative` here outranks Tailwind's own `fixed` on
- * specificity, and without them any floating panel silently falls back into the
- * document flow.
- */
-[class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute']),
-[class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute']),
-[class*='rounded-xl'][class*='bg-ink-85']:not([class*='fixed']):not([class*='absolute']) {
-  position: relative;
-  border-radius: 1.6rem;
-  border-color: var(--clay-border);
-  /* The surface's own tonal falloff. A panel lit from above is brighter along
-     its top edge and shades toward its base; without this the face stays flat
-     and only the outline looks three-dimensional. */
-  background-image: linear-gradient(180deg, var(--clay-top), var(--clay-bottom));
-  /* Four layers, each doing one job: the seam where it meets the page, the
-     shadow it casts nearby, the far diffuse one that gives it height, and the
-     highlight along the lit top edge. */
-  box-shadow:
-    0 8px 0 var(--extrude-card),
-    0 14px 20px -4px var(--clay-lift),
-    0 34px 60px -18px var(--clay-far),
-    inset 0 1px 0 var(--clay-sheen);
+/* --------------------------------------------------------------------------
+ * The design system
+ * ------------------------------------------------------------------------ */
+
+@layer components {
+  /* A panel: the default surface for grouped content. Lit from above, a
+     hairline border, a soft shadow under it. Deliberately not very round. */
+  .panel {
+    @apply rounded-2xl border bg-ink-900;
+    border-color: var(--surface-border);
+    background-image: linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
+    box-shadow:
+      inset 0 1px 0 var(--surface-sheen),
+      0 10px 30px -18px var(--surface-shadow);
+  }
+
+  .panel-raised {
+    @apply rounded-2xl border bg-ink-850;
+    border-color: var(--surface-border);
+    background-image: linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
+    box-shadow:
+      inset 0 1px 0 var(--surface-sheen),
+      0 16px 40px -20px var(--surface-shadow);
+  }
+
+  /* Recessed: tracks, wells, fields. */
+  .inset {
+    @apply rounded-xl bg-ink-950/60;
+    box-shadow:
+      inset 0 1px 3px var(--inset-shadow),
+      inset 0 -1px 0 var(--surface-sheen);
+  }
+
+  /* Parchment: quest contracts, notices, the place descriptions on the map. */
+  .parchment {
+    position: relative;
+    border-radius: 0.9rem;
+    color: rgb(var(--parch-ink));
+    background-color: rgb(var(--parch-100));
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.33 0 0 0 0 0.15 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E"),
+      radial-gradient(ellipse at 20% 0%, rgb(var(--parch-50)), transparent 70%),
+      linear-gradient(180deg, rgb(var(--parch-100)), rgb(var(--parch-200)));
+    box-shadow:
+      inset 0 0 0 1px rgba(120, 90, 40, 0.28),
+      inset 0 0 24px rgba(120, 80, 30, 0.12),
+      0 14px 34px -18px rgba(0, 0, 0, 0.7);
+  }
+
+  .parchment-muted {
+    filter: saturate(0.6) brightness(0.92);
+  }
+
+  /* Page titles: italic serif, like a chapter heading. */
+  .page-title {
+    @apply font-display text-[1.85rem] font-bold italic leading-tight tracking-tight text-slate-50;
+  }
+
+  .section-title {
+    @apply font-display text-xl font-bold leading-snug text-slate-50;
+  }
+
+  /* Small caps labels above sections and inside cards. */
+  .eyebrow {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-400;
+  }
+
+  /* Buttons. A little bevel, not a pill: an RPG control, not a SaaS chip. */
+  .btn {
+    @apply relative inline-flex min-h-[44px] select-none items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-bold uppercase tracking-[0.08em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .btn-primary {
+    @apply btn text-onAccent;
+    background: linear-gradient(180deg, rgb(var(--gold-400)), rgb(var(--gold-500)) 55%, rgb(var(--gold-600)));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+      0 8px 22px -10px var(--glow-gold);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  .btn-gold {
+    @apply btn;
+    color: rgb(40 26 4);
+    background: linear-gradient(180deg, rgb(var(--reward-300)), rgb(var(--reward-400)) 45%, rgb(var(--reward-500)));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+      0 8px 24px -10px var(--glow-reward);
+  }
+  .btn-gold:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+
+  .btn-secondary {
+    @apply btn border bg-ink-850 text-slate-100;
+    border-color: var(--surface-border);
+    box-shadow: inset 0 1px 0 var(--surface-sheen);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-ink-800;
+  }
+
+  .btn-danger {
+    @apply btn text-white;
+    background: linear-gradient(180deg, rgb(var(--danger-400)), rgb(var(--danger-500)) 55%, rgb(var(--danger-600)));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-300 hover:bg-ink-800 hover:text-slate-100;
+  }
+
+  .btn-sm {
+    @apply min-h-[36px] rounded-lg px-3 text-[11px];
+  }
+
+  /* Parchment has its own dark button. */
+  .btn-ink {
+    @apply btn;
+    color: rgb(var(--parch-50));
+    background: linear-gradient(180deg, rgb(52 43 30), rgb(34 28 19));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Tags: quest types, statuses, counts. */
+  .tag {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-[3px] text-[9.5px] font-bold uppercase leading-none tracking-[0.1em];
+  }
+
+  .field {
+    @apply w-full rounded-xl border bg-ink-950/70 px-3.5 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gold-500/60;
+    border-color: var(--surface-border);
+    box-shadow: inset 0 1px 3px var(--inset-shadow);
+  }
+
+  /* XP bars: a recessed track with a lit fill. */
+  .xp-track {
+    @apply relative h-2.5 overflow-hidden rounded-full bg-ink-950;
+    box-shadow:
+      inset 0 1px 2px var(--inset-shadow),
+      0 0 0 1px var(--surface-border);
+  }
+  .xp-fill {
+    @apply absolute inset-y-0 left-0 rounded-full;
+    background: linear-gradient(90deg, rgb(var(--gold-600)), rgb(var(--gold-400)));
+    box-shadow: 0 0 12px var(--glow-gold);
+  }
+  .xp-fill-gold {
+    background: linear-gradient(90deg, rgb(var(--reward-600)), rgb(var(--reward-400)));
+    box-shadow: 0 0 12px var(--glow-reward);
+  }
+  .xp-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 60%);
+  }
+
+  /* Pixel art is drawn small and shown large. */
+  .pixelated {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .text-rarity-common {
+    color: rgb(var(--rarity-common));
+  }
+  .text-rarity-rare {
+    color: rgb(var(--rarity-rare));
+  }
+  .text-rarity-epic {
+    color: rgb(var(--rarity-epic));
+  }
+  .text-rarity-legendary {
+    color: rgb(var(--rarity-legendary));
+  }
+
+  /* An ornamental divider: a line with a diamond in the middle. */
+  .ornament {
+    @apply flex items-center gap-3 text-slate-600;
+  }
+  .ornament::before,
+  .ornament::after {
+    content: '';
+    @apply h-px flex-1;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+  }
 }
 
 /**
- * Inputs read as pressed *into* the surface rather than raised from it.
- *
- * Depth only reads as depth when it has a direction. If every element is
- * lifted, none of them look lifted — the recessed field is what makes the card
- * around it look raised.
+ * Screens built before the design system use plain utility classes. These rules
+ * give their cards, rows, fields and buttons the same restrained surface
+ * treatment, so the whole app reads as one piece while those screens are
+ * rebuilt. Guards keep floating layers (fixed, absolute) out of it.
  */
-input[class*='rounded-xl'],
-textarea[class*='rounded-xl'],
-input[class*='rounded-lg'],
-textarea[class*='rounded-lg'] {
+[class*='rounded-2xl'][class*='bg-ink-8']:not([class*='fixed']):not([class*='absolute']):not(.panel):not(.panel-raised),
+[class*='rounded-2xl'][class*='bg-ink-9']:not([class*='fixed']):not([class*='absolute']):not(.panel):not(.panel-raised) {
+  border-color: var(--surface-border);
+  background-image: linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
   box-shadow:
-    inset 0 2px 4px var(--clay-inset),
-    inset 0 -1px 0 var(--clay-sheen);
+    inset 0 1px 0 var(--surface-sheen),
+    0 10px 28px -18px var(--surface-shadow);
 }
 
-/**
- * Controls, moulded at a smaller scale.
- *
- * Everything a finger acts on gets the same lighting as the cards, one step
- * shallower, so it reads as an object resting on the surface rather than
- * printed onto it. Things that receive input rather than respond to it — a
- * field, a progress track, an empty checkbox — are recessed instead, because
- * depth only reads when something else is sunk to compare it against.
- */
+input[class*='rounded-xl']:not(.field),
+textarea[class*='rounded-xl']:not(.field),
+input[class*='rounded-lg']:not(.field),
+textarea[class*='rounded-lg']:not(.field) {
+  box-shadow: inset 0 1px 3px var(--inset-shadow);
+}
 
-/**
- * Solid accent buttons: physical keys.
- *
- * The first shadow has no blur, which is what makes it read as the *side* of an
- * extruded object rather than a shadow cast by a flat one — a solid band of a
- * darker tone standing between the face and the surface. The blurred layers
- * after it are the shadow that band throws.
- *
- * Pressing moves the face down onto its own side, so the travel is the button
- * compressing rather than sliding. The distances have to agree: three pixels
- * down and three off the extrusion, or the key appears to sink through the page.
- */
-button[class*='rounded-xl'][class*='bg-gradient-to-r'],
-button[class*='rounded-lg'][class*='bg-gradient-to-r'] {
-  border-radius: 999px;
+button[class*='bg-gradient-to-r'][class*='from-gold-5'] {
   box-shadow:
-    0 5px 0 var(--extrude-accent),
-    0 9px 14px -3px var(--clay-lift),
-    0 18px 30px -10px var(--clay-far),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.15),
+    0 8px 20px -12px var(--glow-gold);
   transition:
     transform 0.12s ease,
-    box-shadow 0.12s ease,
     filter 0.12s ease;
 }
-button[class*='rounded-xl'][class*='bg-gradient-to-r']:hover,
-button[class*='rounded-lg'][class*='bg-gradient-to-r']:hover {
-  filter: brightness(1.04);
+button[class*='bg-gradient-to-r'][class*='from-gold-5']:hover:not(:disabled) {
+  filter: brightness(1.05);
 }
-button[class*='rounded-xl'][class*='bg-gradient-to-r']:active,
-button[class*='rounded-lg'][class*='bg-gradient-to-r']:active {
-  transform: translateY(3px);
-  box-shadow:
-    0 2px 0 var(--extrude-accent),
-    0 3px 6px -2px var(--clay-lift),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-/* A disabled key is not pressable, so it should not look it. */
-button[class*='bg-gradient-to-r']:disabled {
-  box-shadow:
-    0 2px 0 var(--extrude-accent),
-    0 3px 6px -3px var(--clay-lift);
-  transform: none;
+button[class*='bg-gradient-to-r'][class*='from-gold-5']:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
-/* Outlined and tinted buttons: present, but clearly a step below a solid one. */
-button[class*='rounded-xl'][class*='border-ink'],
-button[class*='rounded-lg'][class*='border-ink'],
-button[class*='rounded-xl'][class*='bg-ink'],
-button[class*='rounded-lg'][class*='bg-ink'],
-label[class*='rounded-xl'][class*='border'],
-a[class*='rounded-xl'][class*='border-ink'] {
-  border-radius: 999px;
-  box-shadow:
-    0 3px 0 var(--extrude-neutral),
-    0 4px 8px -3px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
-}
-button[class*='rounded-xl'][class*='border-ink']:active,
-button[class*='rounded-lg'][class*='border-ink']:active,
-button[class*='rounded-xl'][class*='bg-ink']:active,
-button[class*='rounded-lg'][class*='bg-ink']:active {
-  transform: translateY(2px);
-  box-shadow:
-    0 1px 0 var(--extrude-neutral),
-    0 2px 4px -2px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-}
-
-/* Rows in a list sit on the card, not in it. */
-[class*='rounded-xl'][class*='bg-ink-8']:not(button):not(input):not(textarea):not([class*='fixed']):not([class*='absolute']),
-[class*='rounded-lg'][class*='bg-ink-8']:not(button):not(input):not(textarea):not([class*='fixed']):not([class*='absolute']) {
-  box-shadow:
-    0 3px 0 var(--extrude-row),
-    0 7px 13px -4px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-}
-
-/* The nav bar is a tray; the selected tab is the one thing lifted out of it. */
-nav[class*='rounded-xl'] {
-  box-shadow:
-    inset 0 2px 5px var(--clay-inset),
-    0 1px 0 var(--clay-sheen);
-}
-nav button[class*='bg-gradient-to-r'] {
-  border-radius: 999px;
-  box-shadow:
-    0 4px 0 var(--extrude-accent),
-    0 6px 12px -4px var(--clay-lift),
-    0 0 18px -2px var(--glow-gold),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-nav button[class*='bg-gradient-to-r']:active {
-  transform: translateY(2px);
-  box-shadow:
-    0 2px 0 var(--extrude-accent),
-    0 3px 6px -3px var(--clay-lift),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-/* Tracks and empty checkboxes are hollows, so what fills them reads as solid. */
 [class*='rounded-full'][class*='bg-ink-7'],
 [class*='h-1'][class*='bg-ink-7'],
 [class*='h-1.5'][class*='bg-ink-7'],
 [class*='h-2'][class*='bg-ink-7'] {
-  box-shadow: inset 0 1px 3px var(--clay-inset);
-}
-button[class*='rounded'][class*='border-ink-5'][class*='bg-ink-9'] {
-  box-shadow: inset 0 1px 2px var(--clay-inset);
+  box-shadow: inset 0 1px 2px var(--inset-shadow);
 }
 
-/* Small pills — XP chips, tags, counters — get a hairline of thickness. Any
-   more and a label starts competing with the controls around it. */
-span[class*='rounded-full'][class*='bg-'],
-span[class*='rounded'][class*='bg-gold-5'],
-span[class*='rounded'][class*='bg-mystic-5'] {
-  box-shadow:
-    0 2px 0 var(--clay-contact),
-    0 3px 6px -3px var(--clay-lift);
-}
-
-/* The rails are keys mounted on the edge of the screen, so their thickness runs
-   sideways rather than down. */
-button[class*='fixed'][class*='rounded-r-xl'] {
-  box-shadow:
-    3px 0 0 var(--extrude-neutral),
-    5px 0 12px -4px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-}
-button[class*='fixed'][class*='rounded-l-xl'] {
-  box-shadow:
-    -3px 0 0 var(--extrude-neutral),
-    -5px 0 12px -4px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-}
-
-/* Card-sized buttons press like the keys do, just with more travel to match
-   their greater thickness. A slab that does not move under a finger reads as a
-   picture of a button rather than one. */
-/* Shadow only. The movement is framer's, because its inline transform would
-   overwrite anything set here and the two would fight. */
-button[class*='rounded-2xl'][class*='bg-ink-8']:active,
-button[class*='rounded-2xl'][class*='bg-ink-9']:active {
-  box-shadow:
-    0 3px 0 var(--extrude-card),
-    0 4px 8px -3px var(--clay-lift),
-    inset 0 1px 0 var(--clay-sheen);
-}
-button[class*='rounded-2xl'][class*='bg-ink-8'],
-button[class*='rounded-2xl'][class*='bg-ink-9'] {
-  transition: box-shadow 0.12s ease;
-}
-
-/**
- * Icons get the same lighting as everything else.
- *
- * A hard one-pixel shadow directly below, then a soft one further out — the
- * same pairing the cards use, at the scale of a stroke. `drop-shadow` follows
- * the drawn path rather than the element box, so a stroke icon casts a shadow
- * shaped like itself instead of like a rectangle, which `box-shadow` would do.
- */
 .icon-3d {
-  filter:
-    drop-shadow(0 1px 0 var(--icon-shadow))
-    drop-shadow(0 2px 3px var(--icon-shadow));
+  filter: drop-shadow(0 1px 0 var(--icon-shadow));
 }
 
-/* The tile a section icon sits in is a shallow well, so the icon reads as
-   resting inside it rather than floating over it. */
 .icon-well {
   box-shadow:
-    inset 0 2px 4px var(--clay-inset),
+    inset 0 1px 3px var(--inset-shadow),
     inset 0 -1px 0 var(--icon-sheen);
 }
 
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -626,6 +676,7 @@ button[class*='rounded-2xl'][class*='bg-ink-9'] {
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--scrollbar-thumb));
   border-radius: 999px;
+  border: 2px solid rgb(var(--ink-950));
 }
 
 .shimmer-bar {
@@ -633,22 +684,115 @@ button[class*='rounded-2xl'][class*='bg-ink-9'] {
   background-size: 200% 100%;
 }
 
-/*
- * The edges of an iPhone.
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+ * Motion. Everything here is off when the player asks for reduced motion.
+ * ------------------------------------------------------------------------ */
+
+@keyframes hero-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.5%);
+  }
+}
+
+@keyframes hero-blink {
+  0%,
+  94% {
+    background-position: 0% 0%;
+  }
+  95%,
+  98% {
+    background-position: 100% 0%;
+  }
+  99%,
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-fade {
+  0% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sparkle-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--dx, 0px), var(--dy, -40px), 0) scale(1);
+    opacity: 0;
+  }
+}
+
+.hero-bob {
+  animation: hero-bob 2.6s ease-in-out infinite;
+}
+
+.hero-blink {
+  animation: hero-blink 4.8s steps(1) infinite;
+}
+
+.glow-pulse {
+  animation: glow-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-bob,
+  .hero-blink,
+  .glow-pulse {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * The edges of a phone.
  *
  * Installed to the home screen, the app runs full screen with the status bar
- * laid over it, so the top of the page sits under the clock and the Dynamic
- * Island, where iOS takes the taps. On phones the Focus / Social switch floats
- * at the foot of the screen, so what else lives down there moves up to clear
- * it. Written as plain CSS because env() does not survive Tailwind's
- * arbitrary values reliably.
- */
+ * laid over it. The bottom navigation sits above the home indicator, and
+ * anything floating clears it. Written as plain CSS because env() does not
+ * survive Tailwind's arbitrary values reliably.
+ * ------------------------------------------------------------------------ */
 .safe-header {
-  padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.5rem));
+  padding-top: max(0.75rem, calc(env(safe-area-inset-top) + 0.35rem));
+}
+
+.safe-nav {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .page-foot {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5.75rem);
 }
 
 .toast-foot {
@@ -659,19 +803,13 @@ button[class*='rounded-2xl'][class*='bg-ink-9'] {
   bottom: calc(env(safe-area-inset-bottom) + 5rem);
 }
 
-/* Level with the dock: its middle sits 38px above the safe area, and the
-   switch is 40px tall. */
 .theme-foot {
-  bottom: calc(env(safe-area-inset-bottom) + 1.125rem);
+  bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
 }
 
-@media (min-width: 768px) {
-  .theme-foot {
-    bottom: auto;
-  }
-
+@media (min-width: 1024px) {
   .page-foot {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 2rem);
   }
 
   .toast-foot {
@@ -680,5 +818,9 @@ button[class*='rounded-2xl'][class*='bg-ink-9'] {
 
   .install-foot {
     bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  }
+
+  .theme-foot {
+    bottom: 1.25rem;
   }
 }

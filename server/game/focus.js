@@ -205,6 +205,8 @@ export function startSession(userId, input) {
       ])
     }
 
+    // A session with no quest can still count toward a goal in the notebook.
+    if (!goalId && typeof input?.goalId === 'string' && /^[\w-]{1,64}$/.test(input.goalId)) goalId = input.goalId
     const label = String(input?.label ?? '').trim().replace(/\s+/g, ' ').slice(0, 80) || questTitle || (kind === 'timer' ? 'Focus session' : 'Stopwatch session')
     if (!screenInput(label, { allowLength: 160 }).ok) throw invalid('That label was blocked by the content filter.', 'label')
     const plan = cleanPlan(input?.plan)

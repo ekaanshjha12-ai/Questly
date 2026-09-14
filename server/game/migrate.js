@@ -198,7 +198,9 @@ export function ensureGame(userId, timezoneHint = null) {
         db.run('INSERT OR IGNORE INTO state_backups (user_id, data, created_at) VALUES (?, ?, ?)', [userId, stateRow.data, now])
       }
       const summary = carryOver(userId, state, user, safeTimezone(tz))
-      if (summary.progress.xp > 0) {
+      // Only worth saying when there was a balance to carry: an account whose
+      // saved document held goals and nothing earned has nothing carried over.
+      if (summary.entries.some((e) => e.source === 'legacy')) {
         notify(userId, {
           kind: 'system',
           title: 'Your progress carried over',

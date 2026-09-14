@@ -90,6 +90,28 @@ function slateFor(goals, period, key, ordinal, covered) {
 }
 
 /**
+ * A goal just got quests written for it: take back its generated quests for
+ * the current periods that nobody has touched, so the written ones replace
+ * them today rather than next week. Anything started, progressed, pinned or
+ * paid stays exactly as it is.
+ */
+export function refreshGoalQuests(userId, goalId, now = new Date()) {
+  const progress = getProgressRow(userId)
+  if (!progress) return
+  const tz = safeTimezone(progress.timezone)
+  transaction(() => {
+    for (const period of PERIODS) {
+      db.run(
+        `DELETE FROM quests WHERE user_id = ? AND goal_id = ? AND period = ? AND period_key = ? AND origin = 'generated'
+           AND status = 'active' AND started_at IS NULL AND xp_paid = 0 AND progress_value = 0 AND pinned = 0`,
+        [userId, goalId, period, periodKey(period, tz, now)],
+      )
+    }
+  })
+  ensurePeriodicQuests(userId, now)
+}
+
+/**
  * Tops up the current day, week and month. Only ever adds: quests already
  * issued for a period hold their slots. Idempotent through the unique
  * `(user_id, gen_key)` index.

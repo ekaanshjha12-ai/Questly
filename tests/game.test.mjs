@@ -13,9 +13,21 @@ describe('progression', () => {
   let bob
   let legacy
   let admin
+  let planner
+  let newcomer
 
   before(async () => {
     alice = world.seedPlayer({ username: 'alice' })
+    planner = world.seedPlayer({ username: 'planner' })
+    // Saved goals from onboarding, and nothing earned yet.
+    newcomer = world.seedPlayer({ username: 'newcomer' })
+    world.seed(`
+      db.putState(${JSON.stringify(newcomer.id)}, JSON.stringify({
+        onboarded: true,
+        player: { name: 'Newcomer', character: 'female', createdAt: new Date().toISOString() },
+        goals: [{ id: 'goal-n', title: 'Learn to draw', category: 'creative', createdAt: new Date().toISOString(), archived: false }],
+      }))
+    `)
     bob = world.seedPlayer({ username: 'bob' })
     admin = world.seedPlayer({ username: 'warden', role: 'admin' })
     legacy = world.seedPlayer({ username: 'veteran' })
@@ -149,6 +161,37 @@ describe('progression', () => {
     assert.equal(focusOnly.body.code, 'needs_focus')
   })
 
+  it('adds a generated plan as quests, all or none, at the server’s rates', async () => {
+    const plan = await planner.client('POST', '/api/quests/plan', {
+      items: [
+        { title: 'Buy a lab notebook', kind: 'todo', xp: 5000 },
+        { title: 'Read chapter one of the textbook', kind: 'daily' },
+        { title: 'Finish the first problem set and check every answer against the key', kind: 'weekly' },
+        { title: 'Sit a full mock exam under timed conditions', kind: 'monthly', type: 'legendary' },
+      ],
+    })
+    assert.equal(plan.status, 201)
+    assert.deepEqual(plan.body.quests.map((q) => [q.type, q.origin, q.xp]), [
+      ['optional', 'plan', 15],
+      ['optional', 'plan', 20],
+      ['side', 'plan', 70],
+      ['main', 'plan', 225],
+    ])
+    // Their own quests: editable and deletable before they pay anything.
+    const renamed = await planner.client('PATCH', `/api/quests/${plan.body.quests[0].id}`, { title: 'Buy two lab notebooks' })
+    assert.equal(renamed.status, 200)
+    const removed = await planner.client('DELETE', `/api/quests/${plan.body.quests[1].id}`)
+    assert.equal(removed.status, 204)
+
+    // One bad line refuses the whole plan.
+    const before = (await planner.client('GET', '/api/quests')).body.quests.length
+    const bad = await planner.client('POST', '/api/quests/plan', { items: [{ title: 'Fine task', kind: 'todo' }, { title: 'x', kind: 'todo' }] })
+    assert.equal(bad.status, 400)
+    const tooMany = await planner.client('POST', '/api/quests/plan', { items: Array.from({ length: 41 }, (_, i) => ({ title: `Task number ${i}`, kind: 'todo' })) })
+    assert.equal(tooMany.status, 400)
+    assert.equal((await planner.client('GET', '/api/quests')).body.quests.length, before)
+  })
+
   it('caps self-reported XP per day and says so', async () => {
     const big = await alice.client('POST', '/api/quests', { type: 'optional', title: 'Huge chore', durationMin: 480, difficulty: 'heroic' })
     assert.equal(big.body.quest.xp, 720)
@@ -256,6 +299,14 @@ describe('progression', () => {
     assert.equal(broke.status, 409)
     assert.equal(broke.body.code, 'insufficient_coins')
     assert.equal((await bob.client('POST', '/api/inventory/buy', { itemId: 'alchemist_hood' })).status, 409)
+  })
+
+  it('tells a player their progress carried over only when there was some', async () => {
+    const fresh = await newcomer.client('GET', '/api/notifications')
+    assert.equal(fresh.status, 200)
+    assert.ok(!fresh.body.notifications.some((n) => n.title === 'Your progress carried over'))
+    const old = await legacy.client('GET', '/api/notifications')
+    assert.ok(old.body.notifications.some((n) => n.title === 'Your progress carried over'))
   })
 
   it('carries an old account’s progress over exactly once', async () => {

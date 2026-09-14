@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Camera, Mic, Loader2, X, Check, AlertCircle, Zap, ShieldCheck } from 'lucide-react'
-import type { Quest, VerificationKind } from '../types'
-import { ApiError, verifyTask, type Verdict } from '../lib/api'
+import { ApiError, verifyTask, type GameQuest, type RewardSummary, type Verdict } from '../lib/api'
 import { prepareImage } from '../lib/image'
-import { VERIFY_BONUS_XP } from '../hooks/useAppState'
+
+/** Mirrors the server's proof bonus, for the label only — the server pays it. */
+const VERIFY_BONUS_XP = { photo: 15, voice: 8 } as const
+
+export interface VerifiedResult {
+  quest?: GameQuest
+  rewards?: RewardSummary
+  questError?: string
+}
 
 interface Props {
-  quest: Quest
+  quest: { id: string; title: string }
   onClose: () => void
-  onVerified: (kind: VerificationKind, note: string) => void
+  onVerified: (result: VerifiedResult) => void
 }
 
 type Mode = 'choose' | 'photo' | 'voice'
@@ -39,7 +46,7 @@ export default function VerifyModal({ quest, onClose, onVerified }: Props) {
   const [mode, setMode] = useState<Mode>('choose')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [verdict, setVerdict] = useState<Verdict | null>(null)
+  const [verdict, setVerdict] = useState<(Verdict & VerifiedResult) | null>(null)
   // What was actually submitted, so the reward shown always matches the reward
   // paid. Reading the UI mode here would drift if the two ever disagree.
   const [verdictKind, setVerdictKind] = useState<'photo' | 'voice'>('photo')
@@ -60,12 +67,14 @@ export default function VerifyModal({ quest, onClose, onVerified }: Props) {
     setPhase('checking')
     setError(null)
     try {
-      const result = await verifyTask(payload)
+      // The quest goes with the proof, so the server completes it and pays the
+      // bonus itself when the proof is accepted.
+      const result = await verifyTask({ ...payload, questId: quest.id })
       setVerdictKind(payload.kind)
       setVerdict(result)
       setPhase('done')
       if (result.verified) {
-        onVerified(payload.kind, result.reason)
+        onVerified({ quest: result.quest, rewards: result.rewards, questError: result.questError })
       }
     } catch (err) {
       setPhase('idle')
@@ -188,11 +197,12 @@ export default function VerifyModal({ quest, onClose, onVerified }: Props) {
                 </p>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-slate-300">{verdict.reason}</p>
-              {verdict.verified && (
-                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-gold-400">
-                  <Zap className="h-3 w-3" />+{VERIFY_BONUS_XP[verdictKind]} bonus XP
+              {verdict.verified && !verdict.questError && (
+                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-reward-400">
+                  <Zap className="h-3 w-3" />+{verdict.rewards?.xp ?? VERIFY_BONUS_XP[verdictKind]} XP
                 </p>
               )}
+              {verdict.questError && <p className="mt-2 text-xs text-ember-400">{verdict.questError}</p>}
             </div>
 
             <div className="flex gap-2">
@@ -350,9 +360,9 @@ export function VerifyModalHost({
   onClose,
   onVerified,
 }: {
-  quest: Quest | null
+  quest: { id: string; title: string } | null
   onClose: () => void
-  onVerified: (kind: VerificationKind, note: string) => void
+  onVerified: (result: VerifiedResult) => void
 }) {
   return (
     <AnimatePresence>

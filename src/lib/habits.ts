@@ -1,4 +1,5 @@
 import type { AppState } from '../types'
+import type { ActivityDay } from './api'
 import { dailyKey, startOfDay } from './period'
 
 /**
@@ -9,9 +10,8 @@ import { dailyKey, startOfDay } from './period'
  * A chart built only from the days with data draws a solid wall of activity and
  * hides exactly the thing you opened it to see. The gaps are the information.
  *
- * Everything is derived from timestamps already on state, so it costs no API
- * call and works offline. Nothing is stored — recomputing eighty days of counts
- * is cheaper than keeping a second copy of the truth in sync.
+ * Habit ticks come from the notebook; quests, optional quests, proof and focus
+ * come from the server's activity record, which the tracker fetches.
  */
 
 export interface DayPoint {
@@ -45,7 +45,7 @@ function emptyDay(date: Date): DayPoint {
 }
 
 /** One row per day for the last `days` days, oldest first, today last. */
-export function dailySeries(state: AppState, days: number, now: Date = new Date()): DayPoint[] {
+export function dailySeries(state: AppState, days: number, now: Date = new Date(), activity: ActivityDay[] = []): DayPoint[] {
   const start = startOfDay(now).getTime() - (days - 1) * 86400000
   const byDate = new Map<string, DayPoint>()
   const series: DayPoint[] = []
@@ -56,43 +56,17 @@ export function dailySeries(state: AppState, days: number, now: Date = new Date(
     byDate.set(point.date, point)
   }
 
-  // An invalid or out-of-window timestamp lands on no bucket and is dropped,
-  // which is what should happen — the window is the window.
-  const at = (iso: string | null | undefined): DayPoint | undefined => {
-    if (!iso) return undefined
-    const t = new Date(iso)
-    return Number.isNaN(t.getTime()) ? undefined : byDate.get(dailyKey(t))
-  }
-
-  for (const quest of state.quests) {
-    const day = at(quest.completedAt)
-    if (day) {
-      day.quests++
-      day.total++
-    }
-    // Verification is counted on the day the proof was given, which can be a
-    // different day from the completion.
-    const proof = quest.verifiedBy ? at(quest.verifiedAt) : undefined
-    if (proof) proof.verified++
-  }
-
-  for (const todo of state.todos) {
-    const day = at(todo.completedAt)
-    if (day) {
-      day.todos++
-      day.total++
-    }
-  }
-
-  for (const session of state.sessions) {
-    // Attributed to the day it ended, so a session run past midnight counts
-    // once, on the day you finished it.
-    const day = at(session.endedAt)
-    if (day) {
-      day.sessions++
-      day.focusMs += Math.max(0, session.durationMs)
-      day.total++
-    }
+  // Server activity arrives already bucketed by the player's own day; a day
+  // outside the window lands on no bucket and is dropped.
+  for (const record of activity) {
+    const day = byDate.get(record.date)
+    if (!day) continue
+    day.quests += record.quests
+    day.verified += record.verified
+    day.todos += record.todos
+    day.sessions += record.sessions
+    day.focusMs += record.focusMs
+    day.total += record.quests + record.todos + record.sessions
   }
 
   // Hand-ticked habits count the same as anything else the app tracks — they
@@ -137,6 +111,7 @@ export function summarise(
   state: AppState,
   series: DayPoint[],
   now: Date = new Date(),
+  activity: ActivityDay[] = [],
 ): HabitSummary {
   const activeDays = series.filter((d) => d.total > 0).length
   const totalCompletions = series.reduce((sum, d) => sum + d.total, 0)
@@ -154,11 +129,7 @@ export function summarise(
   )
 
   // The window immediately before this one, same length, for the trend.
-  const previous = dailySeries(
-    state,
-    series.length * 2,
-    now,
-  ).slice(0, series.length)
+  const previous = dailySeries(state, series.length * 2, now, activity).slice(0, series.length)
   const previousTotal = previous.reduce((sum, d) => sum + d.total, 0)
 
   return {

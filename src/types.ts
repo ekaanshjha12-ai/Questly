@@ -40,58 +40,16 @@ export type QuestPeriod = 'daily' | 'weekly' | 'monthly'
 
 export type VerificationKind = 'photo' | 'voice'
 
-export interface Quest {
-  id: string
-  goalId: string
-  period: QuestPeriod
-  periodKey: string
-  title: string
-  xp: number
-  completed: boolean
-  completedAt: string | null
-  /** Set once a photo or spoken confirmation has been accepted as proof. */
-  verifiedBy?: VerificationKind
-  verifiedAt?: string
-  verificationNote?: string
-}
-
 export type CharacterId = 'male' | 'female'
 
+/**
+ * The player as the notebook knows them. XP, coins, level, streak and what
+ * they own are kept by the server — see `Progress` in lib/api.ts.
+ */
 export interface Player {
   name: string
   character: CharacterId
-  xp: number
-  coins: number
   createdAt: string
-}
-
-export interface Progression {
-  /** Highest level actually unlocked. XP can run ahead of this while the player
-   * still owes photo proof. */
-  level: number
-  /** Photo proofs banked toward the next level. */
-  proofs: number
-}
-
-export interface Collection {
-  /** Ids of character models the player has bought. */
-  unlocked: string[]
-  /** Currently worn model id, or null for the starter character. */
-  active: string | null
-}
-
-export interface StreakState {
-  current: number
-  longest: number
-  lastCompletedDay: string | null
-}
-
-export interface Todo {
-  id: string
-  title: string
-  done: boolean
-  createdAt: string
-  completedAt: string | null
 }
 
 export type SessionKind = 'timer' | 'stopwatch'
@@ -103,21 +61,7 @@ export interface PlanItem {
   done: boolean
 }
 
-/** A recorded stretch of focused work. `completed` means a countdown timer
- * actually reached zero, as opposed to being saved early. */
-export interface FocusSession {
-  id: string
-  kind: SessionKind
-  label: string
-  goalId: string | null
-  durationMs: number
-  targetMs: number | null
-  completed: boolean
-  startedAt: string
-  endedAt: string
-  /** What the session was for, written before starting. */
-  plan?: PlanItem[]
-}
+
 
 export interface Flashcard {
   id: string
@@ -149,9 +93,10 @@ export interface ExplainReport {
 
 export type PlannerView = 'daily' | 'weekly' | 'monthly'
 
-/** A placement of an existing task onto a day. The task itself always lives in
- * `todos` or `quests` — the planner only records *where* it sits, so completion
- * and XP stay governed by a single source of truth.
+/** A placement of an existing quest onto a day. The quest itself lives on the
+ * server — the planner only records *where* it sits, so completion and XP stay
+ * governed by a single source of truth. `todo` placements come from before
+ * to-dos became optional quests; they kept their ids, so they still resolve.
  *
  * The anchor is a real date, not a view. Daily, weekly and monthly are three
  * lenses over the same field, so a task placed once is visible in all of them.
@@ -188,10 +133,12 @@ export interface PlanPlacement {
   block?: string
 }
 
-/** One task from a generated plan, ready to become a to-do. Dated tasks carry
+/** One task from a generated plan, ready to become a quest. Dated tasks carry
  * a placement so they show up already scheduled instead of sitting unplaced. */
 export interface PlanItemInput {
   title: string
+  /** Which part of the plan it came from — the server sets its reward by this. */
+  kind: 'todo' | 'daily' | 'weekly' | 'monthly'
   placement?: PlanPlacement
 }
 
@@ -252,6 +199,7 @@ export type MoodLog = Record<string, Partial<Record<MoodSlot, string>>>
 
 /** Which piece of the profile a card element shows. */
 export type CardField =
+  | 'hero'
   | 'avatar'
   | 'name'
   | 'username'
@@ -300,22 +248,19 @@ export interface Achievement {
   icon: string
 }
 
+/**
+ * The player's notebook: what they write for themselves. Saved as one
+ * document. Nothing in it can move a reward — progress lives on the server.
+ */
 export interface AppState {
   onboarded: boolean
   player: Player
   goals: Goal[]
-  quests: Quest[]
-  todos: Todo[]
   schedule: ScheduleEntry[]
-  sessions: FocusSession[]
-  streak: StreakState
-  unlockedAchievements: Record<string, string>
   decks: Deck[]
   reports: ExplainReport[]
   /** Null until the player asks for their first analysis. */
   outlook: SuccessOutlook | null
-  collection: Collection
-  progression: Progression
   /** Hand-tracked habits and their ticks. */
   habits: Habit[]
   habitMarks: HabitMarks
@@ -323,7 +268,4 @@ export interface AppState {
   /** The player's decorated profile card. Null until they first change it —
    * until then the default layout is drawn. */
   card: CardDesign | null
-  /** Ids of challenges whose reward has already been added to XP, so a reward
-   * is paid into this state once however many times the list is fetched. */
-  challengeRewards: string[]
 }

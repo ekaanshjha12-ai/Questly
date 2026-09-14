@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { Moon, Music2, Square, Volume1, Waves } from 'lucide-react'
 import { MUSIC, type MusicGroup } from '../lib/music'
 import { SOUNDS, type SoundGroup } from '../lib/noise'
 import type { NoiseControls } from '../hooks/useNoise'
-import { SoundsIcon } from './SectionIcons'
+import LevelBars from './LevelBars'
 
 /**
  * Sounds: music and ambience for working to.
  *
  * Two layers that can play together — a music style and an ambient sound — so
  * lo-fi can run with rain behind it. Both carry on while the rest of the app is
- * used, and the header shows what is playing from anywhere.
+ * used, and the page header shows what is playing from anywhere.
  */
 
 const SLEEP_OPTIONS: { label: string; minutes: number | null }[] = [
@@ -43,57 +43,6 @@ function formatRemaining(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/**
- * Equaliser bars that move with the actual output level. Animated through refs
- * in a frame loop — driving them from React state would re-render the app
- * sixty times a second.
- */
-export function LevelBars({ getLevel, active, bars = 4, className = '' }: { getLevel: () => number; active: boolean; bars?: number; className?: string }) {
-  const refs = useRef<(HTMLSpanElement | null)[]>([])
-  const reduce = useReducedMotion()
-
-  useEffect(() => {
-    const set = (i: number, h: number) => {
-      const el = refs.current[i]
-      if (el) el.style.transform = `scaleY(${h})`
-    }
-    if (!active || reduce) {
-      for (let i = 0; i < bars; i++) set(i, active ? 0.55 : 0.2)
-      return
-    }
-    let frame = 0
-    const smooth = new Array(bars).fill(0.2)
-    const tick = (now: number) => {
-      const level = getLevel()
-      for (let i = 0; i < bars; i++) {
-        // Each bar wobbles on its own phase, scaled by how loud it really is.
-        const wobble = 0.55 + 0.45 * Math.sin(now / (170 + i * 53) + i * 1.7)
-        const target = Math.min(1, 0.15 + level * 1.6 * wobble)
-        smooth[i] += (target - smooth[i]) * 0.25
-        set(i, smooth[i])
-      }
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [active, bars, getLevel, reduce])
-
-  return (
-    <span className={`flex items-end gap-[3px] ${className}`} aria-hidden>
-      {Array.from({ length: bars }, (_, i) => (
-        <span
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el
-          }}
-          className="block h-full w-[3px] origin-bottom rounded-full bg-gradient-to-t from-ember-500 to-gold-500"
-          style={{ transform: 'scaleY(0.2)' }}
-        />
-      ))}
-    </span>
-  )
-}
-
 export default function SoundsScreen({ noise }: { noise: NoiseControls }) {
   const [group, setGroup] = useState<SoundGroup>('nature')
   // Opens on whichever group is playing, so what is on is on screen.
@@ -116,14 +65,6 @@ export default function SoundsScreen({ noise }: { noise: NoiseControls }) {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-50">
-          <SoundsIcon className="h-5 w-5 text-gold-400" /> Sounds
-        </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Music and ambience to focus, study or wind down to. It keeps playing while you use the rest of Questly.
-        </p>
-      </div>
 
       {/* --- now playing -------------------------------------------------------- */}
       <motion.section

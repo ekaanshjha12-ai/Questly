@@ -1,5 +1,5 @@
 import type { AppState, LegacyScheduleEntry, ScheduleEntry } from '../types'
-import { levelFromXp } from './leveling'
+import type { GameSnapshot } from './api'
 import { dateFromLegacyEntry } from './planner'
 
 /** The server is the source of truth; this is only an offline read cache.
@@ -17,52 +17,44 @@ export function defaultState(): AppState {
     player: {
       name: 'Adventurer',
       character: 'female',
-      xp: 0,
-      coins: 0,
       createdAt: new Date().toISOString(),
     },
     goals: [],
-    quests: [],
-    todos: [],
     schedule: [],
-    sessions: [],
-    streak: {
-      current: 0,
-      longest: 0,
-      lastCompletedDay: null,
-    },
-    unlockedAchievements: {},
     decks: [],
     reports: [],
     outlook: null,
-    collection: {
-      unlocked: [],
-      active: null,
-    },
-    progression: {
-      level: 1,
-      proofs: 0,
-    },
     habits: [],
     habitMarks: {},
     moods: {},
     card: null,
-    challengeRewards: [],
   }
 }
 
-/** Fields written by older versions that no longer exist. Dropped on load so
- * they stop being round-tripped back to the server on every save. */
-const RETIRED_FIELDS = ['equipment', 'activePowers'] as const
+/**
+ * Fields that used to live in the notebook and now belong to the server. An
+ * older cached document still carries them; they are dropped on load so they
+ * never ride along in a save again.
+ */
+const RETIRED_FIELDS = [
+  'equipment',
+  'activePowers',
+  'quests',
+  'todos',
+  'sessions',
+  'streak',
+  'unlockedAchievements',
+  'collection',
+  'progression',
+  'challengeRewards',
+] as const
 
 /**
  * Rewrites schedule entries saved before placements were anchored to a date.
  *
- * Without this, every existing placement would vanish from the planner — the
- * views read `entry.date`, and an old entry has none. Two entries can now
- * collide (the same task placed in two views, which the old model allowed and
- * this change is meant to prevent), so the first one wins and the rest are
- * dropped rather than leaving a task sitting on two days.
+ * Two entries can collide (the same task placed in two views, which the old
+ * model allowed), so the first one wins and the rest are dropped rather than
+ * leaving a task sitting on two days.
  */
 function migrateSchedule(schedule: unknown): ScheduleEntry[] {
   if (!Array.isArray(schedule)) return []
@@ -95,21 +87,19 @@ function migrateSchedule(schedule: unknown): ScheduleEntry[] {
   return out
 }
 
-/** Merges onto defaultState so states saved by older versions of the app
- * (missing newer fields like `collection`) still load cleanly. */
+/** Merges onto defaultState so documents saved by older versions of the app
+ * still load cleanly. */
 export function hydrate(partial: Partial<AppState> | null | undefined): AppState {
-  const merged = { ...defaultState(), ...(partial ?? {}) } as AppState & Record<string, unknown>
+  const base = defaultState()
+  const merged = { ...base, ...(partial ?? {}) } as AppState & Record<string, unknown>
   for (const field of RETIRED_FIELDS) delete merged[field]
-
-  merged.schedule = migrateSchedule(merged.schedule)
-
-  // Accounts that predate the proof gate have no progression record. Seeding it
-  // from their XP grandfathers the level they already earned — defaulting to 1
-  // would silently demote everyone.
-  if (!partial || !(partial as Partial<AppState>).progression) {
-    merged.progression = { level: levelFromXp(merged.player.xp).level, proofs: 0 }
+  const player = (partial?.player ?? {}) as Partial<AppState['player']> & Record<string, unknown>
+  merged.player = {
+    name: typeof player.name === 'string' && player.name ? player.name : base.player.name,
+    character: player.character === 'male' ? 'male' : 'female',
+    createdAt: typeof player.createdAt === 'string' ? player.createdAt : base.player.createdAt,
   }
-
+  merged.schedule = migrateSchedule(merged.schedule)
   return merged
 }
 
@@ -131,9 +121,26 @@ export function saveCachedState(userId: string, state: AppState): void {
   }
 }
 
+/** The last game snapshot, so an offline start can still show progress. */
+export function loadCachedGame(userId: string): GameSnapshot | null {
+  try {
+    const raw = localStorage.getItem(`${PREFIX}:game:${userId}`)
+    return raw ? (JSON.parse(raw) as GameSnapshot) : null
+  } catch {
+    return null
+  }
+}
+
+export function saveCachedGame(userId: string, snapshot: GameSnapshot): void {
+  try {
+    localStorage.setItem(`${PREFIX}:game:${userId}`, JSON.stringify(snapshot))
+  } catch {
+    // Storage full or unavailable — only the offline copy is lost.
+  }
+}
+
 /** The last account to sign in successfully. Kept so that an offline start can
- * find which cached state to open — without it the app cannot get past the
- * session check and the cache it already holds is unreachable. */
+ * find which cached state to open. */
 const LAST_USER_KEY = `${PREFIX}:last-user`
 
 export interface RememberedUser {
@@ -171,6 +178,7 @@ export function forgetUser(): void {
 export function clearCachedState(userId: string): void {
   try {
     localStorage.removeItem(cacheKey(userId))
+    localStorage.removeItem(`${PREFIX}:game:${userId}`)
   } catch {
     // Nothing to do if storage is unavailable.
   }

@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { heroFrame } from '../art/hero'
 import type { CardDesign, CardItem, CardStroke } from '../types'
 import { CARD_H, CARD_W, findBackground, type CardBackground, type CardData } from '../lib/card'
 
@@ -173,6 +174,27 @@ function ItemBody({ item, data, bg }: { item: CardItem; data: CardData; bg: Card
   }
 
   switch (item.field) {
+    case 'hero':
+      return (
+        <div
+          className="relative flex items-end justify-center overflow-hidden rounded-[3cqw]"
+          style={{
+            width: '44cqw',
+            height: '50cqw',
+            border: `1.2cqw solid ${data.rankColor}`,
+            boxShadow: '0 1.6cqw 0 rgba(0,0,0,0.3), 0 3cqw 6cqw rgba(0,0,0,0.35), inset 0 0 6cqw rgba(0,0,0,0.35)',
+            background: 'radial-gradient(ellipse at 50% 35%, rgba(255,255,255,0.18), rgba(0,0,0,0.35) 75%)',
+          }}
+        >
+          <img
+            src={heroFrame(data.look ?? { appearance: null, equipment: {} })}
+            alt=""
+            draggable={false}
+            className="pixelated"
+            style={{ width: '36cqw', height: '45cqw', imageRendering: 'pixelated' }}
+          />
+        </div>
+      )
     case 'avatar':
       return (
         <div

@@ -7,7 +7,8 @@ import { shiftDays } from '../lib/planner'
 import { dailyKey } from '../lib/period'
 
 interface Props {
-  onApplyPlan: (items: PlanItemInput[]) => void
+  /** Puts the plan on the quest board; rejects with the reason if it could not. */
+  onApplyPlan: (items: PlanItemInput[]) => Promise<void>
   /** Goes to the planner, where an applied plan's dated tasks now sit. */
   onOpenPlanner: () => void
 }
@@ -81,10 +82,10 @@ function formatBytes(bytes: number): string {
 
 function planToItems(plan: GeneratedPlan): PlanItemInput[] {
   return [
-    ...plan.todos.map((title) => ({ title })),
-    ...plan.daily.map((d) => ({ title: d.title, placement: place(d.dayOffset, d.block) })),
-    ...plan.weekly.map((w) => ({ title: w.title, placement: place(w.dayOffset) })),
-    ...plan.monthly.map((m) => ({ title: m.title, placement: place(m.dayOffset) })),
+    ...plan.todos.map((title) => ({ title, kind: 'todo' as const })),
+    ...plan.daily.map((d) => ({ title: d.title, kind: 'daily' as const, placement: place(d.dayOffset, d.block) })),
+    ...plan.weekly.map((w) => ({ title: w.title, kind: 'weekly' as const, placement: place(w.dayOffset) })),
+    ...plan.monthly.map((m) => ({ title: m.title, kind: 'monthly' as const, placement: place(m.dayOffset) })),
   ]
 }
 
@@ -214,10 +215,18 @@ export default function AiPlanner({ onApplyPlan, onOpenPlanner }: Props) {
     }
   }
 
-  function apply() {
-    if (!plan) return
-    onApplyPlan(planToItems(plan))
-    setApplied(true)
+  async function apply() {
+    if (!plan || busy) return
+    setError(null)
+    setBusy(true)
+    try {
+      await onApplyPlan(planToItems(plan))
+      setApplied(true)
+    } catch (err) {
+      setError(errorText(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const totalTasks = plan ? plan.todos.length + plan.daily.length + plan.weekly.length + plan.monthly.length : 0
@@ -226,14 +235,6 @@ export default function AiPlanner({ onApplyPlan, onOpenPlanner }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-slate-50">
-          <Sparkles className="h-5 w-5 text-gold-400" /> AI Planner
-        </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Describe a goal and answer a few questions. You get a dated plan that goes straight into your planner.
-        </p>
-      </div>
 
       <ol className="flex items-center gap-2" aria-label="Steps">
         {STAGES.map((st, i) => (
@@ -409,12 +410,17 @@ export default function AiPlanner({ onApplyPlan, onOpenPlanner }: Props) {
                 {stage === 'review' && plan && (
                   <div className="space-y-4">
                     {applied ? (
-                      <div className="rounded-xl border border-mystic-400/40 bg-mystic-500/10 px-3 py-2.5 text-xs text-mystic-200">
-                        Added: {totalTasks} tasks are in your to-do list, and the dated ones are already placed in the planner.
+                      <div className="rounded-xl border border-gold-500/40 bg-gold-500/10 px-3 py-2.5 text-xs text-gold-200">
+                        Added: {totalTasks} quests are on your board, and the dated ones are already placed in the planner.
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400">
-                        Review the plan, then add it. Dated tasks land straight in the planner.
+                        Review the plan, then add it. Every task becomes a quest; dated ones land straight in the planner.
+                      </p>
+                    )}
+                    {error && !applied && (
+                      <p role="alert" className="rounded-lg border border-danger-500/40 bg-danger-500/10 px-3 py-2 text-xs text-danger-400">
+                        {error}
                       </p>
                     )}
 
@@ -472,11 +478,13 @@ export default function AiPlanner({ onApplyPlan, onOpenPlanner }: Props) {
                       {!applied && (
                         <button
                           type="button"
-                          onClick={apply}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent"
+                          onClick={() => void apply()}
+                          disabled={busy}
+                          aria-busy={busy || undefined}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-sm font-semibold text-onAccent disabled:opacity-60"
                         >
-                          <CalendarCheck className="h-4 w-4" />
-                          Add {totalTasks} tasks to my planner
+                          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+                          Add {totalTasks} quests to my board
                         </button>
                       )}
                     </div>

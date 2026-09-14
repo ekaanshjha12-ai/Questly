@@ -1,4 +1,4 @@
-import type { AppState, QuestPool, SuccessOutlook } from '../types'
+import type { AppState, GoalCategory, PlanItem, QuestPeriod, QuestPool, SuccessOutlook } from '../types'
 
 export interface AuthUser {
   id: string
@@ -37,12 +37,26 @@ export class ApiError extends Error {
   }
 }
 
+/** The device's IANA timezone, so the server can turn days over at the
+ * player's own midnight. */
+function timezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (init?.body) headers['Content-Type'] = 'application/json'
+  const tz = timezone()
+  if (tz) headers['X-Timezone'] = tz
   const res = await fetch(path, {
     // Session lives in an httpOnly cookie, so it must ride along on every call.
     credentials: 'same-origin',
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
     ...init,
+    headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
   })
 
   if (res.status === 204) return undefined as T
@@ -139,6 +153,11 @@ export function login(email: string, password: string, mfaCode?: string) {
   })
 }
 
+/** Deletes the account and everything in it. Needs the current password. */
+export function deleteAccount(password: string) {
+  return request<void>('/api/account/delete', { method: 'POST', body: JSON.stringify({ password }) })
+}
+
 export function logout() {
   return request<void>('/api/auth/logout', { method: 'POST' })
 }
@@ -162,7 +181,7 @@ export function verifyStatus() {
 }
 
 export function verifyTask(
-  payload:
+  payload: (
     | {
         kind: 'photo'
         taskTitle: string
@@ -170,9 +189,10 @@ export function verifyTask(
         mediaType: string
         capturedAt: number | null
       }
-    | { kind: 'voice'; taskTitle: string; transcript: string },
+    | { kind: 'voice'; taskTitle: string; transcript: string }
+  ) & { questId?: string },
 ) {
-  return request<Verdict>('/api/verify', {
+  return request<Verdict & { quest?: GameQuest; rewards?: RewardSummary; questError?: string }>('/api/verify', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -299,8 +319,13 @@ export function analyseOutlook(
   })
 }
 
+/** A goal's written quests arrived: swap today's untouched quests for them. */
+export function refreshGoalQuests(goalId: string) {
+  return request<{ ok: true }>('/api/quests/refresh-goal', { method: 'POST', body: JSON.stringify({ goalId }) })
+}
+
 export function saveState(state: AppState) {
-  return request<{ version: number; updatedAt: string }>('/api/state', {
+  return request<{ version: number; updatedAt: string; rewards: RewardSummary | null }>('/api/state', {
     method: 'PUT',
     body: JSON.stringify({ state }),
   })
@@ -516,6 +541,8 @@ export interface PlayerSummary {
   level: number
   rank: string
   avatarVersion: string | null
+  /** How their character looks: base appearance and what they wear. */
+  look?: Look
 }
 
 export interface PublicPlayer extends PlayerSummary {
@@ -710,7 +737,7 @@ export function fetchFeed(before?: string, user?: string) {
 }
 
 export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string; videoId?: string }) {
-  return request<{ post: Post }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
+  return request<{ post: Post; rewards: RewardSummary | null }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
 }
 
 /**
@@ -825,4 +852,327 @@ export function acceptConversation(id: string) {
 
 export function declineConversation(id: string) {
   return request<{ ok: true }>(`/api/messages/${encodeURIComponent(id)}/decline`, { method: 'POST' })
+}
+
+/* --- the game: progress, quests, focus, inventory, Chronicle ------------------ */
+
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type QuestType = 'main' | 'side' | 'daily' | 'club' | 'challenge' | 'optional'
+export type QuestStatus = 'locked' | 'upcoming' | 'active' | 'in_progress' | 'completed' | 'failed' | 'expired'
+export type ProgressKind = 'check' | 'minutes' | 'count' | 'milestones'
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'heroic'
+export type Slot = 'head' | 'clothing' | 'back' | 'tool' | 'pet' | 'badge' | 'special'
+
+export interface Appearance {
+  body: 'a' | 'b'
+  skin: 'porcelain' | 'fair' | 'tan' | 'olive' | 'brown' | 'deep'
+  hair: 'short' | 'long' | 'bun' | 'curly' | 'shaved' | 'braid' | 'mohawk' | 'bob'
+  hairColor: 'black' | 'brown' | 'auburn' | 'blonde' | 'silver' | 'teal' | 'plum' | 'ember'
+  eyes: 'dark' | 'blue' | 'green' | 'amber'
+}
+
+export interface Look {
+  appearance: Appearance | null
+  equipment: Partial<Record<Slot, string>>
+}
+
+export interface Progress {
+  xp: number
+  coins: number
+  level: number
+  xpIntoLevel: number
+  xpForNext: number
+  rank: { id: string; name: string }
+  nextRank: { id: string; name: string; level: number } | null
+  streak: { current: number; longest: number; activeToday: boolean }
+  timezone: string
+  today: string
+  path: string | null
+  appearance: Appearance | null
+  flags: Record<string, unknown>
+}
+
+export interface GameQuest {
+  id: string
+  type: QuestType
+  origin: 'user' | 'plan' | 'generated' | 'legacy_todo' | 'club' | 'challenge' | 'onboarding'
+  title: string
+  description: string | null
+  category: GoalCategory
+  difficulty: Difficulty
+  durationMin: number
+  xp: number
+  xpPaid: number
+  rarity: Rarity
+  status: QuestStatus
+  progress: {
+    kind: ProgressKind
+    target: number
+    value: number
+    unit: string | null
+    percent: number
+    milestones: { index: number; title: string; done: boolean }[] | null
+  }
+  period: QuestPeriod | null
+  goalId: string | null
+  clubId: string | null
+  challengeId: string | null
+  minLevel: number | null
+  startsAt: string | null
+  deadlineAt: string | null
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  updatedAt: string
+  verified: { by: 'photo' | 'voice'; at: string } | null
+  pinned: boolean
+}
+
+export interface QuestInput {
+  type: 'main' | 'side' | 'optional'
+  title: string
+  description?: string
+  category?: GoalCategory
+  difficulty?: Difficulty
+  durationMin: number
+  progressKind?: ProgressKind
+  target?: number
+  unit?: string
+  milestones?: string[]
+  startsAt?: string | null
+  deadlineAt?: string | null
+  goalId?: string | null
+}
+
+export type FocusStatus = 'running' | 'paused' | 'completed' | 'ended' | 'abandoned'
+
+export interface FocusSessionView {
+  id: string
+  kind: 'timer' | 'stopwatch'
+  label: string
+  questId: string | null
+  challengeId: string | null
+  clubId: string | null
+  goalId: string | null
+  targetMs: number | null
+  status: FocusStatus
+  startedAt: string
+  pausedAt: string | null
+  pausedMs: number
+  pauses: number
+  endedAt: string | null
+  activeMs: number
+  xp: number
+  xpPreview: number
+  plan: PlanItem[]
+  legacy: boolean
+  serverNow: string
+}
+
+export interface FocusTotals {
+  todayMs: number
+  weekMs: number
+  totalMs: number
+  sessions: number
+}
+
+export interface AchievementView {
+  id: string
+  title: string
+  description: string
+  icon: string
+  xp: number
+  unlockedAt: string | null
+}
+
+export interface RewardSummary {
+  xp: number
+  coins: number
+  capped: boolean
+  levelBefore: number
+  levelAfter: number
+  achievements: AchievementView[]
+  items: { id: string; name: string; slot: Slot; rarity: Rarity }[]
+  streak: { current: number; extended: boolean } | null
+  entries: { source: string; label: string | null; xp: number; coins: number }[]
+  progress: Progress
+}
+
+export interface Caps {
+  focusXpLeft: number
+  selfReportedXpLeft: number
+  focusXpDaily: number
+  selfReportedXpDaily: number
+}
+
+export interface OnboardingStep {
+  id: string
+  title: string
+  body: string
+  link: string
+  done: boolean
+}
+
+export interface GameSnapshot {
+  progress: Progress
+  /** XP earned today, in the player's own day. */
+  todayXp: number
+  onboarding: { steps: OnboardingStep[]; complete: boolean }
+  focus: FocusSessionView | null
+  focusTotals: FocusTotals
+  quests: GameQuest[]
+  featuredQuestId: string | null
+  look: Look
+  notifications: { unread: number }
+  caps: Caps
+  achievements: { unlocked: number; total: number; recent: AchievementView[] }
+}
+
+export interface InventoryItem {
+  id: string
+  name: string
+  slot: Slot
+  rarity: Rarity
+  description: string
+  source: string
+  state: 'equipped' | 'owned' | 'available' | 'locked'
+  acquiredAt: string | null
+  price: number | null
+  minLevel: number | null
+  affordable: boolean | null
+  model: boolean
+}
+
+export interface Inventory {
+  coins: number
+  level: number
+  slots: Slot[]
+  items: InventoryItem[]
+  equipment: Partial<Record<Slot, string>>
+  appearance: Appearance | null
+}
+
+export interface ChronicleEntry {
+  id: number
+  kind: string
+  title: string
+  body: string | null
+  link: string | null
+  data: Record<string, unknown> | null
+  createdAt: string
+  read: boolean
+}
+
+export interface LedgerEntry {
+  id: number
+  source: string
+  label: string | null
+  xp: number
+  coins: number
+  verified: boolean
+  day: string
+  at: string
+}
+
+export interface ProgressStatsResponse {
+  stats: {
+    totalFocusMs: number
+    focusSessions: number
+    currentStreak: number
+    longestStreak: number
+    questsCompleted: number
+    questsVerified: number
+    todosCompleted: number
+    todosOpen: number
+    level: number
+    xp: number
+    accountAgeDays: number
+    activeDays: number
+    activeDaysLast14: number
+    completionsLast7: number
+    completionsLast30: number
+    daysSinceLastActivity: number | null
+  }
+  goals: {
+    id: string
+    title: string
+    category: string
+    detail?: string
+    ageDays: number
+    questsCompleted: number
+    questsVerified: number
+    focusMinutes: number
+  }[]
+}
+
+export interface ActivityDay {
+  date: string
+  quests: number
+  verified: number
+  todos: number
+  sessions: number
+  focusMs: number
+}
+
+/** A completion that paid: the quest as it now stands and what it earned. */
+export interface QuestResult {
+  quest: GameQuest
+  rewards?: RewardSummary
+}
+
+const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) })
+const id = (value: string) => encodeURIComponent(value)
+
+export const game = {
+  snapshot: () => request<GameSnapshot>('/api/game'),
+  setTimezone: (timezone: string) => request<{ progress: Progress }>('/api/game/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
+  setAppearance: (appearance: Appearance) =>
+    request<{ appearance: Appearance }>('/api/game/appearance', { method: 'PUT', body: JSON.stringify({ appearance }) }),
+  history: (before?: number) => request<{ entries: LedgerEntry[]; more: boolean }>(`/api/progress/history${before ? `?before=${before}` : ''}`),
+  stats: () => request<ProgressStatsResponse>('/api/progress/stats'),
+  activity: (days: number) => request<{ today: string; days: ActivityDay[] }>(`/api/progress/activity?days=${days}`),
+  achievements: () => request<{ achievements: AchievementView[] }>('/api/achievements'),
+
+  quests: () => request<{ quests: GameQuest[]; featuredQuestId: string | null; caps: Caps }>('/api/quests'),
+  questHistory: (before?: string) =>
+    request<{ quests: GameQuest[]; more: boolean }>(`/api/quests/history${before ? `?before=${id(before)}` : ''}`),
+  quest: (questId: string) => request<{ quest: GameQuest }>(`/api/quests/${id(questId)}`),
+  createQuest: (input: QuestInput) => request<{ quest: GameQuest }>('/api/quests', json(input)),
+  /** Adds a generated plan's tasks as quests, all or none. */
+  createPlanQuests: (items: { title: string; kind: 'todo' | 'daily' | 'weekly' | 'monthly' }[]) =>
+    request<{ quests: GameQuest[] }>('/api/quests/plan', json({ items })),
+  updateQuest: (questId: string, input: Partial<QuestInput>) =>
+    request<{ quest: GameQuest }>(`/api/quests/${id(questId)}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteQuest: (questId: string) => request<void>(`/api/quests/${id(questId)}`, { method: 'DELETE' }),
+  startQuest: (questId: string) => request<{ quest: GameQuest }>(`/api/quests/${id(questId)}/start`, json({})),
+  pinQuest: (questId: string, pinned: boolean) => request<{ quest: GameQuest }>(`/api/quests/${id(questId)}/pin`, json({ pinned })),
+  completeQuest: (questId: string) => request<QuestResult>(`/api/quests/${id(questId)}/complete`, json({})),
+  logProgress: (questId: string, delta: number) => request<QuestResult>(`/api/quests/${id(questId)}/progress`, json({ delta })),
+  setMilestone: (questId: string, index: number, done: boolean) =>
+    request<QuestResult>(`/api/quests/${id(questId)}/milestones/${index}`, json({ done })),
+  abandonQuest: (questId: string) => request<{ quest: GameQuest }>(`/api/quests/${id(questId)}/abandon`, json({})),
+
+  currentFocus: () => request<{ session: FocusSessionView | null }>('/api/focus/current'),
+  focusHistory: (before?: string) =>
+    request<{ sessions: FocusSessionView[]; more: boolean; totals: FocusTotals }>(`/api/focus/history${before ? `?before=${id(before)}` : ''}`),
+  startFocus: (input: { kind: 'timer' | 'stopwatch'; targetMinutes?: number; label?: string; questId?: string | null; goalId?: string | null; plan?: PlanItem[] }) =>
+    request<{ session: FocusSessionView }>('/api/focus', json(input)),
+  pauseFocus: (sessionId: string) => request<{ session: FocusSessionView }>(`/api/focus/${id(sessionId)}/pause`, json({})),
+  resumeFocus: (sessionId: string) => request<{ session: FocusSessionView }>(`/api/focus/${id(sessionId)}/resume`, json({})),
+  finishFocus: (sessionId: string) =>
+    request<{ session: FocusSessionView; rewards: RewardSummary; quest: GameQuest | null }>(`/api/focus/${id(sessionId)}/finish`, json({})),
+  abandonFocus: (sessionId: string) => request<{ session: FocusSessionView }>(`/api/focus/${id(sessionId)}/abandon`, json({})),
+  updateFocusPlan: (sessionId: string, plan: PlanItem[]) =>
+    request<{ session: FocusSessionView }>(`/api/focus/${id(sessionId)}/plan`, { method: 'PUT', body: JSON.stringify({ plan }) }),
+  hideFocus: (sessionId: string) => request<void>(`/api/focus/${id(sessionId)}`, { method: 'DELETE' }),
+
+  inventory: () => request<Inventory>('/api/inventory'),
+  equip: (slot: Slot, itemId: string | null) =>
+    request<{ equipment: Partial<Record<Slot, string>> }>('/api/inventory/equip', json({ slot, itemId })),
+  buy: (itemId: string) => request<{ inventory: Inventory; rewards: RewardSummary }>('/api/inventory/buy', json({ itemId })),
+
+  notifications: (before?: number) =>
+    request<{ notifications: ChronicleEntry[]; more: boolean; unread: number }>(`/api/notifications${before ? `?before=${before}` : ''}`),
+  unread: () => request<{ unread: number }>('/api/notifications/unread'),
+  markRead: (ids?: number[]) => request<{ unread: number }>('/api/notifications/read', json(ids ? { ids } : {})),
 }

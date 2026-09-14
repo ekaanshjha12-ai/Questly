@@ -98,11 +98,11 @@ drops metadata, cross-age messaging protections, account export and deletion.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Server progression core: ledger, levels, quests, focus sessions, achievements, inventory, notifications, migration, tests | In progress |
-| 2 | Client switches to server progression; existing screens keep working | Planned |
-| 3 | Design system, six-tab navigation, router, Home hub, Quest Board, Focus Mode + victory, Level Up | Planned |
-| 4 | Character, wardrobe/inventory, Questly Card upgrade | Planned |
-| 5 | Chronicle Log notifications | Planned |
+| 1 | Server progression core: ledger, levels, quests, focus sessions, achievements, inventory, notifications, migration, tests | Done |
+| 2 | Client switches to server progression; existing screens keep working | Done |
+| 3 | Design system, navigation, router, Home hub, Quest Board, Focus Mode + victory, Level Up | Done (Clubs tab arrives with phase 7) |
+| 4 | Character, wardrobe/inventory, Questly Card upgrade | Done |
+| 5 | Chronicle Log notifications | Done |
 | 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Planned |
 | 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Planned |
 | 8 | World map: regions, locks, time of day, club buildings, events | Planned |
@@ -112,9 +112,25 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 12 | Legal and policy pages, privacy controls | Planned |
 | 13 | Analytics events and retention | Planned |
 | 14 | Security hardening (S3–S10) | Planned |
-| 15 | Performance: code splitting, lazy world/3D | Planned |
+| 15 | Performance: code splitting, lazy world/3D | Started: every screen away from the hub and the 3D viewer load on demand |
 | 16 | Full QA pass and final security review | Planned |
 
 ## Remaining
 
 Kept up to date as phases land.
+
+- **Clubs tab.** Navigation has five tabs until clubs exist; a sixth tab with
+  nothing behind it would be fake functionality.
+- **Onboarding** still asks for goals and a 3D character; the path choice
+  (Scholar, Builder, Creator, Discipline, Explorer) is phase 10.
+- **Duels** keep their existing check-in flow and screens; the VS screen,
+  states and focus-validated progress are phase 6. Their XP already goes
+  through the ledger.
+- **Main bundle** is about 525 kB (166 kB gzipped). The sound engine and
+  motion library are the bulk; splitting them is part of phase 15.
+- **Security** still open: S4 (hash session tokens), S5 (per-account login
+  backoff), S6 (reports table), S7 (AI routes echo error detail), S8 (EXIF
+  stripping on every upload path), S10 (card design validation).
+- Fixed along the way: the inline theme script in `index.html` was blocked by
+  the Content Security Policy in production, so the saved theme never applied
+  before first paint. It now loads from `/theme-init.js`.

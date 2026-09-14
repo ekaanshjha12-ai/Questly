@@ -279,7 +279,7 @@ function CardReveal({ user, onContinue }: { user: AuthUser; onContinue: () => vo
   const data = useMemo(
     () =>
       cardData(
-        hydrate({ player: { name: user.displayName ?? 'Adventurer', character: 'female', xp: 0, coins: 0, createdAt: new Date().toISOString() } }),
+        hydrate({ player: { name: user.displayName ?? 'Adventurer', character: 'female', createdAt: new Date().toISOString() } }),
         user,
       ),
     [user],

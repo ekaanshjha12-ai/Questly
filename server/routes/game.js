@@ -1,6 +1,16 @@
 import express from 'express'
 import { db } from '../db.js'
-import { achievementsFor, FOCUS_DAILY_XP, getProgressRow, ledgerPage, paidToday, progressView, SELF_REPORTED_DAILY_XP } from '../game/rewards.js'
+import {
+  achievementsFor,
+  FOCUS_DAILY_XP,
+  getProgressRow,
+  ledgerPage,
+  paidToday,
+  progressView,
+  SELF_REPORTED_DAILY_XP,
+  startRewards,
+  transaction,
+} from '../game/rewards.js'
 import { markActive } from '../game/analytics.js'
 import { isValidTimezone } from '../game/clock.js'
 import { GameError, invalid } from '../game/errors.js'
@@ -22,6 +32,7 @@ import { listNotifications, markRead, unreadCount } from '../game/notify.js'
 import {
   abandonQuest,
   completeQuest,
+  createPlanQuests,
   createQuest,
   deleteQuest,
   featuredQuest,
@@ -34,7 +45,9 @@ import {
   startQuest,
   updateQuest,
 } from '../game/quests.js'
-import { ensurePeriodicQuests } from '../game/slate.js'
+import { ensurePeriodicQuests, refreshGoalQuests } from '../game/slate.js'
+import { activitySeries, progressStats } from '../game/stats.js'
+import { onboardingSteps, setFlag } from '../game/onboarding.js'
 
 /**
  * Routes for everything a player earns: progress, quests, focus sessions,
@@ -101,8 +114,20 @@ export function gameRoutes({ requireAuth, rateLimit }) {
     ensurePeriodicQuests(userId)
     const board = questBoard(userId)
     const unlocked = achievementsFor(userId).filter((a) => a.unlockedAt)
+    const progress = progressView(getProgressRow(userId))
+    const onboarding = onboardingSteps(userId)
+    // Finishing the first quests is worth the Drafting Quill; settle it the
+    // moment the checklist completes.
+    if (onboarding.complete && !progress.flags.onboardingDone) {
+      transaction(() => {
+        setFlag(userId, 'onboardingDone', true)
+        startRewards(userId).finish()
+      })
+    }
     return {
       progress: progressView(getProgressRow(userId)),
+      todayXp: db.get('SELECT COALESCE(SUM(xp), 0) AS n FROM xp_ledger WHERE user_id = ? AND day = ? AND xp > 0', [userId, progress.today])?.n ?? 0,
+      onboarding,
       focus: currentSession(userId),
       focusTotals: focusTotals(userId),
       quests: board,
@@ -137,11 +162,18 @@ export function gameRoutes({ requireAuth, rateLimit }) {
     return { progress: progressView(getProgressRow(req.user.id)) }
   }))
 
-  router.put('/game/appearance', requireAuth, write, game, handle((req) => ({ appearance: setAppearance(req.user.id, req.body?.appearance) })))
+  router.put('/game/appearance', requireAuth, write, game, handle((req) => {
+    const appearance = setAppearance(req.user.id, req.body?.appearance)
+    setFlag(req.user.id, 'appearanceSet', true)
+    return { appearance }
+  }))
 
   router.get('/progress/history', requireAuth, read, game, handle((req) =>
     ledgerPage(req.user.id, { before: Number(req.query.before) || null, limit: Number(req.query.limit) || 30 }),
   ))
+
+  router.get('/progress/stats', requireAuth, read, game, handle((req) => progressStats(req.user.id)))
+  router.get('/progress/activity', requireAuth, read, game, handle((req) => activitySeries(req.user.id, Number(req.query.days) || 84)))
 
   router.get('/achievements', requireAuth, read, game, handle((req) => ({ achievements: achievementsFor(req.user.id) })))
 
@@ -160,6 +192,19 @@ export function gameRoutes({ requireAuth, rateLimit }) {
   router.post('/quests', requireAuth, creating, game, handle((req, res) => {
     res.status(201)
     return { quest: createQuest(req.user.id, req.body ?? {}) }
+  }))
+
+  // A whole plan counts as one creation against the hourly limit.
+  router.post('/quests/plan', requireAuth, creating, game, handle((req, res) => {
+    res.status(201)
+    return { quests: createPlanQuests(req.user.id, req.body?.items) }
+  }))
+
+  router.post('/quests/refresh-goal', requireAuth, write, game, handle((req) => {
+    const goalId = String(req.body?.goalId ?? '')
+    if (!/^[\w-]{1,64}$/.test(goalId)) throw invalid('That goal could not be found.', 'goalId')
+    refreshGoalQuests(req.user.id, goalId)
+    return { ok: true }
   }))
 
   router.get('/quests/:id', requireAuth, read, game, handle((req) => ({ quest: getQuestView(req.user.id, req.params.id) })))

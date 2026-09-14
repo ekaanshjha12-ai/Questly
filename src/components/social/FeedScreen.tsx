@@ -13,6 +13,7 @@ import {
   type Post,
   type PostKind,
   type PostVideo,
+  type RewardSummary,
 } from '../../lib/api'
 import {
   POST_KINDS,
@@ -26,6 +27,21 @@ import {
 } from '../../lib/social'
 import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
+import { useGame } from '../../game/GameProvider'
+
+/** A draft handed over from Focus Mode's "Share progress". */
+function takeShareDraft(): ShareMoment | null {
+  try {
+    const raw = sessionStorage.getItem('questly:share')
+    if (!raw) return null
+    sessionStorage.removeItem('questly:share')
+    const parsed = JSON.parse(raw) as { kind?: PostKind; text?: string }
+    if (!parsed.text) return null
+    return { id: 'focus-share', kind: parsed.kind ?? 'progress', label: 'From Focus Mode', text: String(parsed.text).slice(0, 1000) }
+  } catch {
+    return null
+  }
+}
 
 /**
  * The feed: what other ambitious people are doing and learning, and a place to
@@ -53,10 +69,11 @@ export default function FeedScreen({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<string | null>(null)
-  const [composing, setComposing] = useState<ShareMoment | 'blank' | null>(startSharing ? 'blank' : null)
+  const [composing, setComposing] = useState<ShareMoment | 'blank' | null>(() => (startSharing ? takeShareDraft() ?? 'blank' : null))
   const [media, setMedia] = useState<MediaAvailability | null>(null)
+  const { snapshot, applyRewards } = useGame()
 
-  const moments = useMemo(() => (username ? [] : shareMoments(state)), [state, username])
+  const moments = useMemo(() => (username ? [] : shareMoments(state, snapshot)), [state, snapshot, username])
 
   const load = useCallback(async () => {
     try {
@@ -119,9 +136,10 @@ export default function FeedScreen({
               myName={myName}
               media={media}
               onCancel={() => setComposing(null)}
-              onPosted={(post) => {
+              onPosted={(post, rewards) => {
                 setPosts((p) => [post, ...(p ?? [])])
                 setComposing(null)
+                applyRewards(rewards)
               }}
             />
           ) : (
@@ -214,7 +232,7 @@ function Composer({
   myName: string
   media: MediaAvailability | null
   onCancel: () => void
-  onPosted: (post: Post) => void
+  onPosted: (post: Post, rewards: RewardSummary | null) => void
 }) {
   const [kind, setKind] = useState<PostKind>(seed?.kind ?? 'update')
   const [body, setBody] = useState(seed?.text ?? '')
@@ -298,7 +316,7 @@ function Composer({
     setBusy(true)
     setError(null)
     try {
-      const { post: created } = await createPost({
+      const { post: created, rewards } = await createPost({
         kind,
         body: body.trim(),
         ...(attachment?.type === 'photo' ? { imageBase64: attachment.base64, mediaType: attachment.mediaType } : {}),
@@ -306,7 +324,7 @@ function Composer({
       })
       if (previewRef.current) URL.revokeObjectURL(previewRef.current)
       previewRef.current = null
-      onPosted(created)
+      onPosted(created, rewards ?? null)
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : 'Could not post that.')
     } finally {

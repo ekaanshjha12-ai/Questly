@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Flame, TrendingDown, TrendingUp, Minus } from 'lucide-react'
 import type { AppState, MoodSlot } from '../types'
+import { game, type ActivityDay } from '../lib/api'
 import HabitGrid from './HabitGrid'
 import {
   dailySeries,
@@ -48,17 +49,30 @@ interface Props {
 export default function HabitTracker({ state, ...actions }: Props) {
   const [rangeId, setRangeId] = useState<(typeof RANGES)[number]['id']>('12w')
   const range = RANGES.find((r) => r.id === rangeId) ?? RANGES[1]
+  // Quests and focus come from the server's record; twice the window, so the
+  // trend can compare against the one before.
+  const [activity, setActivity] = useState<ActivityDay[]>([])
+  useEffect(() => {
+    let cancelled = false
+    game
+      .activity(range.days * 2)
+      .then((res) => !cancelled && setActivity(res.days))
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [range.days])
 
   const { series, summary, weeks, weekdays, maxDay } = useMemo(() => {
-    const s = dailySeries(state, range.days)
+    const s = dailySeries(state, range.days, new Date(), activity)
     return {
       series: s,
-      summary: summarise(state, s),
+      summary: summarise(state, s, new Date(), activity),
       weeks: heatmapWeeks(s),
       weekdays: weekdayProfile(s),
       maxDay: s.reduce((m, d) => Math.max(m, d.total), 0),
     }
-  }, [state, range.days])
+  }, [state, range.days, activity])
 
   const focus = formatFocusTotal(summary.totalFocusMs)
   const empty = summary.totalCompletions === 0
@@ -66,7 +80,7 @@ export default function HabitTracker({ state, ...actions }: Props) {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-bold text-slate-50">Habit tracker</h2>
+        <h2 className="sr-only">Habit tracker</h2>
         <div className="flex gap-1 rounded-xl border border-ink-600 bg-ink-850/70 p-1">
           {RANGES.map((r) => (
             <button
