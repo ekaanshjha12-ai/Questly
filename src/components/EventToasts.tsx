@@ -79,7 +79,7 @@ export function ToastStack({ events, onDismiss }: Props) {
   // Level-ups and rank-ups get their own modal, so they never join the stack.
   const stackable = events.filter((e) => e.type !== 'levelup' && e.type !== 'rank')
   return (
-    <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-2">
+    <div className="toast-foot pointer-events-none fixed right-4 z-40 flex flex-col-reverse items-end gap-2 md:right-6">
       <AnimatePresence>
         {stackable.map((e) => (
           <EventToast key={e.id} event={e} onDismiss={onDismiss} />

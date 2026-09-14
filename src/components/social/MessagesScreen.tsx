@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, MessageCircle, SquarePen, X } from 'lucide-react'
 import type { Conversation, FoundPlayer } from '../../lib/api'
 import type { Inbox } from '../../hooks/useMessages'
+import { PHONE, useMediaQuery } from '../../hooks/useMediaQuery'
 import { timeAgo } from '../../lib/social'
 import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
@@ -14,13 +15,14 @@ import ConversationView, { type ConversationTarget } from './Conversation'
  * first.
  *
  * With no follow list, anyone on Questly can write to you — of any age — so a
- * first message from someone new waits under Requests rather than landing
- * among your chats, and they cannot send another until you answer.
+ * conversation from someone new waits under Requests rather than landing
+ * among your chats, until you accept or reply.
  */
 export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName: string }) {
   const [open, setOpen] = useState<ConversationTarget | null>(null)
   const [finding, setFinding] = useState(false)
   const [card, setCard] = useState<string | null>(null)
+  const phone = useMediaQuery(PHONE)
 
   // Fresh on arrival, rather than whatever the last poll saw.
   useEffect(() => {
@@ -31,7 +33,16 @@ export default function MessagesScreen({ inbox, myName }: { inbox: Inbox; myName
   if (open) {
     return (
       <>
-        <div className="h-[calc(100dvh-12.5rem)] min-h-[24rem] overflow-hidden rounded-2xl border border-ink-600 bg-ink-900">
+        <div
+          className="min-h-[24rem] overflow-hidden rounded-2xl border border-ink-600 bg-ink-900"
+          // Sized to the screen so the message box sits in view; on a phone it
+          // also clears the notch above and the Focus / Social dock below.
+          style={{
+            height: phone
+              ? 'calc(100dvh - 17rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))'
+              : 'calc(100dvh - 12.5rem)',
+          }}
+        >
           <ConversationView
             key={'id' in open ? open.id : open.username}
             target={open}

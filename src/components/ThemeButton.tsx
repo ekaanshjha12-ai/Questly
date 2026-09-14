@@ -1,5 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
+import { PHONE, useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
+import { useTyping } from '../hooks/useTyping'
 
 /**
  * The theme control: a day/night switch on the left rail.
@@ -30,6 +32,10 @@ export default function ThemeButton() {
   const { resolved, setChoice } = useTheme()
   const dark = resolved === 'dark'
   const reduce = useReducedMotion()
+  // On a phone it sits at the foot of the screen, so like the Focus / Social
+  // dock beside it, it steps aside while the keyboard is up.
+  const phone = useMediaQuery(PHONE)
+  const hidden = useTyping() && phone
 
   const slide = reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 520, damping: 34 }
   const fade = reduce ? { duration: 0 } : { duration: 0.35, ease: 'easeOut' as const }
@@ -40,14 +46,22 @@ export default function ThemeButton() {
       role="switch"
       aria-checked={dark}
       aria-label={dark ? 'Dark theme — switch to light' : 'Light theme — switch to dark'}
+      aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
       onClick={() => setChoice(dark ? 'light' : 'dark')}
       initial={{ x: -40, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
+      animate={
+        hidden
+          ? { x: -40, opacity: 0, transition: { duration: 0.15 }, transitionEnd: { visibility: 'hidden' } }
+          : { x: 0, opacity: 1, visibility: 'visible' }
+      }
       whileTap={reduce ? undefined : { scale: 0.95 }}
       transition={{ delay: 0.35 }}
-      // Same slot on the rail the old button used: above the planner, bottom
-      // corner on phones, beside the content from md up.
-      className="fixed bottom-[10.75rem] left-1.5 z-40 rounded-full bg-ink-850 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 md:bottom-auto md:top-[calc(50%-5.5rem)]"
+      // On phones, at the foot of the screen level with the Focus / Social
+      // dock, clear of the page above it; beside the content from md up.
+      className={`theme-foot fixed left-1.5 z-40 rounded-full bg-ink-850 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 md:top-[calc(50%-5.5rem)] ${
+        hidden ? 'pointer-events-none' : ''
+      }`}
       style={{
         // The raised bezel: a lit top edge and a cast shadow, so the recessed
         // track inside reads as sunk into something.

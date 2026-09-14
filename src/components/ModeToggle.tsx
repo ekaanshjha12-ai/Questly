@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { AppMode } from '../hooks/useMode'
+import { useTyping } from '../hooks/useTyping'
 
 /**
  * The switch between Focus and Social.
@@ -24,9 +25,12 @@ interface Props {
   mode: AppMode
   onChange: (mode: AppMode) => void
   badge?: number
+  /** Distinguishes the header's switch from the dock's, so the sliding key of
+   * one never animates across to the other. */
+  layoutKey?: string
 }
 
-export default function ModeToggle({ mode, onChange, badge = 0 }: Props) {
+export default function ModeToggle({ mode, onChange, badge = 0, layoutKey = 'mode-key' }: Props) {
   const reduce = useReducedMotion()
   const [nudge, setNudge] = useState(0)
 
@@ -69,7 +73,7 @@ export default function ModeToggle({ mode, onChange, badge = 0 }: Props) {
           >
             {active && (
               <motion.span
-                layoutId={reduce ? undefined : 'mode-key'}
+                layoutId={reduce ? undefined : layoutKey}
                 key={`key-${nudge}`}
                 initial={nudge && !reduce ? { scale: 1 } : false}
                 animate={nudge && !reduce ? { scale: [1, 0.9, 1.04, 1] } : undefined}
@@ -110,6 +114,41 @@ export default function ModeToggle({ mode, onChange, badge = 0 }: Props) {
         )
       })}
     </div>
+  )
+}
+
+/**
+ * The switch on a phone: floating at the foot of the screen, above the home
+ * indicator, where a thumb reaches it — rather than in the top corner, where
+ * on an iPhone it sat under the status bar and could not be tapped, and where
+ * a busy header could push it off the edge.
+ *
+ * It steps out of the way while something is being typed, so it never sits on
+ * top of a text box or the keyboard.
+ */
+export function ModeDock(props: Props) {
+  const typing = useTyping()
+  const reduce = useReducedMotion()
+  const away = reduce ? { opacity: 0 } : { y: 90, opacity: 0 }
+
+  return (
+    // Hidden rather than unmounted while typing: a switch with a shared-layout
+    // key can hold up its own removal, and staying mounted means the key does
+    // not animate in afresh every time the dock comes back.
+    <motion.div
+      initial={away}
+      animate={typing ? { ...away, transitionEnd: { visibility: 'hidden' } } : { y: 0, opacity: 1, visibility: 'visible' }}
+      transition={reduce ? { duration: 0.15 } : { type: 'spring', stiffness: 420, damping: 36 }}
+      aria-hidden={typing || undefined}
+      className="pointer-events-none fixed inset-x-0 z-40 flex justify-center"
+      style={{ bottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+    >
+      <div
+        className={`rounded-full border border-ink-600 bg-ink-900/85 p-1 shadow-2xl backdrop-blur-md ${typing ? '' : 'pointer-events-auto'}`}
+      >
+        <ModeToggle {...props} layoutKey="mode-key-dock" />
+      </div>
+    </motion.div>
   )
 }
 

@@ -32,7 +32,8 @@ import ThemeButton from './components/ThemeButton'
 import PersonaliseScreen from './components/PersonaliseScreen'
 import HabitTracker from './components/HabitTracker'
 import SignupFlow from './components/SignupFlow'
-import ModeToggle from './components/ModeToggle'
+import ModeToggle, { ModeDock } from './components/ModeToggle'
+import { PHONE, useMediaQuery } from './hooks/useMediaQuery'
 import SocialHome from './components/social/SocialHome'
 import { useMode, type AppMode } from './hooks/useMode'
 import { useChallenges } from './hooks/useChallenges'
@@ -262,6 +263,8 @@ function AuthedApp({
   const [view, setView] = useState<View>('home')
   const { mode, setMode } = useMode()
   const reduceMotion = useReducedMotion()
+  // On a phone the switch sits at the foot of the screen instead of the header.
+  const phone = useMediaQuery(PHONE)
   const switchMode = useCallback(
     (next: AppMode) => {
       if (next === mode) return
@@ -342,7 +345,7 @@ function AuthedApp({
   return (
     <div className="min-h-screen">
       <header className="border-b border-ink-700/60">
-        <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
+        <div className="safe-header mx-auto flex max-w-2xl items-center gap-2 px-4 pb-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
           <button
             type="button"
             onClick={() => setView('home')}
@@ -384,16 +387,18 @@ function AuthedApp({
             )}
             <SyncBadge status={syncStatus} />
             <InstallButton />
-            <ModeToggle
-              mode={mode}
-              onChange={switchMode}
-              badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
-            />
+            {!phone && (
+              <ModeToggle
+                mode={mode}
+                onChange={switchMode}
+                badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0}
+              />
+            )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 [padding-bottom:calc(1.5rem+env(safe-area-inset-bottom))] [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
+      <main className="page-foot mx-auto max-w-2xl space-y-5 px-4 pt-6 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))]">
         <AnimatePresence mode="wait" initial={false} custom={mode === 'social' ? 1 : -1}>
           <motion.div
             key={mode}
@@ -518,6 +523,10 @@ function AuthedApp({
           </button>
         </footer>
       </main>
+
+      {phone && (
+        <ModeDock mode={mode} onChange={switchMode} badge={mode === 'focus' ? challengeFeed.incomingCount + inbox.unread + inbox.requests : 0} />
+      )}
 
       <VerifyModalHost
         quest={verifyingQuest}

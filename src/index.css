@@ -632,3 +632,53 @@ button[class*='rounded-2xl'][class*='bg-ink-9'] {
   background: linear-gradient(90deg, rgb(var(--gold-500)) 0%, rgb(var(--gold-300)) 50%, rgb(var(--gold-500)) 100%);
   background-size: 200% 100%;
 }
+
+/*
+ * The edges of an iPhone.
+ *
+ * Installed to the home screen, the app runs full screen with the status bar
+ * laid over it, so the top of the page sits under the clock and the Dynamic
+ * Island, where iOS takes the taps. On phones the Focus / Social switch floats
+ * at the foot of the screen, so what else lives down there moves up to clear
+ * it. Written as plain CSS because env() does not survive Tailwind's
+ * arbitrary values reliably.
+ */
+.safe-header {
+  padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.5rem));
+}
+
+.page-foot {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
+}
+
+.toast-foot {
+  bottom: calc(env(safe-area-inset-bottom) + 5.25rem);
+}
+
+.install-foot {
+  bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
+/* Level with the dock: its middle sits 38px above the safe area, and the
+   switch is 40px tall. */
+.theme-foot {
+  bottom: calc(env(safe-area-inset-bottom) + 1.125rem);
+}
+
+@media (min-width: 768px) {
+  .theme-foot {
+    bottom: auto;
+  }
+
+  .page-foot {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
+  }
+
+  .toast-foot {
+    bottom: 1.5rem;
+  }
+
+  .install-foot {
+    bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  }
+}

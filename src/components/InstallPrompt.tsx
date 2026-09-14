@@ -181,7 +181,7 @@ export default function InstallPrompt() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-2xl border border-gold-500/40 bg-ink-900/95 p-3 shadow-2xl backdrop-blur [margin-bottom:env(safe-area-inset-bottom)]"
+          className="install-foot fixed inset-x-3 z-40 mx-auto max-w-md rounded-2xl border border-gold-500/40 bg-ink-900/95 p-3 shadow-2xl backdrop-blur"
         >
           <div className="flex items-start gap-3">
             <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-lg" />
