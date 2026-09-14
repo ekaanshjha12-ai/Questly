@@ -11,7 +11,7 @@ import {
   startRewards,
   transaction,
 } from '../game/rewards.js'
-import { markActive } from '../game/analytics.js'
+import { markActive, track } from '../game/analytics.js'
 import { isValidTimezone } from '../game/clock.js'
 import { GameError, invalid } from '../game/errors.js'
 import {
@@ -47,7 +47,7 @@ import {
 } from '../game/quests.js'
 import { ensurePeriodicQuests, refreshGoalQuests } from '../game/slate.js'
 import { activitySeries, progressStats } from '../game/stats.js'
-import { onboardingSteps, setFlag } from '../game/onboarding.js'
+import { onboardingSteps, PATHS, setFlag } from '../game/onboarding.js'
 
 /**
  * Routes for everything a player earns: progress, quests, focus sessions,
@@ -166,6 +166,17 @@ export function gameRoutes({ requireAuth, rateLimit }) {
     const appearance = setAppearance(req.user.id, req.body?.appearance)
     setFlag(req.user.id, 'appearanceSet', true)
     return { appearance }
+  }))
+
+  // The path chosen at the start. Changeable; the first choice is what
+  // counts as finishing onboarding.
+  router.put('/game/path', requireAuth, write, game, handle((req) => {
+    const path = String(req.body?.path ?? '')
+    if (!PATHS.includes(path)) throw invalid('Choose one of the five paths.', 'path')
+    const first = !progressView(getProgressRow(req.user.id)).flags.path
+    setFlag(req.user.id, 'path', path)
+    if (first) track(req.user.id, 'onboarding_completed', { path })
+    return { path }
   }))
 
   router.get('/progress/history', requireAuth, read, game, handle((req) =>

@@ -107,7 +107,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Planned |
 | 8 | World map: regions, locks, time of day, club buildings, events | Planned |
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Planned |
-| 10 | Onboarding paths and first quests | Planned |
+| 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |
 | 12 | Legal and policy pages, privacy controls | Planned |
 | 13 | Analytics events and retention | Planned |
@@ -121,8 +121,6 @@ Kept up to date as phases land.
 
 - **Clubs tab.** Navigation has five tabs until clubs exist; a sixth tab with
   nothing behind it would be fake functionality.
-- **Onboarding** still asks for goals and a 3D character; the path choice
-  (Scholar, Builder, Creator, Discipline, Explorer) is phase 10.
 - **Duels** keep their existing check-in flow and screens; the VS screen,
   states and focus-validated progress are phase 6. Their XP already goes
   through the ledger.

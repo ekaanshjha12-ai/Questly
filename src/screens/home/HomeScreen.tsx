@@ -86,7 +86,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
                   <FeaturedIcon className="h-5 w-5" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-display text-2xl font-bold leading-tight text-slate-50">{featured.title}</h2>
+                  <h2 className={`font-display font-bold leading-tight text-slate-50 ${featured.title.length > 42 ? 'text-lg' : 'text-2xl'}`}>{featured.title}</h2>
                   <p className="mt-0.5 text-sm text-slate-400">{featured.description ?? `${formatMinutes(featured.durationMin)} · ${featured.progress.kind === 'minutes' ? `${featured.progress.value}/${featured.progress.target} min focused` : 'ready to begin'}`}</p>
                 </div>
               </div>

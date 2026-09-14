@@ -27,7 +27,7 @@ import { SOUNDS } from './lib/noise'
 
 // Screens away from the hub load when first opened, so the first paint carries
 // only the shell, Home and the Quest Board.
-const Onboarding = lazy(() => import('./components/Onboarding'))
+const Onboarding = lazy(() => import('./screens/onboarding/OnboardingScreen'))
 const AdminSetup = lazy(() => import('./components/AdminSetup'))
 const AdminConsole = lazy(() => import('./components/AdminConsole'))
 const FocusModeScreen = lazy(() => import('./screens/focus/FocusModeScreen'))

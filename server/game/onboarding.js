@@ -56,6 +56,9 @@ const STEPS = [
   },
 ]
 
+/** The paths a new player can choose. A path only shapes suggestions. */
+export const PATHS = ['scholar', 'builder', 'creator', 'discipline', 'explorer']
+
 export function onboardingSteps(userId) {
   const steps = STEPS.map((step) => ({ id: step.id, title: step.title, body: step.body, link: step.link, done: step.done(userId) }))
   return { steps, complete: steps.every((s) => s.done) }

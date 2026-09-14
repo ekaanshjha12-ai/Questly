@@ -192,6 +192,21 @@ describe('progression', () => {
     assert.equal((await planner.client('GET', '/api/quests')).body.quests.length, before)
   })
 
+  it('records the chosen path once it is one of the five', async () => {
+    const bad = await planner.client('PUT', '/api/game/path', { path: 'wizard' })
+    assert.equal(bad.status, 400)
+    const ok = await planner.client('PUT', '/api/game/path', { path: 'scholar' })
+    assert.equal(ok.status, 200)
+    const game = await planner.client('GET', '/api/game')
+    assert.equal(game.body.progress.flags.path, 'scholar')
+    // Changing it later is allowed and does not pay or unlock anything.
+    const changed = await planner.client('PUT', '/api/game/path', { path: 'creator' })
+    assert.equal(changed.status, 200)
+    const after = await planner.client('GET', '/api/game')
+    assert.equal(after.body.progress.flags.path, 'creator')
+    assert.equal(after.body.progress.xp, game.body.progress.xp)
+  })
+
   it('caps self-reported XP per day and says so', async () => {
     const big = await alice.client('POST', '/api/quests', { type: 'optional', title: 'Huge chore', durationMin: 480, difficulty: 'heroic' })
     assert.equal(big.body.quest.xp, 720)

@@ -1155,6 +1155,8 @@ const id = (value: string) => encodeURIComponent(value)
 export const game = {
   snapshot: () => request<GameSnapshot>('/api/game'),
   setTimezone: (timezone: string) => request<{ progress: Progress }>('/api/game/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
+  setPath: (path: 'scholar' | 'builder' | 'creator' | 'discipline' | 'explorer') =>
+    request<{ path: string }>('/api/game/path', { method: 'PUT', body: JSON.stringify({ path }) }),
   setAppearance: (appearance: Appearance) =>
     request<{ appearance: Appearance }>('/api/game/appearance', { method: 'PUT', body: JSON.stringify({ appearance }) }),
   history: (before?: number) => request<{ entries: LedgerEntry[]; more: boolean }>(`/api/progress/history${before ? `?before=${before}` : ''}`),

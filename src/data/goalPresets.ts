@@ -19,6 +19,7 @@ export const GOAL_PRESETS: GoalPreset[] = [
   { id: 'p-language', title: 'Learn a new language', category: 'learning', specHint: 'e.g. Spanish, conversational by June' },
   { id: 'p-read', title: 'Read more books', category: 'learning', specHint: 'e.g. 2 books a month, non-fiction' },
   { id: 'p-code', title: 'Learn to code', category: 'learning', specHint: 'e.g. Python, build a small app' },
+  { id: 'p-exam', title: 'Ace my exams', category: 'learning', specHint: 'e.g. chemistry final in June, an hour a day' },
 
   // Career
   { id: 'p-promo', title: 'Get promoted', category: 'career', specHint: 'e.g. senior role by year end' },
@@ -29,6 +30,7 @@ export const GOAL_PRESETS: GoalPreset[] = [
   { id: 'p-write', title: 'Write a book', category: 'creative', specHint: 'e.g. 500 words a day, finish draft by spring' },
   { id: 'p-music', title: 'Learn an instrument', category: 'creative', specHint: 'e.g. guitar, play a full song' },
   { id: 'p-art', title: 'Draw more often', category: 'creative', specHint: 'e.g. one sketch a day' },
+  { id: 'p-portfolio', title: 'Build a portfolio', category: 'creative', specHint: 'e.g. ten finished pieces by December' },
 
   // Wellness
   { id: 'p-meditate', title: 'Meditate regularly', category: 'wellness', specHint: 'e.g. 10 minutes every morning' },

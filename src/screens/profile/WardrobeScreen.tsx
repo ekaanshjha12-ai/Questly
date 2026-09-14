@@ -12,7 +12,8 @@ import { RarityTag, rarityBorder } from '../../components/ui/Tag'
 import { messageOf, useToast } from '../../components/ui/Toast'
 import HeroSprite from '../../components/art/HeroSprite'
 import ItemIcon from '../../components/art/ItemIcon'
-import { DEFAULT_APPEARANCE, EYE_SWATCHES, HAIR_SWATCHES, SKIN_SWATCHES } from '../../art/hero'
+import AppearanceEditor from '../../components/art/AppearanceEditor'
+import { DEFAULT_APPEARANCE } from '../../art/hero'
 import { findModel } from '../../data/ranks'
 
 const Avatar3D = lazy(() => import('../../components/Avatar3D'))
@@ -26,8 +27,6 @@ const SLOTS: { id: Slot; label: string }[] = [
   { id: 'badge', label: 'Badges' },
   { id: 'special', label: 'Special' },
 ]
-
-const HAIR_STYLES: Appearance['hair'][] = ['short', 'long', 'bun', 'curly', 'braid', 'bob', 'mohawk', 'shaved']
 
 /**
  * The Character Wardrobe: what the hero wears, what is in the vault, and how
@@ -151,31 +150,7 @@ export default function WardrobeScreen() {
           {editing && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
               <div className="mt-3 space-y-4 border-t border-ink-700/60 pt-4">
-                <Picker label="Build">
-                  {(['a', 'b'] as const).map((b) => (
-                    <Choice key={b} active={draft.body === b} onClick={() => setDraft({ ...draft, body: b })} label={b === 'a' ? 'Broad' : 'Slim'} />
-                  ))}
-                </Picker>
-                <Picker label="Skin">
-                  {(Object.keys(SKIN_SWATCHES) as Appearance['skin'][]).map((s) => (
-                    <Swatch key={s} color={SKIN_SWATCHES[s]} active={draft.skin === s} label={s} onClick={() => setDraft({ ...draft, skin: s })} />
-                  ))}
-                </Picker>
-                <Picker label="Hair">
-                  {HAIR_STYLES.map((h) => (
-                    <Choice key={h} active={draft.hair === h} onClick={() => setDraft({ ...draft, hair: h })} label={h} />
-                  ))}
-                </Picker>
-                <Picker label="Hair colour">
-                  {(Object.keys(HAIR_SWATCHES) as Appearance['hairColor'][]).map((c) => (
-                    <Swatch key={c} color={HAIR_SWATCHES[c]} active={draft.hairColor === c} label={c} onClick={() => setDraft({ ...draft, hairColor: c })} />
-                  ))}
-                </Picker>
-                <Picker label="Eyes">
-                  {(Object.keys(EYE_SWATCHES) as Appearance['eyes'][]).map((c) => (
-                    <Swatch key={c} color={EYE_SWATCHES[c]} active={draft.eyes === c} label={c} onClick={() => setDraft({ ...draft, eyes: c })} />
-                  ))}
-                </Picker>
+                <AppearanceEditor value={draft} onChange={setDraft} />
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={() => setEditing(false)} className="flex-1">
                     Cancel
@@ -276,45 +251,5 @@ export default function WardrobeScreen() {
         )}
       </Sheet>
     </div>
-  )
-}
-
-function Picker({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="eyebrow mb-2">{label}</p>
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function Choice({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onClick}
-      className={`min-h-[34px] rounded-lg border px-3 text-xs font-semibold capitalize ${active ? 'border-gold-500/60 bg-gold-500/15 text-gold-300' : 'border-ink-600 bg-ink-900 text-slate-300'}`}
-    >
-      {label}
-    </button>
-  )
-}
-
-function Swatch({ color, active, onClick, label }: { color: string; active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`h-9 w-9 rounded-full border-2 transition-transform ${active ? 'scale-110 border-gold-400' : 'border-ink-600'}`}
-      style={{ background: color }}
-    />
   )
 }

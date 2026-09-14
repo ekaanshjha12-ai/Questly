@@ -25,6 +25,7 @@ import { LoadingState } from '../../components/ui/States'
 import HeroSprite from '../../components/art/HeroSprite'
 import ItemIcon from '../../components/art/ItemIcon'
 import { rankForLevel } from '../../data/ranks'
+import { findPath } from '../../data/paths'
 
 const LEFT: { slot: Slot; label: string }[] = [
   { slot: 'head', label: 'Head' },
@@ -56,6 +57,7 @@ export default function ProfileScreen({ user, goals, challenges }: { user: AuthU
 
   const { progress, look, achievements } = snapshot
   const rank = rankForLevel(progress.level)
+  const path = findPath(progress.flags.path)
   const goal = goals.find((g) => !g.archived)
   const pct = Math.round((progress.xpIntoLevel / progress.xpForNext) * 100)
 
@@ -80,7 +82,14 @@ export default function ProfileScreen({ user, goals, challenges }: { user: AuthU
         <div className="flex items-start justify-between gap-3 px-4 pt-4">
           <div className="min-w-0">
             <h2 className="truncate font-display text-2xl font-bold text-slate-50">{user.displayName ?? 'Adventurer'}</h2>
-            {user.username && <p className="text-sm text-slate-500">@{user.username}</p>}
+            <p className="text-sm text-slate-500">
+              {user.username && <>@{user.username}</>}
+              {path && (
+                <span className="ml-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold" style={{ color: path.accent }}>
+                  <path.icon className="h-3.5 w-3.5" aria-hidden /> {path.name}
+                </span>
+              )}
+            </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="tag border-gold-500/50 bg-gold-500/10 text-gold-300">Level {progress.level}</span>
