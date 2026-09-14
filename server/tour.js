@@ -23,7 +23,7 @@ const FEATURES = [
   { id: 'schedule', name: 'Plan', what: 'Daily, weekly and monthly planner. A task placed on a day shows on all three views.' },
   { id: 'planner', name: 'AI Planner', what: 'Its own card on the hub: describe a goal, answer a few questions, optionally attach a syllabus or training plan, and it writes a dated plan straight into the planner.' },
   { id: 'focus', name: 'Focus', what: 'A timer and stopwatch with a session plan.' },
-  { id: 'sounds', name: 'Sounds', what: 'Music composed as it plays (lo-fi, jazz, soft piano, bossa nova, synthwave) and ambient sounds like rain, ocean or a train carriage, alone or layered together, with a sleep timer. It keeps playing across the app.' },
+  { id: 'sounds', name: 'Sounds', what: 'Music composed as it plays, from lo-fi, jazz and a cozy fireplace to singing bowls, deep space, Mongolian throat singing, an evening raga and gamelan, and ambient sounds like rain, ocean or a train carriage, alone or layered together, with a sleep timer. It keeps playing across the app.' },
   { id: 'study', name: 'Study', what: 'Flashcards generated from any topic, and a coach that listens to them explain something and marks how well they actually know it.' },
   { id: 'habits', name: 'Habits', what: 'Their own habits in a month grid they tick off themselves, with a morning and evening mood row and graphs of how consistent they have been.' },
   { id: 'avatar', name: 'Hero', what: 'Ranks from Recruit up to Heisenberg, and characters to unlock with coins earned by showing up.' },

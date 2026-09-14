@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Moon, Music2, Square, Volume1, Waves } from 'lucide-react'
-import { MUSIC } from '../lib/music'
+import { MUSIC, type MusicGroup } from '../lib/music'
 import { SOUNDS, type SoundGroup } from '../lib/noise'
 import type { NoiseControls } from '../hooks/useNoise'
 import { SoundsIcon } from './SectionIcons'
@@ -20,6 +20,12 @@ const SLEEP_OPTIONS: { label: string; minutes: number | null }[] = [
   { label: '30m', minutes: 30 },
   { label: '1h', minutes: 60 },
   { label: '2h', minutes: 120 },
+]
+
+const MUSIC_GROUPS: { id: MusicGroup; label: string }[] = [
+  { id: 'chill', label: 'Chill' },
+  { id: 'calm', label: 'Calm' },
+  { id: 'world', label: 'World' },
 ]
 
 const GROUPS: { id: SoundGroup; label: string }[] = [
@@ -90,6 +96,8 @@ export function LevelBars({ getLevel, active, bars = 4, className = '' }: { getL
 
 export default function SoundsScreen({ noise }: { noise: NoiseControls }) {
   const [group, setGroup] = useState<SoundGroup>('nature')
+  // Opens on whichever group is playing, so what is on is on screen.
+  const [musicGroup, setMusicGroup] = useState<MusicGroup>(() => MUSIC.find((m) => m.id === noise.music)?.group ?? 'chill')
   const [remaining, setRemaining] = useState<number | null>(null)
 
   useEffect(() => {
@@ -153,14 +161,32 @@ export default function SoundsScreen({ noise }: { noise: NoiseControls }) {
 
       {/* --- music -------------------------------------------------------------- */}
       <section>
-        <div className="mb-2 flex items-baseline justify-between gap-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <Music2 className="h-3.5 w-3.5" /> Music
           </p>
-          <p className="text-[10px] text-slate-500">Composed as it plays, never the same twice</p>
+          <div className="flex gap-0.5 rounded-lg border border-ink-600 bg-ink-800 p-0.5" role="group" aria-label="Kind of music">
+            {MUSIC_GROUPS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setMusicGroup(g.id)}
+                aria-pressed={musicGroup === g.id}
+                className={`relative rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  musicGroup === g.id ? 'bg-ink-600 text-slate-50' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {g.label}
+                {noise.music && MUSIC.find((m) => m.id === noise.music)?.group === g.id && musicGroup !== g.id && (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-gold-500" aria-label="playing" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
+        <p className="mb-2 text-[10px] text-slate-500">Composed as it plays, never the same twice.</p>
         <div className="grid grid-cols-2 gap-2">
-          {MUSIC.map((m) => {
+          {MUSIC.filter((m) => m.group === musicGroup).map((m) => {
             const active = noise.music === m.id
             return (
               <motion.button
