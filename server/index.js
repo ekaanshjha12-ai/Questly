@@ -36,6 +36,10 @@ import {
   verifyUser,
 } from './auth.js'
 import { generateSecret, otpauthUrl } from './totp.js'
+import { stripImageMetadata } from './imagemeta.js'
+import { normalizeCard } from './card.js'
+import { closeReport, fileReport, getReport, listReports, openReportCount, REPORT_STATUSES } from './reports.js'
+import { clearLoginFailures, lockedMessage, loginRetryAfter, purgeLoginFailures, recordLoginFailure } from './loginguard.js'
 import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { levelFromXp } from './game/levels.js'
@@ -158,6 +162,7 @@ import {
   putState,
   recordPhotoHash,
   recordVerification,
+  adminRemovePost,
   setSuspendedUntil,
   setUserDisabled,
   setUserRole,
@@ -211,6 +216,20 @@ app.use(cookieParser())
 app.use(sameOriginOnly(IS_PRODUCTION))
 
 purgeExpiredSessions()
+purgeLoginFailures()
+setInterval(() => {
+  purgeExpiredSessions()
+  purgeLoginFailures()
+}, 6 * 60 * 60_000).unref?.()
+
+/** Answers a locked account's attempt; true when it has been answered. */
+function refuseIfLocked(email, res) {
+  const retryAfter = loginRetryAfter(email)
+  if (!retryAfter) return false
+  res.setHeader('Retry-After', String(retryAfter))
+  res.status(429).json({ error: lockedMessage(retryAfter), code: 'login_locked', retryAfter })
+  return true
+}
 
 /**
  * Limits, tightest first.
@@ -444,8 +463,14 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
       res.status(400).json({ error: 'Email and password are required.' })
       return
     }
+    // Checked before the password, so a locked account's guesses are not tried.
+    if (refuseIfLocked(email, res)) {
+      audit({ email, event: 'auth.login', outcome: 'locked', ip: req.ip })
+      return
+    }
     const user = await verifyUser(email, password)
     if (!user) {
+      recordLoginFailure(email)
       audit({ email, event: 'auth.login', outcome: 'bad_credentials', ip: req.ip })
       // Deliberately vague: don't reveal whether the email exists.
       res.status(401).json({ error: 'Incorrect email or password.' })
@@ -485,12 +510,14 @@ app.post('/api/auth/login', throttleAuth, async (req, res) => {
       }
       const row = findUserById(user.id)
       if (!checkSecondFactor(row, mfaCode)) {
+        recordLoginFailure(email)
         audit({ userId: user.id, email, event: 'auth.mfa', outcome: 'failed', ip: req.ip })
         res.status(401).json({ error: 'That code is not right.', code: 'mfa_invalid' })
         return
       }
     }
 
+    clearLoginFailures(email)
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
     audit({ userId: user.id, email: user.email, event: 'auth.login', outcome: 'success', ip: req.ip })
@@ -513,12 +540,15 @@ app.post('/api/auth/reset', throttleAuth, async (req, res) => {
       res.status(400).json({ error: problem })
       return
     }
+    if (refuseIfLocked(email, res)) return
     const ok = await resetWithCode(email, code, password)
     if (!ok) {
+      recordLoginFailure(email)
       // Deliberately vague: this must not reveal which accounts exist.
       res.status(401).json({ error: 'That email and recovery code do not match.' })
       return
     }
+    clearLoginFailures(email)
     res.json({ ok: true })
   } catch (err) {
     console.error('password reset failed', err)
@@ -665,6 +695,8 @@ app.put('/api/state', requireAuth, throttleState, (req, res) => {
       }
     }
 
+    if ('card' in notebook) notebook.card = normalizeCard(notebook.card, { forOwner: true })
+
     const { version, updatedAt } = putState(req.user.id, JSON.stringify(notebook))
     // A first goal or a designed card can unlock an achievement.
     const summary = transaction(() => startRewards(req.user.id).finish())
@@ -762,7 +794,15 @@ app.post('/api/verify', requireAuth, async (req, res) => {
         res.status(413).json({ error: 'That image is too large. Try a smaller photo.' })
         return
       }
-      const bytes = Buffer.from(imageBase64, 'base64')
+      // The model sees the picture, not where or when it was taken. GIFs carry
+      // no location data and pass as they are.
+      const raw = Buffer.from(imageBase64, 'base64')
+      const bytes = mediaType === 'image/gif' ? raw : stripImageMetadata(raw, mediaType)
+      if (!bytes) {
+        res.status(400).json({ error: 'That image could not be read. Try a normal JPEG photo.' })
+        return
+      }
+      const cleanBase64 = bytes === raw ? imageBase64 : bytes.toString('base64')
 
       // Cheap local checks first — no reason to pay for a vision call on a photo
       // that is already disqualified.
@@ -823,7 +863,7 @@ app.post('/api/verify', requireAuth, async (req, res) => {
       // a retry loop on errors must not be free.
       recordVerification(req.user.id, day)
       verdict = await meter({ userId: req.user.id, endpoint: 'verify.photo' }, () =>
-        verifyPhoto({ taskTitle: taskTitle.trim(), mediaType, imageBase64 }),
+        verifyPhoto({ taskTitle: taskTitle.trim(), mediaType, imageBase64: cleanBase64 }),
       )
 
       if (verdict.verified && !verdict.firstPerson) {
@@ -912,7 +952,6 @@ app.post('/api/goals/quests', ...aiGuard, async (req, res) => {
       error: 'Could not write quests for that goal.',
       // Surfaced so a failure can be diagnosed without shell access to the
       // container. This endpoint requires a session, so it is not public.
-      detail: String(err?.message ?? err).slice(0, 300),
       status: err?.status ?? null,
     })
   }
@@ -936,7 +975,7 @@ app.post('/api/flashcards/subtopics', ...aiGuard, async (req, res) => {
     res.json({ subtopics })
   } catch (err) {
     console.error('subtopic generation failed', err)
-    res.status(502).json({ error: 'Could not break that topic down.', detail: String(err?.message ?? err).slice(0, 300) })
+    res.status(502).json({ error: 'Could not break that topic down.' })
   }
 })
 
@@ -965,7 +1004,7 @@ app.post('/api/flashcards/cards', ...aiGuard, async (req, res) => {
     res.json({ cards })
   } catch (err) {
     console.error('card generation failed', err)
-    res.status(502).json({ error: 'Could not write cards for that.', detail: String(err?.message ?? err).slice(0, 300) })
+    res.status(502).json({ error: 'Could not write cards for that.' })
   }
 })
 
@@ -991,7 +1030,7 @@ app.post('/api/explain/questions', ...aiGuard, async (req, res) => {
     res.json({ questions })
   } catch (err) {
     console.error('question generation failed', err)
-    res.status(502).json({ error: 'Could not think of questions.', detail: String(err?.message ?? err).slice(0, 300) })
+    res.status(502).json({ error: 'Could not think of questions.' })
   }
 })
 
@@ -1024,7 +1063,7 @@ app.post('/api/explain/report', ...aiGuard, async (req, res) => {
     res.json({ report })
   } catch (err) {
     console.error('report generation failed', err)
-    res.status(502).json({ error: 'Could not mark that.', detail: String(err?.message ?? err).slice(0, 300) })
+    res.status(502).json({ error: 'Could not mark that.' })
   }
 })
 
@@ -1076,7 +1115,6 @@ app.post('/api/planner/questions', ...aiGuard, async (req, res) => {
     console.error('planner question generation failed', err)
     res.status(502).json({
       error: 'Could not think of questions for that goal.',
-      detail: String(err?.message ?? err).slice(0, 300),
     })
   }
 })
@@ -1135,7 +1173,7 @@ app.post('/api/planner/plan', ...aiGuard, async (req, res) => {
       return
     }
     console.error('plan generation failed', err)
-    res.status(502).json({ error: 'Could not write a plan for that.', detail: String(err?.message ?? err).slice(0, 300) })
+    res.status(502).json({ error: 'Could not write a plan for that.' })
   }
 })
 
@@ -1215,7 +1253,6 @@ app.post('/api/progress/outlook', ...aiGuard, async (req, res) => {
     console.error('outlook analysis failed', err)
     res.status(502).json({
       error: 'Could not analyse your progress.',
-      detail: String(err?.message ?? err).slice(0, 300),
     })
   }
 })
@@ -1253,6 +1290,96 @@ app.post('/api/admin/users/:id/suspend', requireAuth, requireAdmin, throttleAdmi
     detail: `${target.email} -> ${until ?? 'lifted'}`,
   })
   res.json({ ok: true, until })
+})
+
+/**
+ * The moderation queue: open reports oldest first, with what was reported as
+ * it looked when it was reported.
+ */
+app.get('/api/admin/reports', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const status = REPORT_STATUSES.includes(req.query.status) ? req.query.status : 'open'
+  const page = listReports({ status, before: typeof req.query.before === 'string' ? req.query.before : null })
+  res.json({ ...page, open: openReportCount() })
+})
+
+/**
+ * Closes a report: dismissed, or actioned by taking the post down and/or
+ * suspending the account. The reporter hears that it was reviewed — not what
+ * happened to the other person, which is theirs.
+ */
+app.post('/api/admin/reports/:id/resolve', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
+  const report = getReport(req.params.id)
+  if (!report) {
+    res.status(404).json({ error: 'No such report.' })
+    return
+  }
+  if (report.status !== 'open') {
+    res.status(409).json({ error: 'That report has already been handled.' })
+    return
+  }
+  const outcome = req.body?.outcome === 'dismissed' ? 'dismissed' : req.body?.outcome === 'actioned' ? 'actioned' : null
+  if (!outcome) {
+    res.status(400).json({ error: 'Choose to dismiss the report or act on it.' })
+    return
+  }
+  const removePost = outcome === 'actioned' && req.body?.removePost === true
+  const days = outcome === 'actioned' ? Number(req.body?.suspendDays) : 0
+  const suspend = Number.isFinite(days) && days > 0
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : ''
+  if (outcome === 'actioned' && !removePost && !suspend) {
+    res.status(400).json({ error: 'Pick an action: take the post down, suspend the account, or both.' })
+    return
+  }
+  if (removePost && report.kind !== 'post') {
+    res.status(400).json({ error: 'Only a reported post can be taken down.' })
+    return
+  }
+  const target = report.target ? findUserById(report.target.id) : null
+  if (suspend) {
+    if (!target) {
+      res.status(400).json({ error: 'That account no longer exists.' })
+      return
+    }
+    if (target.id === req.user.id) {
+      res.status(400).json({ error: 'You cannot suspend your own account.' })
+      return
+    }
+    if (target.role === 'superadmin' || (target.role === 'admin' && req.user.role !== 'superadmin')) {
+      res.status(403).json({ error: 'Only the superadmin can suspend another admin.' })
+      return
+    }
+  }
+
+  const actions = []
+  if (removePost && adminRemovePost(report.targetId)) actions.push('post_removed')
+  if (suspend) {
+    const until = new Date(Date.now() + Math.min(365, days) * 86_400_000).toISOString()
+    setSuspendedUntil(target.id, until)
+    invalidateAdminStats()
+    actions.push(`suspended_${Math.min(365, Math.round(days))}d`)
+  }
+  if (!closeReport(report.id, { status: outcome, action: actions.join(',') || null, note, adminId: req.user.id })) {
+    res.status(409).json({ error: 'That report has already been handled.' })
+    return
+  }
+  audit({
+    userId: req.user.id, email: req.user.email, event: 'admin.report', outcome, ip: req.ip,
+    detail: `report ${report.id} (${report.kind} ${report.targetId})${actions.length ? ` -> ${actions.join(', ')}` : ''}`,
+  })
+  if (report.reporter) {
+    try {
+      notify(report.reporter.id, {
+        kind: 'system',
+        title: 'Your report was reviewed',
+        body: outcome === 'actioned'
+          ? 'Thank you. A moderator looked at what you reported and took action.'
+          : 'Thank you. A moderator looked at what you reported and did not find a rule broken this time.',
+      })
+    } catch (err) {
+      console.error('report notification failed', err)
+    }
+  }
+  res.json({ report: getReport(report.id), open: openReportCount() })
 })
 
 /**
@@ -1427,19 +1554,10 @@ function playerSummary(row) {
   }
 }
 
-/** A card design as someone else may see it: no email, no birthday, and any
- * text that the content filter would not let through left off. */
+/** A card design as someone else may see it: rebuilt from known parts, with
+ * no email or birthday and no text the content filter would not let through. */
 function publicCard(state) {
-  const card = state?.card
-  if (!card || !Array.isArray(card.items)) return null
-  return {
-    background: typeof card.background === 'string' ? card.background : 'rank',
-    items: card.items
-      .filter((item) => !(item?.kind === 'field' && (item.field === 'email' || item.field === 'birthday')))
-      .filter((item) => item?.kind !== 'text' || screenInput(String(item.text ?? ''), { allowLength: 60 }).ok)
-      .slice(0, 40),
-    strokes: Array.isArray(card.strokes) ? card.strokes.slice(-80) : [],
-  }
+  return normalizeCard(state?.card, { forOwner: false })
 }
 
 /**
@@ -1547,7 +1665,14 @@ app.post('/api/users/:username/report', requireAuth, throttleChallengeWrite, (re
   }
   const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
   const challengeId = typeof req.body?.challengeId === 'string' ? req.body.challengeId.slice(0, 60) : ''
-  // Lands in the audit log, which the admin console already lists.
+  fileReport({
+    reporterId: req.user.id,
+    kind: 'player',
+    targetId: target.id,
+    targetUserId: target.id,
+    reason,
+    snapshot: { username: target.username, displayName: target.display_name, bio: target.bio, ...(challengeId ? { challengeId } : {}) },
+  })
   audit({
     userId: req.user.id,
     email: req.user.email,
@@ -2277,6 +2402,15 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
     return
   }
   const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+  const author = findUserById(post.user_id)
+  fileReport({
+    reporterId: req.user.id,
+    kind: 'post',
+    targetId: post.id,
+    targetUserId: post.user_id,
+    reason,
+    snapshot: { body: post.body, kind: post.kind, imageId: post.image_id ?? null, createdAt: post.created_at, author: author?.username ?? null },
+  })
   audit({
     userId: req.user.id,
     email: req.user.email,
@@ -2805,8 +2939,11 @@ app.post('/api/account/delete', requireAuth, throttleAuth, async (req, res) => {
     res.status(400).json({ error: 'Your password is required to delete the account.' })
     return
   }
+  // A signed-in device must not become a way to guess the password.
+  if (refuseIfLocked(req.user.email, res)) return
   const confirmed = await verifyUser(req.user.email, password)
   if (!confirmed || confirmed.id !== req.user.id) {
+    recordLoginFailure(req.user.email)
     audit({ userId: req.user.id, email: req.user.email, event: 'account.delete', outcome: 'bad_password', ip: req.ip })
     res.status(401).json({ error: 'That password is not right.' })
     return

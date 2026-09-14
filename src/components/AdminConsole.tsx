@@ -7,8 +7,9 @@ import {
   ApiError, adminDeleteUser, adminGrantXp, adminResetLink, adminSetDisabled, adminSuspend,
   fetchAdminStats, type AdminStats, type AdminUserRow,
 } from '../lib/api'
+import AdminReports from './AdminReports'
 
-type Tab = 'overview' | 'users' | 'analytics' | 'ai'
+type Tab = 'overview' | 'reports' | 'users' | 'analytics' | 'ai'
 
 /**
  * Single accent for every chart.
@@ -276,6 +277,7 @@ export default function AdminConsole() {
   const [notice, setNotice] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [openUser, setOpenUser] = useState<string | null>(null)
+  const [openReports, setOpenReports] = useState<number | null>(null)
 
   async function load(force = false) {
     setBusy(true)
@@ -371,7 +373,7 @@ export default function AdminConsole() {
       )}
 
       <div className="mb-5 flex gap-1 rounded-xl border border-ink-600 bg-ink-850/70 p-1">
-        {(['overview', 'users', 'analytics', 'ai'] as Tab[]).map((t) => (
+        {(['overview', 'reports', 'users', 'analytics', 'ai'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -381,9 +383,12 @@ export default function AdminConsole() {
             }`}
           >
             {t}
+            {t === 'reports' && openReports ? <span className="ml-1 rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{openReports}</span> : null}
           </button>
         ))}
       </div>
+
+      {tab === 'reports' && <AdminReports onOpenCount={setOpenReports} />}
 
       {tab === 'overview' && (
         <div className="space-y-5">

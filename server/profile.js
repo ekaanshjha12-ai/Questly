@@ -1,3 +1,4 @@
+import { stripImageMetadata } from './imagemeta.js'
 import { screenInput } from './moderation.js'
 
 /**
@@ -142,5 +143,9 @@ export function checkImage(imageBase64, mediaType, maxBytes) {
   const bytes = Buffer.from(imageBase64, 'base64')
   if (!bytes.length || bytes.length > maxBytes) return { ok: false, error: 'That picture is too large.' }
   if (!signature(bytes)) return { ok: false, error: 'That file is not the picture it claims to be.' }
-  return { ok: true, bytes, mime: mediaType }
+  // Where it was taken, on what and when stay behind; the picture itself is
+  // copied untouched.
+  const clean = stripImageMetadata(bytes, mediaType)
+  if (!clean) return { ok: false, error: 'That picture could not be read. Try another one.' }
+  return { ok: true, bytes: clean, mime: mediaType }
 }

@@ -501,6 +501,35 @@ export function adminDeleteUser(id: string) {
   return request<void>(`/api/admin/users/${id}`, { method: 'DELETE' })
 }
 
+export type ReportStatus = 'open' | 'actioned' | 'dismissed'
+
+export interface AdminReport {
+  id: string
+  kind: 'player' | 'post' | 'message' | 'challenge'
+  targetId: string
+  status: ReportStatus
+  reason: string | null
+  snapshot: Record<string, unknown> | null
+  action: string | null
+  note: string | null
+  createdAt: string
+  resolvedAt: string | null
+  reporter: { id: string; username: string | null; email: string } | null
+  target: { id: string; username: string | null; email: string; role: string; suspendedUntil: string | null; disabled: boolean; reportsAgainst: number } | null
+  resolvedBy: { id: string; email: string } | null
+}
+
+export function adminReports(status: ReportStatus = 'open') {
+  return request<{ reports: AdminReport[]; more: boolean; open: number }>(`/api/admin/reports?status=${status}`)
+}
+
+export function adminResolveReport(id: string, body: { outcome: 'dismissed' | 'actioned'; removePost?: boolean; suspendDays?: number; note?: string }) {
+  return request<{ report: AdminReport; open: number }>(`/api/admin/reports/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export function fetchAudit(limit = 100) {
   return request<{ entries: { id: number; at: string; email: string | null; event: string; outcome: string; ip: string | null; detail: string | null }[] }>(
     `/api/admin/audit?limit=${limit}`,

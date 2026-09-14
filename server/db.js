@@ -4,6 +4,7 @@ import { requiredMaxXp } from './statecheck.js'
 import { createGameSchema } from './game/schema.js'
 import { levelFromXp, rankName as rankNameForLevel } from './game/levels.js'
 import { screenInput } from './moderation.js'
+import { createHash } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -395,6 +396,18 @@ createGameSchema(db)
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_user ON photo_proofs(user_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_photo_proofs_created ON photo_proofs(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
+
+// Sessions written before tokens were hashed are hashed in place, once. Nobody
+// is signed out: their cookie still hashes to the stored value.
+{
+  const plain = db.all("SELECT token FROM sessions WHERE token NOT LIKE 's256:%'")
+  for (const row of plain) {
+    db.run('UPDATE OR REPLACE sessions SET token = ? WHERE token = ?', [
+      `s256:${createHash('sha256').update(String(row.token)).digest('hex')}`,
+      row.token,
+    ])
+  }
+}
 db.run('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)')
 
 /**
@@ -735,9 +748,18 @@ export function deleteSessionsForUser(userId) {
   db.run('DELETE FROM sessions WHERE user_id = ?', [userId])
 }
 
+/**
+ * Session tokens are kept as SHA-256 hashes, so a copy of the database — a
+ * backup, a leaked volume snapshot — holds nothing that signs anyone in. The
+ * cookie carries the token itself; it is hashed again on every lookup.
+ */
+export function hashSessionToken(token) {
+  return `s256:${createHash('sha256').update(String(token)).digest('hex')}`
+}
+
 export function insertSession({ token, userId, expiresAt }) {
   db.run('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)', [
-    token,
+    hashSessionToken(token),
     userId,
     new Date().toISOString(),
     expiresAt,
@@ -745,8 +767,8 @@ export function insertSession({ token, userId, expiresAt }) {
 }
 
 export function findSession(token) {
-  if (!token) return null
-  const row = db.get('SELECT * FROM sessions WHERE token = ?', [token])
+  if (typeof token !== 'string' || !token) return null
+  const row = db.get('SELECT * FROM sessions WHERE token = ?', [hashSessionToken(token)])
   if (!row) return null
   if (new Date(row.expires_at).getTime() <= Date.now()) {
     deleteSession(token)
@@ -756,7 +778,8 @@ export function findSession(token) {
 }
 
 export function deleteSession(token) {
-  db.run('DELETE FROM sessions WHERE token = ?', [token])
+  if (typeof token !== 'string' || !token) return
+  db.run('DELETE FROM sessions WHERE token = ?', [hashSessionToken(token)])
 }
 
 export function purgeExpiredSessions() {
@@ -1138,6 +1161,13 @@ export function softDeletePost(id, userId) {
     id,
     userId,
   ])
+  return result.changes > 0
+}
+
+/** A moderator taking a post down. Soft, like the author's own delete, so the
+ * record stays for the report that led to it. */
+export function adminRemovePost(id) {
+  const result = db.run('UPDATE posts SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', [new Date().toISOString(), id])
   return result.changes > 0
 }
 

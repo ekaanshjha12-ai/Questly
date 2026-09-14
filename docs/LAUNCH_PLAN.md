@@ -49,18 +49,18 @@ faked in the UI.
 
 ## 3. Security findings
 
-| # | Severity | Finding | Fix |
-|---|---|---|---|
-| S1 | High | Client-authoritative economy: a scripted client can mint XP/coins up to the rate ceiling, which also drives the leaderboard. | Ledger with unique `(user, source, source_id)`; rewards computed server-side; state saves can no longer carry progress. |
-| S2 | High | Challenge rewards are paid by the client adding an "XP allowance". | Settlement writes directly to the ledger. |
-| S3 | Medium | 12 MB JSON body limit on every route. | Small default limit; larger limits only on the upload routes. |
-| S4 | Medium | Session tokens stored in plaintext. | Store SHA-256 of the token; existing sessions migrated. |
-| S5 | Medium | Login throttled per IP only. | Per-account failure backoff in addition. |
-| S6 | Medium | Reports only land in the audit log; no workflow. | `reports` table + admin queue + actions. |
-| S7 | Medium | AI routes return upstream error text (`detail`) to clients. | Generic messages; details only in server logs. |
-| S8 | Low | Uploaded images keep metadata (EXIF/GPS) if sent directly to the API. | Server strips JPEG APP1/PNG text/WebP EXIF chunks. |
-| S9 | Low | Names shown to other players come from the client document. | Use the server-held display name. |
-| S10 | Low | Card designs from the client document are passed to other players with light validation. | Validate/normalise card payloads server-side. |
+| # | Severity | Finding | Fix | Status |
+|---|---|---|---|---|
+| S1 | High | Client-authoritative economy: a scripted client can mint XP/coins up to the rate ceiling, which also drives the leaderboard. | Ledger with unique `(user, source, source_id)`; rewards computed server-side; state saves can no longer carry progress. | Fixed |
+| S2 | High | Challenge rewards are paid by the client adding an "XP allowance". | Settlement writes directly to the ledger. | Fixed |
+| S3 | Medium | 12 MB JSON body limit on every route. | Small default limit; larger limits only on the upload routes. | Fixed |
+| S4 | Medium | Session tokens stored in plaintext. | Store SHA-256 of the token; existing sessions migrated. | Fixed (`s256:` hashes, migrated on boot) |
+| S5 | Medium | Login throttled per IP only. | Per-account failure backoff in addition. | Fixed (`server/loginguard.js`: login, 2FA, recovery code, account deletion) |
+| S6 | Medium | Reports only land in the audit log; no workflow. | `reports` table + admin queue + actions. | Fixed (snapshots, dedupe, dismiss / take down / suspend, reporter notified) |
+| S7 | Medium | AI routes return upstream error text (`detail`) to clients. | Generic messages; details only in server logs. | Fixed |
+| S8 | Low | Uploaded images keep metadata (EXIF/GPS) if sent directly to the API. | Server strips JPEG APP1/PNG text/WebP EXIF chunks. | Fixed (`server/imagemeta.js`; JPEG orientation kept) |
+| S9 | Low | Names shown to other players come from the client document. | Use the server-held display name. | Fixed |
+| S10 | Low | Card designs from the client document are passed to other players with light validation. | Validate/normalise card payloads server-side. | Fixed (`server/card.js`, on save and on view) |
 
 Already sound: parameterised SQL with column allow-lists, CSP without inline
 script, `nosniff`, frame denial, SameSite cookies + Origin check, roles read
@@ -111,7 +111,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |
 | 12 | Legal and policy pages, privacy controls | Planned |
 | 13 | Analytics events and retention | Planned |
-| 14 | Security hardening (S3–S10) | Planned |
+| 14 | Security hardening (S3–S10) | Done |
 | 15 | Performance: code splitting, lazy world/3D | Started: every screen away from the hub and the 3D viewer load on demand |
 | 16 | Full QA pass and final security review | Planned |
 
@@ -128,9 +128,8 @@ Kept up to date as phases land.
   through the ledger.
 - **Main bundle** is about 525 kB (166 kB gzipped). The sound engine and
   motion library are the bulk; splitting them is part of phase 15.
-- **Security** still open: S4 (hash session tokens), S5 (per-account login
-  backoff), S6 (reports table), S7 (AI routes echo error detail), S8 (EXIF
-  stripping on every upload path), S10 (card design validation).
+- **Reporting messages** from inside a conversation is not built yet; players
+  can report the person from their card. Comes with phase 9.
 - Fixed along the way: the inline theme script in `index.html` was blocked by
   the Content Security Policy in production, so the saved theme never applied
   before first paint. It now loads from `/theme-init.js`.
