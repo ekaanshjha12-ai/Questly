@@ -50,7 +50,6 @@ export default function ConversationView({
   const [messages, setMessages] = useState<DirectMessage[]>([])
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [canSend, setCanSend] = useState(true)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +85,6 @@ export default function ConversationView({
       const res = await fetchConversation(conversationId, lastId.current)
       setConversation(res.conversation)
       if (res.conversation.other) setPlayer(res.conversation.other)
-      setCanSend(res.canSend)
       setLoaded(true)
       if (res.messages.length) {
         const fresh = res.messages.filter((m) => m.id > lastId.current)
@@ -124,9 +122,6 @@ export default function ConversationView({
       if (!conversationId) {
         const res = await startConversation(handle, body)
         setConversation(res.conversation)
-        // A new conversation is a request: one message, then wait. Writing to
-        // someone who had already asked to talk opens it straight away.
-        setCanSend(res.conversation.status === 'open')
         setConversationId(res.conversation.id)
       } else {
         const { message } = await sendDirectMessage(conversationId, body)
@@ -136,12 +131,10 @@ export default function ConversationView({
         }
         // Replying to a request is accepting it.
         setConversation((c) => (c && c.requestForMe ? { ...c, status: 'open', requestForMe: false } : c))
-        if (conversation?.status === 'request' && !conversation.requestForMe) setCanSend(false)
       }
       setDraft('')
       announceMessagesChanged()
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'awaiting_accept') setCanSend(false)
       setError(err instanceof Error ? err.message : 'Could not send.')
     } finally {
       setSending(false)
@@ -153,7 +146,6 @@ export default function ConversationView({
     try {
       const res = await acceptConversation(conversationId)
       setConversation(res.conversation)
-      setCanSend(true)
       announceMessagesChanged()
       inputRef.current?.focus()
     } catch (err) {
@@ -197,7 +189,6 @@ export default function ConversationView({
     }
   }
 
-  const waiting = Boolean(conversationId && conversation && conversation.status === 'request' && !conversation.requestForMe && !canSend)
   const fresh = loaded && !conversationId
 
   return (
@@ -343,8 +334,8 @@ export default function ConversationView({
           {conversation?.requestForMe && (
             <div className="mb-3 rounded-xl border border-gold-500/40 bg-gold-500/10 p-3">
               <p className="text-xs text-slate-200">
-                <span className="font-semibold">{name}</span> wants to chat. Accept or reply to open the chat. Until then they can't send
-                anything more.
+                <span className="font-semibold">{name}</span> wants to chat. Accept or reply to move this into your chats, or decline and it
+                stays out of sight.
               </p>
               <div className="mt-2.5 grid grid-cols-2 gap-2">
                 <button
@@ -366,36 +357,30 @@ export default function ConversationView({
             </div>
           )}
 
-          {waiting ? (
-            <p className="rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5 text-center text-xs text-slate-400">
-              Request sent. You can write again once {name} replies or accepts.
-            </p>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void send()
-              }}
-              className="flex gap-2"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void send()
+            }}
+            className="flex gap-2"
+          >
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+              placeholder={fresh ? `Say hello to ${name}…` : `Message ${name}…`}
+              aria-label={`Message ${name}`}
+              className="min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim() || sending}
+              aria-label="Send"
+              className="flex items-center justify-center rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 text-onAccent disabled:opacity-40"
             >
-              <input
-                ref={inputRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value.slice(0, 500))}
-                placeholder={fresh ? `Say hello to ${name}…` : `Message ${name}…`}
-                aria-label={`Message ${name}`}
-                className="min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-gold-500/50 focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending}
-                aria-label="Send"
-                className="flex items-center justify-center rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 px-3 text-onAccent disabled:opacity-40"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
-            </form>
-          )}
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+          </form>
 
           <div className="mt-2 flex items-center justify-between gap-2">
             {error ? (

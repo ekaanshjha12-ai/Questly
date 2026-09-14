@@ -132,7 +132,6 @@ import {
   insertPostVideo,
   listOrphanVideos,
   countConversationsStartedSince,
-  countMessagesBy,
   createConversation,
   findConversationBetween,
   getConversation,
@@ -1351,7 +1350,9 @@ app.delete('/api/admin/users/:id', requireAuth, requireSuperadmin, throttleAdmin
 // ---------------------------------------------------------------------------
 
 const throttleChallengeWrite = rateLimit({ name: 'challenge-write', max: 20, windowMs: 60 * 60_000, by: 'user' })
-const throttleChat = rateLimit({ name: 'challenge-chat', max: 30, windowMs: 60_000, by: 'user' })
+// Two a second, all minute: more than anyone types, so it only ever stops a
+// script flooding a chat.
+const throttleChat = rateLimit({ name: 'challenge-chat', max: 120, windowMs: 60_000, by: 'user' })
 const throttleSocialRead = rateLimit({ name: 'social-read', max: 120, windowMs: 60_000, by: 'user' })
 
 /**
@@ -2230,22 +2231,23 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
 // ---------------------------------------------------------------------------
 // Messages
 //
-// One conversation per pair. The first message is a request: until the other
-// person replies or accepts, the one who wrote it cannot send another, which is
-// what keeps a stranger from filling someone's inbox when there is no follow
-// list to keep them out. Every read and write re-checks that the two may still
-// interact.
+// One conversation per pair, and people can write as much as they like. A
+// conversation someone new starts sits in the other person's requests rather
+// than their chats until they accept or reply, so strangers never land among
+// the people they actually talk to. Every read and write re-checks that the
+// two may still interact.
 //
 // Declining hides the request from the person who declined, and to the one who
-// sent it, it still looks like it is waiting. Nobody is told they were turned
-// down, so declining never invites a "why?". The person who declined can still
-// change their mind: writing back opens the chat.
+// sent it, it still looks like it is waiting; anything more they write stays
+// out of sight. Nobody is told they were turned down, so declining never
+// invites a "why?". The person who declined can still change their mind:
+// writing back opens the chat.
 //
 // Messages and challenges cross age groups, so an adult can write to someone
 // of 15. What stands in the way of that going wrong (the message rules apply
 // to challenge chats too):
-// - a first message is only a request, and nothing more can be sent until the
-//   young person accepts or replies;
+// - a conversation from someone new waits in the young person's requests,
+//   out of their chats, until they accept or reply — or decline or block it;
 // - no chat can carry contact details, links or other apps, so nobody can be
 //   drawn off Questly to somewhere unfiltered (see chatsafety.js);
 // - between an adult and an under-18, asking to meet, where they live or go to
@@ -2257,19 +2259,15 @@ app.post('/api/posts/:id/report', requireAuth, throttleChallengeWrite, (req, res
 // - an under-18 can turn off contact from adults altogether.
 // ---------------------------------------------------------------------------
 
-/** How many conversations one person may open with new people in a day. */
-const MAX_NEW_CONVERSATIONS_PER_DAY = 20
+/** How many conversations one person may open with new people in a day: a
+ * ceiling for spam bots, far past what anyone does by hand. */
+const MAX_NEW_CONVERSATIONS_PER_DAY = 100
 /** Of those, how many an adult may open with under-18s. */
 const MAX_NEW_UNDER18_CONVERSATIONS_PER_DAY = 3
 
 /** The person a request was sent to, while it is unanswered (or declined). */
 function isAnswering(row, userId) {
   return row.status !== 'open' && row.created_by !== userId
-}
-
-/** The person who sent a request that has not been answered yet. */
-function isWaiting(row, userId) {
-  return row.status !== 'open' && row.created_by === userId && countMessagesBy(row.id, userId) > 0
 }
 
 function conversationView(row, viewerId, { unread = 0, lastBody = null, lastUser = null } = {}) {
@@ -2345,10 +2343,6 @@ function readMessage(req, res, conversationId, { viewer, target }) {
   return message.value
 }
 
-function refuseWaiting(res) {
-  res.status(409).json({ error: 'Wait for them to accept your request before sending more.', code: 'awaiting_accept' })
-}
-
 app.get('/api/messages', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
   const conversations = listConversationsFor(viewer.id)
@@ -2388,10 +2382,6 @@ app.post('/api/messages/start', requireAuth, throttleChat, (req, res) => {
   }
 
   let row = findConversationBetween(viewer.id, target.id)
-  if (row && isWaiting(row, viewer.id)) {
-    refuseWaiting(res)
-    return
-  }
   const body = readMessage(req, res, row?.id ?? null, { viewer, target })
   if (body === null) return
 
@@ -2432,16 +2422,12 @@ app.get('/api/messages/:id', requireAuth, throttleSocialRead, (req, res) => {
     at: m.created_at,
   }))
   if (messages.length) markConversationRead(row.id, req.user.id, messages[messages.length - 1].id)
-  res.json({ conversation: conversationView(row, req.user.id), messages, canSend: !isWaiting(row, req.user.id) })
+  res.json({ conversation: conversationView(row, req.user.id), messages })
 })
 
 app.post('/api/messages/:id', requireAuth, throttleChat, (req, res) => {
   const row = loadConversation(req, res)
   if (!row) return
-  if (isWaiting(row, req.user.id)) {
-    refuseWaiting(res)
-    return
-  }
   const viewer = findUserById(req.user.id)
   const target = findUserById(row.user_a === viewer.id ? row.user_b : row.user_a)
   const body = readMessage(req, res, row.id, { viewer, target })

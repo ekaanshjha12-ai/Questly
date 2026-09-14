@@ -347,9 +347,8 @@ try {
  *
  * One conversation per pair, stored with the two ids in sorted order so the
  * pair has exactly one row whoever wrote first. A conversation starts as a
- * request: the person who opened it cannot keep writing into it until the other
- * side replies or accepts, which is what stops a stranger filling someone's
- * inbox in a system with no follow list to keep them out.
+ * request, kept in the other person's requests rather than their chats until
+ * they reply or accept.
  */
 db.run(`
   CREATE TABLE IF NOT EXISTS conversations (
@@ -1232,10 +1231,6 @@ export function listDirectMessages(conversationId, afterId = 0, limit = 200) {
     'SELECT id, user_id, body, created_at FROM direct_messages WHERE conversation_id = ? AND id > ? ORDER BY id LIMIT ?',
     [conversationId, afterId, limit],
   )
-}
-
-export function countMessagesBy(conversationId, userId) {
-  return db.get('SELECT COUNT(*) AS n FROM direct_messages WHERE conversation_id = ? AND user_id = ?', [conversationId, userId])?.n ?? 0
 }
 
 export function markConversationRead(conversationId, userId, lastId) {

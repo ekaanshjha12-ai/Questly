@@ -800,7 +800,7 @@ export function lookupConversation(username: string) {
 }
 
 export function fetchConversation(id: string, after = 0) {
-  return request<{ conversation: Conversation; messages: DirectMessage[]; canSend: boolean }>(
+  return request<{ conversation: Conversation; messages: DirectMessage[] }>(
     `/api/messages/${encodeURIComponent(id)}?after=${after}`,
   )
 }
