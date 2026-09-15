@@ -13,7 +13,7 @@ import { RarityTag } from '../../components/ui/Tag'
 import { messageOf, useToast } from '../../components/ui/Toast'
 import { timeOfDay, type TimeOfDay } from '../../art/scene'
 import { GUILD_POINT, HORIZON_POINT, NIGHT_LIGHTS, REGION_META, WORLD_H, WORLD_W, type RegionId } from '../../data/world'
-import { clubBuilding } from '../../art/club'
+import { clubHall } from '../../data/buildings'
 import type { WorldClub } from '../../lib/api'
 import { formatMinutes } from '../../lib/questFormat'
 import worldArt from '../../assets/world/questly-world.webp'
@@ -216,12 +216,8 @@ const MAX_SCALE = 1.25
 const REGION_RANK = new Map((Object.keys(REGION_META) as RegionId[]).map((id, i) => [id as string, i]))
 const regionRank = (id: string) => REGION_RANK.get(id) ?? 99
 
-/** Where a region's club halls stand, around its marker, in map pixels. */
-const CLUB_PLOTS: [number, number][] = [
-  [-90, 48],
-  [90, 48],
-  [0, 92],
-]
+/** Club halls stand in a row under their region's label: the middle first, then either side. */
+const CLUB_SLOTS = [0, -1, 1]
 
 /** How the painting is lit at each time of day. */
 const LIGHTING: Record<TimeOfDay, { filter: string; wash: string | null; blend: 'soft-light' | 'multiply' }> = {
@@ -310,7 +306,7 @@ function WorldCanvas({
   const lighting = LIGHTING[time]
   const px = (n: number) => n * s
   // Halls stay big enough to see when zoomed out, and do not balloon when zoomed in.
-  const hall = Math.round(clamp(s * 60, 30, 56))
+  const hall = Math.round(clamp(s * 72, 38, 64))
 
   return (
     <div className="relative">
@@ -388,19 +384,29 @@ function WorldCanvas({
           })}
 
           {(Object.keys(REGION_META) as RegionId[]).flatMap((id) =>
-            (clubs[id] ?? []).slice(0, CLUB_PLOTS.length).map((club, i) => {
+            (clubs[id] ?? []).slice(0, CLUB_SLOTS.length).map((club, i) => {
               const { x, y } = REGION_META[id].point
-              const [dx, dy] = CLUB_PLOTS[i]
+              // Offsets in screen pixels, so the row clears the label (and a lock pill) at any zoom.
+              const below = 24 + (regions.get(id)?.unlocked === false ? 20 : 0) + hall / 2
+              const art = clubHall({ slug: club.slug, region: id, tier: club.tier })
               return (
                 <Link
                   key={club.slug}
                   to={`/clubs/${club.slug}`}
-                  aria-label={`${club.name}, level ${club.level} club`}
-                  title={`${club.name} · Level ${club.level}`}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_3px_4px_rgba(0,0,0,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-                  style={{ left: px(x + dx), top: px(y + dy) }}
+                  aria-label={`${club.name}, a level ${club.level} club in its ${art.name}`}
+                  title={`${club.name} · ${art.name} · Level ${club.level}`}
+                  className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                  style={{ left: px(x) + CLUB_SLOTS[i] * (hall + 10), top: px(y) + below }}
                 >
-                  <img src={clubBuilding(club.tier, REGION_META[id].accent)} alt="" draggable={false} className="pixelated select-none" style={{ width: hall, height: Math.round(hall * 0.92) }} />
+                  <span
+                    className="block overflow-hidden rounded-xl border-2 shadow-[0_6px_14px_rgba(0,0,0,0.55)] transition-transform duration-150 group-hover:scale-110"
+                    style={{ width: hall, height: hall, borderColor: `${REGION_META[id].accent}cc` }}
+                  >
+                    <img src={art.thumb} alt="" draggable={false} className="h-full w-full select-none object-cover" />
+                  </span>
+                  <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#07101d]/90 px-1.5 text-[9px] font-bold leading-4 text-white ring-1 ring-white/20">
+                    Lv {club.level}
+                  </span>
                 </Link>
               )
             }),
@@ -702,7 +708,7 @@ function RegionDetail({ region, clubs, events, onTaken }: { region: WorldRegion;
             {clubs.map((club) => (
               <li key={club.slug}>
                 <Link to={`/clubs/${club.slug}`} className="panel flex items-center gap-3 px-3 py-2 hover:border-ink-500">
-                  <img src={clubBuilding(club.tier, meta.accent)} alt="" className="pixelated h-11 w-12 object-contain" />
+                  <img src={clubHall({ slug: club.slug, region: region.id, tier: club.tier }).thumb} alt="" width={48} height={48} className="h-12 w-12 rounded-lg border object-cover" style={{ borderColor: `${meta.accent}80` }} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-slate-100">{club.name}</span>
                     <span className="block text-xs text-slate-500">

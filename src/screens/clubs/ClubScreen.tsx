@@ -20,7 +20,7 @@ import Tabs from '../../components/ui/Tabs'
 import { messageOf, useToast } from '../../components/ui/Toast'
 import HeroSprite from '../../components/art/HeroSprite'
 import FeedScreen from '../../components/social/FeedScreen'
-import { clubBuilding } from '../../art/club'
+import { clubHall, nextHall } from '../../data/buildings'
 import { ApiError } from '../../lib/api'
 import {
   CONSEQUENCE_LABEL,
@@ -143,14 +143,26 @@ function ClubBanner({ club, onManage }: { club: ClubDetail; onManage?: () => voi
   const accent = regionAccent(club.region)
   const span = Math.max(1, club.nextLevelXp - club.levelXp)
   const pct = ((club.xp - club.levelXp) / span) * 100
+  const hall = clubHall({ slug: club.slug, region: club.region, tier: club.tier.id })
+  const next = nextHall({ slug: club.slug, region: club.region, tier: club.tier.id })
+  const size = Math.min(112, hall.maxSize)
   return (
     <section className="panel-raised overflow-hidden" aria-label="Club standing">
-      <div className="relative flex items-end gap-4 px-4 pt-4" style={{ background: `radial-gradient(ellipse at 20% 100%, ${accent}33, transparent 65%)` }}>
-        <img src={clubBuilding(club.tier.id, accent)} alt={`${club.name}'s ${club.tier.name}`} className="pixelated -mb-1 h-28 w-28 shrink-0 object-contain" />
-        <div className="min-w-0 flex-1 pb-3">
+      <div className="relative flex items-end gap-4 px-4 pb-3 pt-4" style={{ background: `radial-gradient(ellipse at 20% 100%, ${accent}33, transparent 65%)` }}>
+        <img
+          src={hall.image}
+          alt={`${club.name}'s ${hall.name}`}
+          width={size}
+          height={size}
+          className="shrink-0 rounded-2xl border-2 object-cover shadow-[0_8px_20px_rgba(0,0,0,0.45)]"
+          style={{ width: size, height: size, borderColor: `${accent}99` }}
+        />
+        <div className="min-w-0 flex-1">
           <p className="font-pixel text-[10px] uppercase tracking-[0.14em]" style={{ color: accent }}>
             Level {club.level} · {club.tier.name}
           </p>
+          <p className="mt-0.5 font-display text-sm font-bold text-slate-100">{hall.name}</p>
+          <p className="text-[11px] text-slate-500">{next ? `Grows into a ${next.art.name} at level ${next.level}` : 'A landmark of the world'}</p>
           <p className="mt-1 text-xs text-slate-400">
             {club.xp.toLocaleString()} Club XP · {Math.max(0, club.nextLevelXp - club.xp).toLocaleString()} to level {club.level + 1}
           </p>

@@ -8,7 +8,7 @@ import Button from '../../components/ui/Button'
 import { Sheet } from '../../components/ui/Sheet'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States'
 import { messageOf, useToast } from '../../components/ui/Toast'
-import { clubBuilding } from '../../art/club'
+import { clubHall } from '../../data/buildings'
 import { CONSEQUENCE_LABEL, REGION_NAMES, regionAccent, regionName } from './clubFormat'
 import type { RegionId } from '../../data/world'
 
@@ -131,9 +131,10 @@ export default function ClubsScreen() {
 function ClubCard({ club, playerLevel }: { club: ClubSummary; playerLevel?: number }) {
   const accent = regionAccent(club.region)
   const locked = playerLevel !== undefined && playerLevel < club.minLevel
+  const hall = clubHall({ slug: club.slug, region: club.region, tier: club.tier.id })
   return (
     <Link to={`/clubs/${club.slug}`} className="panel flex items-center gap-3 px-3 py-3 hover:border-ink-500">
-      <img src={clubBuilding(club.tier.id, accent)} alt="" className="pixelated h-14 w-14 shrink-0 object-contain" />
+      <img src={hall.thumb} alt="" width={56} height={56} loading="lazy" className="h-14 w-14 shrink-0 rounded-xl border object-cover" style={{ borderColor: `${accent}80` }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-display text-base font-bold text-slate-50">{club.name}</span>
         <span className="block truncate text-xs text-slate-400">
