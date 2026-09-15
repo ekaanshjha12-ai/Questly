@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { m as motion } from 'framer-motion'
-import { Swords, Loader2, KeyRound, Copy, Check, Sparkles } from 'lucide-react'
+import { Loader2, KeyRound, Copy, Check, Sparkles } from 'lucide-react'
 import { authConfig, login, resetPassword, type AuthUser, ApiError } from '../lib/api'
 import { hydrate } from '../lib/storage'
 import { cardData, defaultCard } from '../lib/card'
 import SignupFlow from './SignupFlow'
+import BrandMark from './ui/BrandMark'
 import ProfileCard from './ProfileCard'
 
 interface Props {
@@ -154,9 +155,7 @@ export default function AuthScreen({ onAuthed }: Props) {
         className="w-full max-w-sm rounded-2xl border border-ink-600 bg-ink-850/80 p-8 shadow-2xl backdrop-blur"
       >
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-gold-500 to-ember-500 shadow-glow">
-            <Swords className="h-6 w-6 text-onAccent" />
-          </div>
+          <BrandMark size={48} />
           <div>
             <h1 className="font-display text-xl font-bold tracking-wide text-gold-300">Questly</h1>
             <p className="text-xs text-slate-400">

@@ -14,12 +14,12 @@
  * from the server, and a stale reply would show wrong progress.
  */
 
-const VERSION = 'questly-v1'
+const VERSION = 'questly-v2'
 const SHELL = `${VERSION}-shell`
 const ASSETS = `${VERSION}-assets`
 
 // Enough to render something useful on a cold, offline start.
-const PRECACHE = ['/', '/theme-init.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
+const PRECACHE = ['/', '/theme-init.js', '/manifest.webmanifest', '/icons/icon-64.png', '/icons/icon-192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

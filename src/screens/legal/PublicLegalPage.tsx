@@ -1,4 +1,4 @@
-import { Swords } from 'lucide-react'
+import BrandMark from '../../components/ui/BrandMark'
 import { match, useRouter } from '../../app/router'
 import LegalHubScreen from './LegalHubScreen'
 import PolicyScreen from './PolicyScreen'
@@ -25,9 +25,7 @@ export default function PublicLegalPage() {
             }}
             className="flex items-center gap-2 font-display text-lg font-bold tracking-wide text-gold-300"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gold-500 to-ember-500">
-              <Swords className="h-4 w-4 text-onAccent" aria-hidden />
-            </span>
+            <BrandMark size={36} />
             Questly
           </a>
           <button type="button" onClick={() => navigate('/')} className="btn-secondary ml-auto min-h-[40px] px-3 text-xs">

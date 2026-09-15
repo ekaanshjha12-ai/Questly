@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, m as motion } from 'framer-motion'
-import { AtSign, Check, Eye, EyeOff, ImagePlus, Loader2, Swords, X } from 'lucide-react'
+import { AtSign, Check, Eye, EyeOff, ImagePlus, Loader2, X } from 'lucide-react'
 import {
   ApiError,
   checkUsername,
@@ -21,6 +21,7 @@ import {
   readFile,
   type PreparedAvatar,
 } from '../lib/profile'
+import BrandMark from './ui/BrandMark'
 
 /**
  * Sign-up, one question at a time: email, name, username, password, birthday,
@@ -479,9 +480,7 @@ function Shell({ subtitle, children }: { subtitle: string; children: React.React
         className="w-full max-w-sm rounded-2xl border border-ink-600 bg-ink-850/80 p-7 shadow-2xl backdrop-blur"
       >
         <div className="mb-5 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-gold-500 to-ember-500 shadow-glow">
-            <Swords className="h-6 w-6 text-onAccent" />
-          </div>
+          <BrandMark size={48} />
           <div>
             <h1 className="font-display text-xl font-bold tracking-wide text-gold-300">Questly</h1>
             <p className="text-xs text-slate-400">{subtitle}</p>

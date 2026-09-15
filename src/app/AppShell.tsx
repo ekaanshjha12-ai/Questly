@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { m as motion } from 'framer-motion'
-import { ArrowLeft, Bell, Castle, CircleUserRound, House, LibraryBig, Swords, UsersRound, Zap, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, Bell, Castle, CircleUserRound, House, LibraryBig, UsersRound, Zap, type LucideIcon } from 'lucide-react'
 import { Link, useRouter } from './router'
 import { NowPlayingButton } from './NowPlaying'
 import { useGame } from '../game/GameProvider'
 import HeroPortrait from '../components/art/HeroPortrait'
 import { XpBar } from '../components/ui/Bars'
+import BrandMark from '../components/ui/BrandMark'
 
 /**
  * The frame around every signed-in screen: a bottom navigation bar on a phone,
@@ -31,8 +32,7 @@ export function useNavItems({ socialBadge = 0, challengeBadge = 0 }: { socialBad
       to: '/quests',
       label: 'Quests',
       icon: LibraryBig,
-      match: (p) => ['/quests', '/planner', '/habits', '/study', '/ai-plan', '/goals', '/sounds'].some((x) => p.startsWith(x)),
-    },
+      match: (p) => ['/quests', '/planner', '/habits', '/study', '/ai-plan', '/goals', '/sounds'].some((x) => p.startsWith(x)) },
     { id: 'social', to: '/social', label: 'Social', icon: UsersRound, match: (p) => p.startsWith('/social') || p.startsWith('/u/'), badge: socialBadge },
     { id: 'challenges', to: '/challenges', label: 'Challenges', icon: Zap, match: (p) => p.startsWith('/challenges') || p.startsWith('/leaderboard'), badge: challengeBadge },
     { id: 'clubs', to: '/clubs', label: 'Clubs', icon: Castle, match: (p) => p.startsWith('/clubs') },
@@ -90,9 +90,7 @@ function SideNav({ items }: { items: NavItem[] }) {
   return (
     <nav aria-label="Main" className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-ink-700/70 bg-ink-950/90 px-3 py-5 backdrop-blur lg:flex">
       <Link to="/" className="mb-6 flex items-center gap-2.5 px-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-gold-500/40 bg-gold-500/10 text-gold-400">
-          <Swords className="h-5 w-5" aria-hidden />
-        </span>
+        <BrandMark size={38} />
         <span className="font-display text-2xl font-bold italic text-slate-50">Questly</span>
       </Link>
       <ul className="space-y-1">
