@@ -1,4 +1,4 @@
-import { m as motion, useReducedMotion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
@@ -7,8 +7,6 @@ import { PageHeader } from '../../app/AppShell'
 import Button from '../../components/ui/Button'
 import { XpBar } from '../../components/ui/Bars'
 import { ErrorState, LoadingState } from '../../components/ui/States'
-import HeroSprite from '../../components/art/HeroSprite'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useTimeOfDay } from '../../hooks/useTimeOfDay'
 import { formatDurationMs, formatMinutes, greeting, isFocusQuest, questIcon } from '../../lib/questFormat'
 import worldBanner from '../../assets/world/questly-world-banner.webp'
@@ -19,23 +17,21 @@ import BaseBackdrop from './BaseBackdrop'
  * room, where the usual quiet grey would not hold its contrast.
  */
 
-/** The open floor of the room between the title and the quest card, where the hero stands. */
+/** The open stretch of the room between the title and the quest card. */
 const STAGE = 'relative h-[13.5rem] sm:h-[17rem] lg:h-[clamp(20rem,26vw,27rem)]'
 
 /**
  * Home: today's adventure.
  *
- * The first thing on screen is the player's hero in their base — a room that
- * follows their clock — and the one quest worth doing next, with the button
- * that starts it. Standing and progress sit below it — they explain the
- * adventure, they are not the point.
+ * The first thing on screen is the player's base — a room that follows their
+ * clock — and the one quest worth doing next, with the button that starts it.
+ * Standing and progress sit below it — they explain the adventure, they are
+ * not the point.
  */
 export default function HomeScreen({ name, challenges }: { name: string; challenges: Challenge[] | null }) {
-  const reduce = useReducedMotion()
   const { snapshot, status, error, refresh } = useGame()
   const { navigate } = useRouter()
   const time = useTimeOfDay()
-  const wide = useMediaQuery('(min-width: 1024px)')
 
   if (!snapshot) {
     return (
@@ -72,11 +68,6 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
           <span className="tag absolute right-0 top-0 border-ink-600 bg-ink-950/75 text-slate-300 backdrop-blur-sm">
             <Flame className="h-3 w-3 text-[#f08a3c]" /> {progress.streak.current} day streak
           </span>
-          {/* Feet on the quest card's top edge: the card overlaps the stage by the same 1.25rem. */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-[70%]">
-            <span aria-hidden className="absolute bottom-0 left-1/2 h-3 w-[80%] -translate-x-1/2 rounded-[50%] bg-black/45 blur-[4px]" />
-            <HeroSprite look={snapshot.look} height={wide ? 200 : 150} still={Boolean(reduce)} label="Your character" className="relative" />
-          </div>
         </div>
 
         <div className="relative -mt-5">

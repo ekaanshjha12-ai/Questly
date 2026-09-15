@@ -17,7 +17,7 @@ import nightTiny from '../assets/home/room-night-tiny.webp'
  * Each picture is 1536 × 1024 with a 960-wide copy for phones and a few hundred
  * bytes of blur to hold its place. `focus` is the point the page crops around:
  * wide screens cut the picture's height, and a point below the middle keeps
- * both the window and the floor the hero stands on.
+ * both the window and the floor in view.
  */
 export interface Room {
   src: string

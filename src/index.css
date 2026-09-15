@@ -589,7 +589,7 @@ body::before {
   /* Home's room, faded into the page: nearly solid behind the title and greeting
    * (they sit in the top 17% at every width, and at 78% or more the greeting
    * keeps 4.5:1 over the brightest or darkest pixel of any room, in either
-   * theme), clear across the floor where the hero stands, gone by the bottom. */
+   * theme), clear across the middle where the room shows, gone by the bottom. */
   .base-scrim {
     background: linear-gradient(
       180deg,
