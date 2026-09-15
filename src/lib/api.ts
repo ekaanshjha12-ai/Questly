@@ -17,6 +17,8 @@ export interface AuthUser {
   challengesOpen?: boolean
   /** Under-18 accounts only: whether adults may message and challenge them. */
   adultMessages?: boolean
+  /** Terms or privacy versions this account still has to accept. */
+  policyUpdates?: { slug: PolicySlug; title: string; version: number }[]
 }
 
 export class ApiError extends Error {
@@ -101,6 +103,8 @@ export interface SignupInput {
   username: string
   birthdate: string
   bio?: string
+  /** Ticked "I agree" — the server refuses an account without it. */
+  acceptTerms: boolean
 }
 
 export function signup(input: SignupInput) {
@@ -542,6 +546,97 @@ export function adminClubs() {
 
 export function adminSetClubArchived(id: string, archived: boolean) {
   return request<{ clubs: AdminClub[] }>(`/api/admin/clubs/${encodeURIComponent(id)}/archive`, { method: 'POST', body: JSON.stringify({ archived }) })
+}
+
+/* --- legal and support ----------------------------------------------------- */
+
+export type PolicySlug = 'terms' | 'privacy' | 'guidelines' | 'safety'
+
+export interface PolicySummary {
+  slug: PolicySlug
+  title: string
+  version: number
+  updatedAt: string
+}
+
+export interface PolicyDocument extends PolicySummary {
+  /** Markdown, with this deployment's details already filled in. */
+  body: string
+}
+
+export function fetchPolicies() {
+  return request<{ policies: PolicySummary[]; contact: { operator: string; email: string | null } }>('/api/policies')
+}
+
+export function fetchPolicy(slug: string) {
+  return request<{ policy: PolicyDocument }>(`/api/policies/${encodeURIComponent(slug)}`)
+}
+
+export function acceptPolicies() {
+  return request<{ pending: { slug: PolicySlug; title: string; version: number }[] }>('/api/policies/accept', { method: 'POST' })
+}
+
+export type SupportKind = 'problem' | 'account' | 'safety' | 'privacy' | 'feedback' | 'other'
+
+export interface SupportRequest {
+  id: string
+  kind: SupportKind
+  body: string
+  page: string | null
+  status: 'open' | 'closed'
+  reply: string | null
+  createdAt: string
+  closedAt: string | null
+}
+
+export function sendSupportRequest(input: { kind: SupportKind; body: string; page?: string; contact?: string }) {
+  return request<{ ok: true; id: string }>('/api/support', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function fetchMySupportRequests() {
+  return request<{ requests: SupportRequest[] }>('/api/support/mine')
+}
+
+export interface AdminPolicy {
+  slug: PolicySlug
+  title: string
+  body: string
+  version: number
+  updatedAt: string | null
+  fromFile: boolean
+  acceptance: boolean
+  requiredVersion: number | null
+  acceptedCurrent: number | null
+  history: { version: number; material: boolean; fromFile: boolean; note: string | null; createdAt: string; by: string | null }[]
+}
+
+export function adminPolicies() {
+  return request<{ policies: AdminPolicy[]; variables: Record<string, string | number | boolean>; canEdit: boolean }>('/api/admin/policies')
+}
+
+export function adminSavePolicy(slug: PolicySlug, input: { title: string; body: string; material: boolean; note?: string }) {
+  return request<{ policies: AdminPolicy[] }>(`/api/admin/policies/${slug}`, { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function adminResetPolicy(slug: PolicySlug) {
+  return request<{ policies: AdminPolicy[] }>(`/api/admin/policies/${slug}/reset`, { method: 'POST' })
+}
+
+export interface AdminSupportRequest extends SupportRequest {
+  from: { id: string; username: string | null; email: string | null } | null
+  contact: string | null
+  closedBy: string | null
+}
+
+export function adminSupport(status: 'open' | 'closed') {
+  return request<{ requests: AdminSupportRequest[]; open: number }>(`/api/admin/support?status=${status}`)
+}
+
+export function adminCloseSupport(id: string, reply?: string) {
+  return request<{ requests: AdminSupportRequest[]; open: number }>(`/api/admin/support/${encodeURIComponent(id)}/close`, {
+    method: 'POST',
+    body: JSON.stringify({ reply: reply || undefined }),
+  })
 }
 
 export function fetchAudit(limit = 100) {

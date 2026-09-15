@@ -70,6 +70,7 @@ export default function SignupFlow(props: Props) {
   const [birthdate, setBirthdate] = useState('')
   const [avatar, setAvatar] = useState<PreparedAvatar | null>(null)
   const [bio, setBio] = useState('')
+  const [agreed, setAgreed] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -115,7 +116,7 @@ export default function SignupFlow(props: Props) {
     password: password.length >= 8 && (!(props.mode === 'signup' && props.inviteRequired) || inviteCode.trim().length > 0),
     birthdate: age !== null && age >= 0,
     picture: avatar !== null,
-    bio: bio.length <= BIO_MAX,
+    bio: bio.length <= BIO_MAX && (props.mode !== 'signup' || agreed),
   }
 
   function go(delta: number) {
@@ -157,6 +158,7 @@ export default function SignupFlow(props: Props) {
           username: username.trim(),
           birthdate,
           bio: bio.trim() || undefined,
+          acceptTerms: agreed,
         })
         user = result.user
         recoveryCode = result.recoveryCode
@@ -338,7 +340,7 @@ export default function SignupFlow(props: Props) {
             )}
 
             {step === 'birthdate' && (
-              <Question title="When's your birthday?" hint="Your year stays private — cards only ever show the day and month.">
+              <Question title="When's your birthday?" hint="Other players see your age on your Questly Card, never your date of birth.">
                 <input
                   autoFocus
                   type="date"
@@ -374,6 +376,42 @@ export default function SignupFlow(props: Props) {
                 <p className="text-right text-[11px] tabular-nums text-slate-500">
                   {bio.length}/{BIO_MAX}
                 </p>
+                {props.mode === 'signup' && (
+                  <>
+                    <label className="flex items-start gap-2.5 rounded-xl border border-ink-600 bg-ink-900/60 px-3 py-2.5 text-xs leading-relaxed text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={agreed}
+                        onChange={(e) => setAgreed(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-gold-500"
+                      />
+                      <span>
+                        I agree to the{' '}
+                        <a href="/legal/terms" target="_blank" rel="noopener" className="font-semibold text-gold-300 underline underline-offset-2">
+                          Terms of Service
+                        </a>{' '}
+                        and{' '}
+                        <a href="/legal/guidelines" target="_blank" rel="noopener" className="font-semibold text-gold-300 underline underline-offset-2">
+                          Community Guidelines
+                        </a>
+                        , and I have read the{' '}
+                        <a href="/legal/privacy" target="_blank" rel="noopener" className="font-semibold text-gold-300 underline underline-offset-2">
+                          Privacy Policy
+                        </a>
+                        .
+                      </span>
+                    </label>
+                    {age !== null && age < 18 && (
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        As you are under 18, go through these with a parent or guardian before you join. Questly adds extra protections for younger players — see the{' '}
+                        <a href="/legal/safety" target="_blank" rel="noopener" className="text-gold-300 underline underline-offset-2">
+                          Safety Centre
+                        </a>
+                        .
+                      </p>
+                    )}
+                  </>
+                )}
               </Question>
             )}
           </motion.div>

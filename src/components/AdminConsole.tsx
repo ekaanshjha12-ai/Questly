@@ -9,8 +9,10 @@ import {
 } from '../lib/api'
 import AdminReports from './AdminReports'
 import AdminClubs from './AdminClubs'
+import AdminSupport from './AdminSupport'
+import AdminPolicies from './AdminPolicies'
 
-type Tab = 'overview' | 'reports' | 'users' | 'clubs' | 'analytics' | 'ai'
+type Tab = 'overview' | 'reports' | 'support' | 'users' | 'clubs' | 'policies' | 'analytics' | 'ai'
 
 /**
  * Single accent for every chart.
@@ -279,6 +281,7 @@ export default function AdminConsole() {
   const [query, setQuery] = useState('')
   const [openUser, setOpenUser] = useState<string | null>(null)
   const [openReports, setOpenReports] = useState<number | null>(null)
+  const [openSupport, setOpenSupport] = useState<number | null>(null)
 
   async function load(force = false) {
     setBusy(true)
@@ -373,24 +376,27 @@ export default function AdminConsole() {
         <p className="mb-4 rounded-lg border border-gold-500/40 bg-gold-500/5 px-3 py-2 text-xs text-gold-300">{notice}</p>
       )}
 
-      <div className="mb-5 flex gap-1 rounded-xl border border-ink-600 bg-ink-850/70 p-1">
-        {(['overview', 'reports', 'users', 'clubs', 'analytics', 'ai'] as Tab[]).map((t) => (
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-ink-600 bg-ink-850/70 p-1">
+        {(['overview', 'reports', 'support', 'users', 'clubs', 'policies', 'analytics', 'ai'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+            className={`flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
               tab === t ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             {t}
             {t === 'reports' && openReports ? <span className="ml-1 rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{openReports}</span> : null}
+            {t === 'support' && openSupport ? <span className="ml-1 rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{openSupport}</span> : null}
           </button>
         ))}
       </div>
 
       {tab === 'reports' && <AdminReports onOpenCount={setOpenReports} />}
       {tab === 'clubs' && <AdminClubs />}
+      {tab === 'support' && <AdminSupport onOpenCount={setOpenSupport} />}
+      {tab === 'policies' && <AdminPolicies />}
 
       {tab === 'overview' && (
         <div className="space-y-5">

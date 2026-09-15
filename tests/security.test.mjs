@@ -160,7 +160,7 @@ describe('hardening', () => {
   it('backs off repeated wrong passwords for one account', async () => {
     const anon = world.client()
     const signup = await anon('POST', '/api/auth/signup', {
-      email: 'lockme@example.test', password: 'correct horse battery', name: 'Lock Me', username: 'lockme', birthdate: '1994-04-04',
+      email: 'lockme@example.test', password: 'correct horse battery', name: 'Lock Me', username: 'lockme', birthdate: '1994-04-04', acceptTerms: true,
     })
     assert.equal(signup.status, 201)
     for (let i = 0; i < 5; i += 1) {

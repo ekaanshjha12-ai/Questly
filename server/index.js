@@ -45,6 +45,9 @@ import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { levelFromXp } from './game/levels.js'
 import { gameRoutes } from './routes/game.js'
 import { clubRoutes } from './routes/clubs.js'
+import { legalRoutes } from './routes/legal.js'
+import { acceptPolicies, pendingAcceptances } from './policies.js'
+import { purgeExpiredRecords } from './retention.js'
 import { clubPostRights, isClubLeader as clubLeaderOf, isClubMember, notifyAnnouncement } from './game/clubs.js'
 import {
   appreciationFor,
@@ -234,11 +237,22 @@ app.use((err, req, res, next) => {
 app.use(cookieParser())
 app.use(sameOriginOnly(IS_PRODUCTION))
 
+function purgeOldRecords() {
+  try {
+    const removed = purgeExpiredRecords()
+    if (Object.values(removed).some(Boolean)) console.log('retention sweep', removed)
+  } catch (err) {
+    console.error('retention sweep failed', err)
+  }
+}
+
 purgeExpiredSessions()
 purgeLoginFailures()
+purgeOldRecords()
 setInterval(() => {
   purgeExpiredSessions()
   purgeLoginFailures()
+  purgeOldRecords()
 }, 6 * 60 * 60_000).unref?.()
 
 /** Answers a locked account's attempt; true when it has been answered. */
@@ -342,6 +356,8 @@ function publicUser(userId) {
     profileComplete: Boolean(row.username && row.birthdate),
     challengesOpen: Boolean(row.challenges_open),
     adultMessages: Boolean(row.adult_messages),
+    // Terms or privacy versions this account has not accepted yet.
+    policyUpdates: pendingAcceptances(row.id),
   }
 }
 
@@ -407,7 +423,7 @@ app.get('/api/auth/username', throttleUsername, (req, res) => {
 
 app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
   try {
-    const { email, password, inviteCode } = req.body ?? {}
+    const { email, password, inviteCode, acceptTerms } = req.body ?? {}
 
     if (INVITE_CODE) {
       const provided = typeof inviteCode === 'string' ? inviteCode.trim() : ''
@@ -425,6 +441,11 @@ app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
     }
     if (findUserByEmail(email)) {
       res.status(409).json({ error: 'An account with that email already exists.', code: 'email_taken' })
+      return
+    }
+
+    if (acceptTerms !== true) {
+      res.status(400).json({ error: 'Agree to the Terms of Service to create an account.', code: 'terms_required' })
       return
     }
 
@@ -456,6 +477,8 @@ app.post('/api/auth/signup', throttleSignup, throttleAuth, async (req, res) => {
       }
       throw err
     }
+    // What they agreed to, and which version of it.
+    acceptPolicies(user.id)
     const { token } = startSession(user.id)
     res.cookie(SESSION_COOKIE, token, cookieOptions())
     audit({ userId: user.id, email: user.email, event: 'auth.signup', outcome: 'success', ip: req.ip })
@@ -2718,6 +2741,16 @@ function sweepVideos() {
       rmSync(join(MEDIA_DIR, `${id}.jpg`), { force: true })
       deletePostVideo(id)
     }
+    // Files whose video row is gone — a deleted account takes its rows with
+    // it, and this is where their files follow.
+    if (existsSync(MEDIA_DIR)) {
+      for (const name of readdirSync(MEDIA_DIR)) {
+        const match = /^([0-9a-f-]{36})\.(mp4|jpg)$/i.exec(name)
+        if (!match || getPostVideo(match[1])) continue
+        const path = join(MEDIA_DIR, name)
+        if (Date.now() - statSync(path).mtimeMs > 6 * 60 * 60_000) rmSync(path, { force: true })
+      }
+    }
     const tmpDir = join(MEDIA_DIR, 'tmp')
     if (existsSync(tmpDir)) {
       for (const name of readdirSync(tmpDir)) {
@@ -3409,6 +3442,8 @@ app.use(
     getPost,
   }),
 )
+
+app.use('/api', legalRoutes({ requireAuth, requireAdmin, requireSuperadmin, rateLimit, audit, notify, sessionCookie: SESSION_COOKIE }))
 
 // Unmatched API routes must answer in JSON — the client parses every response
 // body as JSON, and Express's default HTML error page would blow up there.

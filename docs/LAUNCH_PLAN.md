@@ -109,7 +109,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Done: appreciate, comments (filtered for abuse, contact details and cross-age risks; rate-limited; hidden across blocks; removable by author, post owner or club leader), challenge from a post, share link and post pages, quests / duels / achievements / focus sessions attached from the server's records, comment and conversation reports with saved content, new Chronicle Log alerts |
 | 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |
-| 12 | Legal and policy pages, privacy controls | Planned |
+| 12 | Legal and policy pages, privacy controls | Done: Terms, Privacy Policy, Community Guidelines and Safety Centre readable signed in or out, filled in from the environment and edited with version history by the superadmin; terms agreed to at sign-up and again after a significant change; Contact & support (also for people who cannot sign in) with an admin queue and in-app replies; retention sweep erasing deleted posts and comments, old security log entries, closed reports and support requests, and video files left behind by deleted accounts |
 | 13 | Analytics events and retention | Planned |
 | 14 | Security hardening (S3–S10) | Done |
 | 15 | Performance: code splitting, lazy world/3D | Started: every screen away from the hub and the 3D viewer load on demand |

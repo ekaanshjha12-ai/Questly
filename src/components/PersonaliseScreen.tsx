@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  ChevronRight,
   Download,
+  LifeBuoy,
+  Lock,
+  Scale,
+  ScrollText,
+  ShieldCheck,
+  Users,
   IdCard,
   Loader2,
   LogOut,
@@ -26,6 +33,7 @@ import CardEditor from './CardEditor'
 import { PicturePicker } from './SignupFlow'
 import { Sheet } from './ui/Sheet'
 import Button from './ui/Button'
+import { useRouter } from '../app/router'
 
 /**
  * How the app looks and feels, in one place.
@@ -101,6 +109,42 @@ export default function PersonaliseScreen({
       <Section icon={ShieldAlert} title="Account and data" note="Your data is yours. Download everything Questly holds about you, or delete the account for good.">
         <AccountControls user={user} onSignOut={onSignOut} />
       </Section>
+
+      <Section icon={Scale} title="Help, safety and legal" note="How Questly works, what it keeps about you, and how to reach a person.">
+        <HelpLinks />
+      </Section>
+    </div>
+  )
+}
+
+function HelpLinks() {
+  const { navigate } = useRouter()
+  const links = [
+    { to: '/support?kind=problem', label: 'Report a problem', icon: LifeBuoy },
+    { to: '/support', label: 'Contact & support', icon: LifeBuoy },
+    { to: '/legal/safety', label: 'Safety Centre', icon: ShieldCheck },
+    { to: '/legal/guidelines', label: 'Community Guidelines', icon: Users },
+    { to: '/legal/terms', label: 'Terms of Service', icon: ScrollText },
+    { to: '/legal/privacy', label: 'Privacy Policy', icon: Lock },
+  ]
+  return (
+    <div className="space-y-2">
+      {links.map(({ to, label, icon: Icon }) => (
+        <a
+          key={to}
+          href={to}
+          onClick={(e) => {
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+            e.preventDefault()
+            navigate(to)
+          }}
+          className="flex min-h-[44px] items-center gap-3 rounded-xl border border-ink-600 bg-ink-800 px-3 text-sm text-slate-200 hover:border-ink-500"
+        >
+          <Icon className="h-4 w-4 shrink-0 text-gold-400" aria-hidden />
+          <span className="min-w-0 flex-1">{label}</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+        </a>
+      ))}
     </div>
   )
 }

@@ -21,7 +21,7 @@ import { generateBackupCodes, normalizeBackupCode, verifyTotp } from './totp.js'
 const scryptAsync = promisify(scrypt)
 
 const KEY_LEN = 64
-const SESSION_DAYS = 30
+export const SESSION_DAYS = 30
 export const SESSION_COOKIE = 'questly_session'
 
 async function hashPassword(password, salt) {

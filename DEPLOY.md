@@ -48,6 +48,24 @@ If you mount somewhere else, set `DATA_DIR` to that path instead.
 | `VERIFY_DAILY_LIMIT` | Optional | Verification checks per person per day. Defaults to `10`. Set `0` to disable. |
 | `DATA_DIR` | Optional | Where the SQLite file lives. Defaults to `server/data`. |
 | `PORT` | No | Railway sets this automatically. |
+| `QUESTLY_OPERATOR_NAME` | Recommended | Who runs Questly — a person or a company. Shown in the Terms and Privacy Policy. Defaults to "the Questly team". |
+| `QUESTLY_CONTACT_EMAIL` | Recommended | Where people can write. Shown in the policies and on Contact & support. Without it, contact goes through the in-app form only. |
+| `QUESTLY_GOVERNING_LAW` | Optional | For example `England and Wales`. Adds a governing-law section to the Terms; left out when unset. |
+| `QUESTLY_HOSTING_PROVIDER` | Optional | For example `Railway`. Named in the Privacy Policy as where data is stored. |
+| `DELETED_CONTENT_RETENTION_DAYS` | Optional | Days a deleted post or comment is kept before it is erased. Defaults to `30`. |
+| `AUDIT_LOG_RETENTION_DAYS` | Optional | Days the security log (with IP addresses) is kept. Defaults to `180`. |
+| `CLOSED_REPORT_RETENTION_DAYS` | Optional | Days a closed moderation report is kept. Defaults to `365`. |
+| `SUPPORT_RETENTION_DAYS` | Optional | Days a closed support request is kept. Defaults to `365`. |
+
+### The policy documents
+
+Terms of Service, Privacy Policy, Community Guidelines and the Safety Centre
+start from `server/policies/*.md`. They are written to describe how this code
+actually behaves, but **they are a starting point, not legal advice** — have
+them reviewed for the places you operate before launch. Edit them in the
+admin console under **Policies** (superadmin only); every version is kept, and
+ticking "significant change" asks every player to accept the new Terms or
+Privacy Policy.
 
 ## 5. Get the URL
 

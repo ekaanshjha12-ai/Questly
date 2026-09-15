@@ -14,6 +14,7 @@ import { GameProvider, useGame } from './game/GameProvider'
 import { match, RouterProvider, useRouter } from './app/router'
 import AppShell, { BackLink, PageHeader } from './app/AppShell'
 import { NowPlayingProvider } from './app/NowPlaying'
+import PolicyUpdateBanner from './components/PolicyUpdateBanner'
 import HomeScreen from './screens/home/HomeScreen'
 import QuestBoardScreen from './screens/quests/QuestBoardScreen'
 import RewardLayer from './screens/rewards/RewardLayer'
@@ -51,6 +52,13 @@ const GoalsManager = lazy(() => import('./components/GoalsManager'))
 const SoundsScreen = lazy(() => import('./components/SoundsScreen'))
 const PersonaliseScreen = lazy(() => import('./components/PersonaliseScreen'))
 const CardDesigner = lazy(() => import('./components/PersonaliseScreen').then((m) => ({ default: m.CardDesigner })))
+const PolicyScreen = lazy(() => import('./screens/legal/PolicyScreen'))
+const LegalHubScreen = lazy(() => import('./screens/legal/LegalHubScreen'))
+const SupportScreen = lazy(() => import('./screens/legal/SupportScreen'))
+const PublicLegalPage = lazy(() => import('./screens/legal/PublicLegalPage'))
+
+/** Pages anyone can open, signed in or not: the policies and Contact & support. */
+const isLegalPath = (path: string) => path === '/legal' || path.startsWith('/legal/') || path === '/support'
 
 type Boot =
   | { phase: 'loading' }
@@ -94,6 +102,7 @@ export default function App() {
 function Root() {
   const [route] = useState(standalonePath)
   const [boot, setBoot] = useState<Boot>({ phase: 'loading' })
+  const { path } = useRouter()
   // Keeps a system-theme choice following the device while the app is open.
   useTheme()
 
@@ -155,6 +164,15 @@ function Root() {
   }
 
   if (boot.phase === 'loading') return <Spinner />
+  // The policies and support have to be reachable before there is an account,
+  // and by someone who cannot get into theirs.
+  if (isLegalPath(path) && (boot.phase !== 'ready' || boot.user.profileComplete === false)) {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <PublicLegalPage />
+      </Suspense>
+    )
+  }
   if (boot.phase === 'error') return <FullScreenMessage>{boot.message}</FullScreenMessage>
   if (boot.phase === 'anonymous') return <AuthScreen onAuthed={(user) => void loadForUser(user)} />
 
@@ -240,6 +258,7 @@ function SignedInApp({
   return (
     <NowPlayingProvider value={{ label: nowPlaying, getLevel: noise.getLevel }}>
       <AppShell immersive={path === '/focus'} socialBadge={inbox.unread + inbox.requests} challengeBadge={challengeFeed.incomingCount}>
+        {path !== '/focus' && !isLegalPath(path) && <PolicyUpdateBanner user={user} onUserChange={onUserChange} />}
         <Suspense fallback={<LoadingState lines={3} label="Opening" />}>
           <Routes
             user={user}
@@ -268,6 +287,13 @@ function ToolPage({ title, subtitle, back, children }: { title: string; subtitle
       {children}
     </div>
   )
+}
+
+const POLICY_TITLES: Record<string, string> = {
+  terms: 'Terms of Service',
+  privacy: 'Privacy Policy',
+  guidelines: 'Community Guidelines',
+  safety: 'Safety Centre',
 }
 
 const TO_QUESTS = { to: '/quests', label: 'Quests' }
@@ -465,6 +491,28 @@ function Routes({
     return (
       <ToolPage title="Questly Card" subtitle="What other players see when they open you" back={TO_PROFILE}>
         <CardDesigner state={state} user={user} progress={game.snapshot?.progress ?? null} look={game.snapshot?.look ?? null} onSetCard={notebook.setCard} />
+      </ToolPage>
+    )
+  }
+  if (path === '/legal') {
+    return (
+      <ToolPage title="Help, safety and legal" subtitle="How Questly works, what it keeps, and how to reach a person" back={{ to: '/profile/settings', label: 'Settings' }}>
+        <LegalHubScreen signedIn />
+      </ToolPage>
+    )
+  }
+  const legalDoc = match('/legal/:slug', path)
+  if (legalDoc) {
+    return (
+      <ToolPage title={POLICY_TITLES[legalDoc.slug] ?? 'Document'} back={{ to: '/legal', label: 'Help, safety and legal' }}>
+        <PolicyScreen slug={legalDoc.slug} />
+      </ToolPage>
+    )
+  }
+  if (path === '/support') {
+    return (
+      <ToolPage title="Contact & support" subtitle="Report a problem, ask a question, or raise a concern" back={{ to: '/legal', label: 'Help, safety and legal' }}>
+        <SupportScreen signedIn />
       </ToolPage>
     )
   }
