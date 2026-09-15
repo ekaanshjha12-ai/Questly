@@ -1,9 +1,9 @@
 import { m as motion } from 'framer-motion'
-import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
+import { ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
 import { Link, useRouter } from '../../app/router'
-import { PageHeader } from '../../app/AppShell'
+import { HeaderActions, PageHeader } from '../../app/AppShell'
 import Button from '../../components/ui/Button'
 import { XpBar } from '../../components/ui/Bars'
 import { ErrorState, LoadingState } from '../../components/ui/States'
@@ -37,14 +37,14 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
     return (
       <div className="relative isolate">
         <BaseBackdrop time={time} />
-        <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} />
+        <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} actions={<HeaderActions portrait={false} />} />
         <div className={STAGE} />
         {status === 'error' ? <ErrorState message={error ?? 'Could not load your quest hub.'} onRetry={() => void refresh()} /> : <LoadingState lines={3} label="Loading your quest hub" />}
       </div>
     )
   }
 
-  const { progress, quests, focusTotals, achievements, onboarding } = snapshot
+  const { progress, quests, focusTotals, achievements } = snapshot
   const featured = quests.find((q) => q.id === snapshot.featuredQuestId) ?? null
   const focus = snapshot.focus
   const duel = (challenges ?? []).find((c) => c.status === 'active' || c.status === 'accepted') ?? null
@@ -57,7 +57,8 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
   return (
     <div className="relative isolate">
       <BaseBackdrop time={time} />
-      <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} />
+      {/* No character on Home: the room is the base, and Profile is a tab away. */}
+      <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} actions={<HeaderActions portrait={false} />} />
 
       {/* --- the base and today's quest --------------------------------------------- */}
       <section aria-label="Today's quest">
@@ -125,34 +126,6 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
           )}
         </div>
       </section>
-
-      {/* --- first quests -------------------------------------------------------------- */}
-      {!onboarding.complete && (
-        <section className="mt-6" aria-label="Your first quests">
-          <h2 className="eyebrow mb-2.5">Your first quests</h2>
-          <ol className="panel divide-y divide-ink-700/60">
-            {onboarding.steps.map((step, i) => (
-              <li key={step.id}>
-                <Link to={step.link} className="flex items-center gap-3 px-4 py-3 hover:bg-ink-850/60">
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-pixel text-[11px] ${
-                      step.done ? 'border-gold-500/60 bg-gold-500/15 text-gold-300' : 'border-ink-600 bg-ink-850 text-slate-400'
-                    }`}
-                  >
-                    {step.done ? <Check className="h-4 w-4" strokeWidth={3} /> : String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block text-sm font-semibold ${step.done ? 'text-slate-500 line-through' : 'text-slate-100'}`}>{step.title}</span>
-                    <span className="block text-xs text-slate-500">{step.body}</span>
-                  </span>
-                  {!step.done && <ChevronRight className="h-4 w-4 text-slate-500" />}
-                </Link>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-2 px-1 text-[11px] text-slate-500">Finish all four to earn the Drafting Quill.</p>
-        </section>
-      )}
 
       {/* --- standing ------------------------------------------------------------------ */}
       <section className="mt-6" aria-label="Performance">

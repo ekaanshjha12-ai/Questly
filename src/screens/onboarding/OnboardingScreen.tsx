@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, m as motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Check, Plus, Scroll, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, X } from 'lucide-react'
 import type { CharacterId, GoalCategory, NewGoalInput } from '../../types'
 import { game, type Appearance } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
@@ -11,19 +11,17 @@ import { DEFAULT_APPEARANCE } from '../../art/hero'
 import HeroSprite from '../../components/art/HeroSprite'
 import AppearanceEditor from '../../components/art/AppearanceEditor'
 import Button from '../../components/ui/Button'
-import { Parchment } from '../../components/ui/Panel'
 import { messageOf, useToast } from '../../components/ui/Toast'
 
 /**
- * A new player's first minutes: choose a path, make the hero, set the goals
- * the first quests are written from, and see the quests that start the
- * adventure. The path and the look are saved to the server as each step is
- * left, so a reload mid-way keeps them; the goals are saved with the notebook
- * when the last step is confirmed.
+ * A new player's first minutes: choose a path, make the hero, and set the
+ * goals their quests are written from. The path and the look are saved to
+ * the server as each step is left, so a reload mid-way keeps them; the goals
+ * are saved with the notebook when the last step is confirmed.
  */
 
-type Step = 'path' | 'hero' | 'goals' | 'quests'
-const STEPS: Step[] = ['path', 'hero', 'goals', 'quests']
+type Step = 'path' | 'hero' | 'goals'
+const STEPS: Step[] = ['path', 'hero', 'goals']
 const MAX_GOALS = 5
 
 interface ChosenGoal {
@@ -33,13 +31,6 @@ interface ChosenGoal {
   specHint: string
   detail: string
 }
-
-const FIRST_QUESTS = [
-  { id: 'focus', title: 'Complete your first Focus Session', body: 'Five focused minutes or more, timed by Questly.' },
-  { id: 'character', title: 'Customise your character', body: 'Choose how your hero looks.' },
-  { id: 'card', title: 'Design your Questly Card', body: 'Make the card other players see.' },
-  { id: 'quest', title: 'Complete a quest', body: 'Any quest on your board counts.' },
-]
 
 export default function OnboardingScreen({
   name,
@@ -57,7 +48,6 @@ export default function OnboardingScreen({
     return PATHS.some((p) => p.id === saved) ? (saved as PathId) : null
   })
   const [appearance, setAppearance] = useState<Appearance>(snapshot?.look.appearance ?? DEFAULT_APPEARANCE)
-  const [lookSaved, setLookSaved] = useState(false)
   const [chosen, setChosen] = useState<ChosenGoal[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -112,16 +102,13 @@ export default function OnboardingScreen({
       try {
         const saved = await game.setAppearance(appearance)
         if (snapshot) setLook({ ...snapshot.look, appearance: saved.appearance })
-        setLookSaved(true)
         setStep('goals')
       } catch (err) {
         toast.error('Could not save your hero', messageOf(err, 'Check your connection and try again.'))
       } finally {
         setBusy(false)
       }
-    } else if (step === 'goals') {
-      if (chosen.length) setStep('quests')
-    } else {
+    } else if (chosen.length) {
       onComplete(
         name || 'Adventurer',
         appearance.body === 'a' ? 'male' : 'female',
@@ -298,37 +285,6 @@ export default function OnboardingScreen({
                 </div>
               </>
             )}
-
-            {step === 'quests' && (
-              <>
-                <h1 className="page-title">Your first quests</h1>
-                <p className="mt-1 text-sm text-slate-400">They wait on your hub. Finish all four and the Drafting Quill is yours.</p>
-                <Parchment className="mt-5 px-5 py-5">
-                  <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-parch-soft">
-                    <Scroll className="h-4 w-4" aria-hidden /> Contract of the {pathMeta?.name ?? 'Adventurer'}
-                  </p>
-                  <ol className="mt-4 space-y-3.5">
-                    {FIRST_QUESTS.map((q, i) => {
-                      const done = q.id === 'character' && lookSaved
-                      return (
-                        <li key={q.id} className="flex items-start gap-3">
-                          <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-[11px] font-bold ${done ? 'border-[#1f7a52] bg-[#1f7a52] text-white' : 'border-parch-ink/30 text-parch-ink'}`}>
-                            {done ? <Check className="h-4 w-4" strokeWidth={3} /> : String(i + 1).padStart(2, '0')}
-                          </span>
-                          <span className="min-w-0">
-                            <span className={`block font-display text-[17px] font-bold leading-tight text-parch-ink ${done ? 'line-through decoration-2 opacity-60' : ''}`}>{q.title}</span>
-                            <span className="block text-xs text-parch-soft">{q.body}</span>
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ol>
-                  <p className="mt-5 border-t border-parch-ink/15 pt-3 text-xs text-parch-soft">
-                    And from your goals: {chosen.map((g) => g.title).join(', ')}.
-                  </p>
-                </Parchment>
-              </>
-            )}
           </motion.section>
         </AnimatePresence>
       </div>
@@ -345,11 +301,11 @@ export default function OnboardingScreen({
             className="!min-h-[52px] flex-1 text-[15px]"
             loading={busy}
             disabled={!canContinue}
-            icon={step === 'quests' ? Sparkles : undefined}
-            trailingIcon={step === 'quests' ? undefined : ArrowRight}
+            icon={step === 'goals' ? Sparkles : undefined}
+            trailingIcon={step === 'goals' ? undefined : ArrowRight}
             onClick={() => void next()}
           >
-            {step === 'path' ? 'Choose path' : step === 'hero' ? 'This is my hero' : step === 'goals' ? 'Continue' : 'Begin the adventure'}
+            {step === 'path' ? 'Choose path' : step === 'hero' ? 'This is my hero' : 'Begin the adventure'}
           </Button>
         </div>
       </footer>

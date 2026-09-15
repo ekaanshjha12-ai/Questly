@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type AnchorHTMLAttributes, type ReactNode } from 'react'
+import { updateReady } from '../lib/updates'
 
 /**
  * A small history router.
@@ -38,6 +39,11 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     }
     const target = `${url.pathname}${url.search}${url.hash}`
     const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    // A newer version is deployed: arrive at the next screen on it.
+    if (updateReady() && target !== now) {
+      window.location.assign(target)
+      return
+    }
     if (target !== now) {
       if (options.replace) window.history.replaceState(null, '', target)
       else window.history.pushState({ questly: true }, '', target)

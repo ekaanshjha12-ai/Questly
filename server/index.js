@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -354,6 +354,27 @@ const INVITE_CODE = process.env.INVITE_CODE?.trim() || null
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+/**
+ * Which build of the app this server hands out: the fingerprinted name of its
+ * main script, which changes with every deploy that changes the app. An open or
+ * installed app compares it with its own to know it is out of date — a phone
+ * can keep an installed app in memory for days, and nothing else would tell it.
+ */
+let servedBuild
+app.get('/api/version', (_req, res) => {
+  if (servedBuild === undefined) {
+    try {
+      const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.html'), 'utf8')
+      servedBuild = html.match(/src="(\/assets\/index-[\w-]+\.js)"/)?.[1] ?? null
+    } catch {
+      // No build (development): nothing to compare against.
+      servedBuild = null
+    }
+  }
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ build: servedBuild })
 })
 
 app.get('/api/auth/config', (_req, res) => {

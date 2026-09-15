@@ -1350,7 +1350,7 @@ export interface Caps {
 }
 
 export interface WorldRequirement {
-  type: 'level' | 'elite_quests' | 'first_quests'
+  type: 'level' | 'elite_quests'
   label: string
   current: number
   target: number

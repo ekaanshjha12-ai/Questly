@@ -4,7 +4,7 @@ import { periodEnd, safeTimezone, weekKey } from './clock.js'
 import { conflict, invalid, notFound } from './errors.js'
 import { levelFromXp } from './levels.js'
 import { notify } from './notify.js'
-import { onboardingSteps, setFlag } from './onboarding.js'
+import { setFlag } from './onboarding.js'
 import { getQuestView, questView, questXp, rarityFor } from './quests.js'
 import { getProgressRow, progressView, startRewards, transaction } from './rewards.js'
 
@@ -27,7 +27,6 @@ import { getProgressRow, progressView, startRewards, transaction } from './rewar
  * Requirement kinds:
  *   level        reach a level
  *   elite_quests completed quests of epic or legendary rarity
- *   first_quests the four first quests every new player is given
  */
 export const REGIONS = [
   { id: 'focus_sanctum', name: 'Verdant Woods', requires: [] },
@@ -37,7 +36,7 @@ export const REGIONS = [
   { id: 'training_grounds', name: 'Frostpeak', requires: [] },
   { id: 'archive', name: 'The Lost Ruins', requires: [] },
   { id: 'digital_workshop', name: 'Emberlands', requires: [{ type: 'level', level: 3 }] },
-  { id: 'innovation_district', name: 'Sunscorch', requires: [{ type: 'level', level: 8 }, { type: 'first_quests' }] },
+  { id: 'innovation_district', name: 'Sunscorch', requires: [{ type: 'level', level: 8 }] },
   { id: 'elite_region', name: 'The Summit', requires: [{ type: 'level', level: 15 }, { type: 'elite_quests', count: 3 }] },
 ]
 
@@ -92,29 +91,20 @@ function playerRecord(userId) {
   const level = levelFromXp(progress?.xp ?? 0)
   const eliteQuests =
     db.get("SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND status = 'completed' AND rarity IN ('epic', 'legendary')", [userId])?.n ?? 0
-  let firstQuests = false
-  try {
-    firstQuests = Boolean(JSON.parse(progress?.flags ?? '{}').onboardingDone) || onboardingSteps(userId).complete
-  } catch {
-    firstQuests = false
-  }
-  return { progress, level, eliteQuests, firstQuests }
+  return { progress, level, eliteQuests }
 }
 
 function requirementView(req, record) {
   if (req.type === 'level') {
     return { type: 'level', label: `Reach level ${req.level}`, current: Math.min(record.level, req.level), target: req.level, met: record.level >= req.level }
   }
-  if (req.type === 'elite_quests') {
-    return {
-      type: 'elite_quests',
-      label: `Complete ${req.count} elite quests`,
-      current: Math.min(record.eliteQuests, req.count),
-      target: req.count,
-      met: record.eliteQuests >= req.count,
-    }
+  return {
+    type: 'elite_quests',
+    label: `Complete ${req.count} elite quests`,
+    current: Math.min(record.eliteQuests, req.count),
+    target: req.count,
+    met: record.eliteQuests >= req.count,
   }
-  return { type: 'first_quests', label: 'Complete your first quests', current: record.firstQuests ? 1 : 0, target: 1, met: record.firstQuests }
 }
 
 function regionView(region, record) {

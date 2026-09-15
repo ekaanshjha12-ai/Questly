@@ -5,6 +5,7 @@ import './index.css'
 // install offer, which happens well before the signed-in app mounts.
 import './lib/install'
 import { applyCursorPrefs, loadCursorPrefs } from './lib/cursors'
+import { watchForUpdates } from './lib/updates'
 import App from './App.tsx'
 
 // Before the first render, so the sign-in screen already has the chosen cursor.
@@ -26,3 +27,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     })
   })
 }
+
+// So a phone that keeps Questly open for days still picks up each new version.
+if (import.meta.env.PROD) watchForUpdates()

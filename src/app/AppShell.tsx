@@ -133,8 +133,8 @@ function SideNav({ items }: { items: NavItem[] }) {
   )
 }
 
-/** The bell and portrait at the top right of every page. */
-export function HeaderActions() {
+/** The bell and portrait at the top right of every page. `portrait` off leaves the character out (Home). */
+export function HeaderActions({ portrait = true }: { portrait?: boolean }) {
   const { snapshot } = useGame()
   const unread = snapshot?.notifications.unread ?? 0
   return (
@@ -152,9 +152,11 @@ export function HeaderActions() {
           </span>
         )}
       </Link>
-      <Link to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 lg:hidden">
-        <HeroPortrait look={snapshot?.look} size={40} ring="border-reward-500/60" />
-      </Link>
+      {portrait && (
+        <Link to="/profile" aria-label="Your profile" className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 lg:hidden">
+          <HeroPortrait look={snapshot?.look} size={40} ring="border-reward-500/60" />
+        </Link>
+      )}
     </div>
   )
 }
