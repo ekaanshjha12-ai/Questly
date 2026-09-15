@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { ArrowLeft, Bell, Castle, CircleUserRound, House, LibraryBig, Swords, UsersRound, Zap, type LucideIcon } from 'lucide-react'
 import { Link, useRouter } from './router'
 import { NowPlayingButton } from './NowPlaying'

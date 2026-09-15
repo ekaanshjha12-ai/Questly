@@ -3,7 +3,8 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, extname, join, normalize, sep } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { isConfigured, verifyPhoto, verifyVoice, MIN_CONFIDENCE } from './verify.js'
 import { perceptualHash, hammingDistance, DUPLICATE_THRESHOLD } from './imagehash.js'
@@ -209,6 +210,24 @@ if (IS_PRODUCTION) app.set('trust proxy', 1)
 app.use(securityHeaders(IS_PRODUCTION))
 // Counts API requests by route and outcome for the console's health panel — never who made them.
 app.use(requestMetrics)
+
+// Larger JSON answers — feeds, the world, the console — go out gzipped when the
+// browser accepts it. Small ones are not worth the header.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/') || !/\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) return next()
+  const json = res.json.bind(res)
+  res.json = (body) => {
+    const text = JSON.stringify(body)
+    if (text === undefined || text.length < 8192 || res.headersSent) return json(body)
+    const zipped = gzipSync(text, { level: 5 })
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Encoding', 'gzip')
+    res.setHeader('Vary', 'Accept-Encoding')
+    res.setHeader('Content-Length', zipped.length)
+    return res.end(zipped)
+  }
+  next()
+})
 
 // Most requests are a few hundred bytes of JSON. Only the routes that carry a
 // photo, attached documents or the notebook document get room for megabytes,
@@ -3475,6 +3494,31 @@ const distDir = join(here, '..', 'dist')
 const hasBuild = existsSync(join(distDir, 'index.html'))
 
 if (hasBuild) {
+  // The build keeps Brotli and gzip copies of every text file beside it
+  // (scripts/compress.mjs). Send one when the browser takes it; the static
+  // handler below then serves that file under the original's type and caching.
+  const COMPRESSED_TYPES = /\.(?:js|mjs|css|html|svg|json|webmanifest|txt)$/
+  app.use((req, res, next) => {
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || !COMPRESSED_TYPES.test(req.path)) return next()
+    let file
+    try {
+      file = normalize(join(distDir, decodeURIComponent(req.path)))
+    } catch {
+      return next()
+    }
+    if (!file.startsWith(distDir + sep)) return next()
+    const accepts = String(req.headers['accept-encoding'] ?? '')
+    for (const [encoding, suffix] of [['br', '.br'], ['gzip', '.gz']]) {
+      if (!new RegExp(`\\b${encoding}\\b`).test(accepts) || !existsSync(file + suffix)) continue
+      res.setHeader('Content-Encoding', encoding)
+      res.setHeader('Vary', 'Accept-Encoding')
+      res.type(extname(file))
+      req.url = req.url.replace(/(\?|$)/, `${suffix}$1`)
+      break
+    }
+    next()
+  })
+
   app.use(
     express.static(distDir, {
       index: false,

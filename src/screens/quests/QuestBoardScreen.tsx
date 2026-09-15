@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Brain, CalendarDays, History, Layers, ListTodo, Music, Plus, Scroll, Sparkles, Target, Map as MapIcon } from 'lucide-react'
 import type { GameQuest, QuestType } from '../../lib/api'
 import { game as gameApi } from '../../lib/api'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { ChevronRight, Eye, EyeOff, Loader2, Trophy } from 'lucide-react'
 import PlayerCardSheet from './PlayerCardSheet'
 import { fetchLeaderboard, setLeaderboardVisibility, type BoardRow } from '../lib/api'

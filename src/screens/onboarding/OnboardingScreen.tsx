@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m as motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Check, Plus, Scroll, Sparkles, X } from 'lucide-react'
 import type { CharacterId, GoalCategory, NewGoalInput } from '../../types'
 import { game, type Appearance } from '../../lib/api'

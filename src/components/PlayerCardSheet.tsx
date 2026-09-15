@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Ban, Check, Flag, Loader2, MessageCircle, Swords, UserRound, X } from 'lucide-react'
 import { blockPlayer, fetchPlayer, reportPlayer, type Challenge, type PublicPlayer } from '../lib/api'
 import { publicCardData, publicDefaultCard } from '../lib/card'

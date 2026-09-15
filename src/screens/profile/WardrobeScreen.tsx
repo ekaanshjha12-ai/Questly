@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m as motion, useReducedMotion } from 'framer-motion'
 import { Box, Coins, Lock, Palette, Sparkles } from 'lucide-react'
 import { game, type Appearance, type Inventory, type InventoryItem, type Slot } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'

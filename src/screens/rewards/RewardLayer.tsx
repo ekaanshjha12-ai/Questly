@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m as motion, useReducedMotion } from 'framer-motion'
 import { Crown, Flame, Sparkles, Trophy } from 'lucide-react'
 import { useGame, type Celebration } from '../../game/GameProvider'
 import { useRouter } from '../../app/router'

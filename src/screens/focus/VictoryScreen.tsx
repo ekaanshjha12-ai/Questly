@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 import { Clock, Share2, Sparkles, Star, Trophy } from 'lucide-react'
 import type { FinishedFocus } from '../../game/GameProvider'
 import { useGame } from '../../game/GameProvider'

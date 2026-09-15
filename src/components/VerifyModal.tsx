@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Camera, Mic, Loader2, X, Check, AlertCircle, Zap, ShieldCheck } from 'lucide-react'
 import { ApiError, verifyTask, type GameQuest, type RewardSummary, type Verdict } from '../lib/api'
 import { prepareImage } from '../lib/image'

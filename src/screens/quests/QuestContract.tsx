@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 import { Check, Clock, Lock, Play, Plus, ListChecks, Sparkles, CalendarClock } from 'lucide-react'
 import type { GameQuest } from '../../lib/api'
 import { CATEGORY_LABEL, dueLabel, formatMinutes, isFocusQuest, progressLabel, questIcon } from '../../lib/questFormat'

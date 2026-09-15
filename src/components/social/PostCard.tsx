@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Flag, HandHeart, Loader2, MessageSquare, MoreHorizontal, ScrollText, Send, Share2, ShieldCheck, Swords, Timer, Trash2, Trophy } from 'lucide-react'
 import {
   addComment,

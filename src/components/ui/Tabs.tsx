@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 
 export interface TabItem<T extends string> {
   id: T

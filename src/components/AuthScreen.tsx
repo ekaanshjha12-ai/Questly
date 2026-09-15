@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { Swords, Loader2, KeyRound, Copy, Check, Sparkles } from 'lucide-react'
 import { authConfig, login, resetPassword, type AuthUser, ApiError } from '../lib/api'
 import { hydrate } from '../lib/storage'

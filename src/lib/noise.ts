@@ -12,7 +12,8 @@
  * been a 9MB download for material that is identical every second.
  */
 
-import { startMusic, type MusicId, type MusicSession } from './music'
+import type { MusicId } from './musicCatalog'
+import type { MusicSession } from './music'
 
 export type SoundId =
   | 'deep'
@@ -542,7 +543,10 @@ export function createNoiseEngine(): NoiseEngine {
 
     async playMusic(id: MusicId) {
       const token = ++musicGeneration
+      // Woken first, inside the tap that asked for music, as browsers require.
       const context = await wake()
+      // The composer and its instruments load the first time music is played.
+      const { startMusic } = await import('./music')
       if (token !== musicGeneration) return
       music?.stop(0.5)
       music = startMusic(context, layerGain.music!, id)

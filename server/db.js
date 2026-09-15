@@ -264,6 +264,7 @@ for (const column of ["mode TEXT NOT NULL DEFAULT 'checkin'", 'daily_minutes INT
 }
 db.run('CREATE INDEX IF NOT EXISTS idx_challenges_creator ON challenges(creator_id)')
 db.run('CREATE INDEX IF NOT EXISTS idx_challenges_opponent ON challenges(opponent_id)')
+db.run('CREATE INDEX IF NOT EXISTS idx_challenges_status ON challenges(status, created_at)')
 
 db.run(`
   CREATE TABLE IF NOT EXISTS challenge_checkins (
@@ -318,6 +319,10 @@ db.run(`
 `)
 db.run('CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)')
+// A club's feed, newest first; and the main feed, which is every post without a club.
+db.run('CREATE INDEX IF NOT EXISTS idx_posts_club ON posts(club_id, created_at)')
+// Deleted posts, for the retention sweep that erases them.
+db.run('CREATE INDEX IF NOT EXISTS idx_posts_deleted ON posts(deleted_at) WHERE deleted_at IS NOT NULL')
 
 /** Feed pictures, apart from the posts so a page of the feed does not drag
  * every image through the query. */

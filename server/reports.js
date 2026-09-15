@@ -28,6 +28,8 @@ db.run(`
   )
 `)
 db.run('CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at)')
+// Whether a post or comment has a report waiting: the console and the retention sweep ask often.
+db.run('CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_kind, target_id, status)')
 db.run("CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_open ON reports(reporter_id, target_kind, target_id) WHERE status = 'open'")
 
 export const REPORT_KINDS = ['player', 'post', 'comment', 'message', 'challenge', 'club']

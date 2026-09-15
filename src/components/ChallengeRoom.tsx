@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m as motion, useReducedMotion } from 'framer-motion'
 import { Check, Flag, Loader2, MessageCircle, Play, ScrollText, Send, Share2, ShieldAlert, Timer, TrendingUp, X, XCircle } from 'lucide-react'
 import {
   ApiError,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { AlertTriangle, Check, Copy, Loader2, ShieldCheck } from 'lucide-react'
 import { ApiError, completeSetup, fetchSetupInfo, type SetupInfo } from '../lib/api'
 

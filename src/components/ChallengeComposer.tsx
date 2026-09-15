@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { CheckSquare, Loader2, Swords, Timer, X } from 'lucide-react'
 import { ApiError, sendChallenge, type Challenge, type ChallengeTermsInput, type DuelMode, type PlayerSummary } from '../lib/api'
 import { StatusPill, TermsSheet } from './ChallengeParts'

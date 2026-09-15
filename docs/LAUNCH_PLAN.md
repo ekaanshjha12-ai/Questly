@@ -112,15 +112,13 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 12 | Legal and policy pages, privacy controls | Done: Terms, Privacy Policy, Community Guidelines and Safety Centre readable signed in or out, filled in from the environment and edited with version history by the superadmin; terms agreed to at sign-up and again after a significant change; Contact & support (also for people who cannot sign in) with an admin queue and in-app replies; retention sweep erasing deleted posts and comments, old security log entries, closed reports and support requests, and video files left behind by deleted accounts |
 | 13 | Analytics events and retention | Done: events for sign-up, onboarding, first quest and focus session, quests, focus, level-ups, duels, clubs and posts; active players and stickiness; how far new accounts get; weekly-cohort retention (next day, week 1, 2, 4); 30-day trends with a table view — aggregates only, no personal data |
 | 14 | Security hardening (S3–S10) | Done |
-| 15 | Performance: code splitting, lazy world/3D | Started: every screen away from the hub and the 3D viewer load on demand |
+| 15 | Performance: code splitting, lazy world/3D | Done: every screen away from the hub, the 3D viewer, the music composer, the animation features and the sign-in screens load on demand (main script 538 kB to 370 kB, 99 kB over the wire); built text files ship as Brotli and gzip copies; larger API answers are gzipped; images stay separate cacheable files; indexes for club feeds, shared records, reports, deleted posts and open duels |
 | 16 | Full QA pass and final security review | Planned |
 
 ## Remaining
 
 Kept up to date as phases land.
 
-- **Main bundle** is about 532 kB (168 kB gzipped). The sound engine and
-  motion library are the bulk; splitting them is part of phase 15.
 - Fixed along the way: the inline theme script in `index.html` was blocked by
   the Content Security Policy in production, so the saved theme never applied
   before first paint. It now loads from `/theme-init.js`.

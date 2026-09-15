@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 import {
   BarChart3,
   ChevronRight,

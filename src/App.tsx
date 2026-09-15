@@ -1,13 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { LazyMotion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
 import { useAppState, type Notebook } from './hooks/useAppState'
 import type { AppState, PlanItemInput } from './types'
 import { ApiError, fetchState, game as gameApi, logout as logoutRequest, me, type AuthUser, type Challenge, type GameQuest } from './lib/api'
 import { clearCachedState, forgetUser, loadCachedState, recallUser, rememberUser } from './lib/storage'
-import AuthScreen from './components/AuthScreen'
-import SignupFlow from './components/SignupFlow'
 import InstallPrompt from './components/InstallPrompt'
-import Celebration from './components/Celebration'
 import { ToastProvider, messageOf, useToast } from './components/ui/Toast'
 import { LoadingState } from './components/ui/States'
 import { GameProvider, useGame } from './game/GameProvider'
@@ -23,11 +21,17 @@ import { useTheme } from './hooks/useTheme'
 import { useChallenges } from './hooks/useChallenges'
 import { useMessages } from './hooks/useMessages'
 import { useCelebrations } from './lib/prefs'
-import { MUSIC } from './lib/music'
+import { MUSIC } from './lib/musicCatalog'
 import { SOUNDS } from './lib/noise'
 
 // Screens away from the hub load when first opened, so the first paint carries
 // only the shell, Home and the Quest Board.
+const loadMotionFeatures = () => import('./lib/motionFeatures').then((mod) => mod.default)
+
+// Signed-in players never need the sign-in screens, and confetti only on a level-up.
+const AuthScreen = lazy(() => import('./components/AuthScreen'))
+const SignupFlow = lazy(() => import('./components/SignupFlow'))
+const Celebration = lazy(() => import('./components/Celebration'))
 const Onboarding = lazy(() => import('./screens/onboarding/OnboardingScreen'))
 const AdminSetup = lazy(() => import('./components/AdminSetup'))
 const AdminConsole = lazy(() => import('./components/AdminConsole'))
@@ -91,11 +95,13 @@ function standalonePath(): 'admin-setup' | 'admin' | null {
 
 export default function App() {
   return (
-    <RouterProvider>
-      <ToastProvider>
-        <Root />
-      </ToastProvider>
-    </RouterProvider>
+    <LazyMotion features={loadMotionFeatures}>
+      <RouterProvider>
+        <ToastProvider>
+          <Root />
+        </ToastProvider>
+      </RouterProvider>
+    </LazyMotion>
   )
 }
 
@@ -174,13 +180,23 @@ function Root() {
     )
   }
   if (boot.phase === 'error') return <FullScreenMessage>{boot.message}</FullScreenMessage>
-  if (boot.phase === 'anonymous') return <AuthScreen onAuthed={(user) => void loadForUser(user)} />
+  if (boot.phase === 'anonymous') {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <AuthScreen onAuthed={(user) => void loadForUser(user)} />
+      </Suspense>
+    )
+  }
 
   // Accounts made before profiles existed finish one before anything else.
   // Strictly `false`: a user recalled from cache for an offline start has no
   // profile fields at all, and being offline must not lock them out.
   if (boot.user.profileComplete === false) {
-    return <SignupFlow mode="complete" initialName={boot.initialState?.player?.name ?? ''} onCompleted={(user) => setBoot({ ...boot, user })} />
+    return (
+      <Suspense fallback={<Spinner />}>
+        <SignupFlow mode="complete" initialName={boot.initialState?.player?.name ?? ''} onCompleted={(user) => setBoot({ ...boot, user })} />
+      </Suspense>
+    )
   }
 
   const onSignedOut = () => setBoot({ phase: 'anonymous' })
@@ -557,5 +573,9 @@ function LevelConfetti() {
   }, [celebrations])
 
   if (!enabled || burst.key === 0) return null
-  return <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />
+  return (
+    <Suspense fallback={null}>
+      <Celebration burstKey={burst.key} intensity={burst.big ? 'big' : 'normal'} />
+    </Suspense>
+  )
 }

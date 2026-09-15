@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, Headphones, ListChecks, Pause, Play, Plus, Square, Timer, Watch, X } from 'lucide-react'
 import type { Goal, PlanItem } from '../../types'
 import type { FocusSessionView, GameQuest, Look } from '../../lib/api'

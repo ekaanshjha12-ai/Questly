@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 
 /** An XP bar: a recessed track with a lit fill that grows into place. */
 export function XpBar({

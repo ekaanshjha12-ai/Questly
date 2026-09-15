@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createNoiseEngine, type Layer, type NoiseEngine, type SoundId } from '../lib/noise'
-import type { MusicId } from '../lib/music'
+import type { MusicId } from '../lib/musicCatalog'
 
 const VOLUME_KEYS: Record<Layer, string> = { ambience: 'questly:noise-volume', music: 'questly:music-volume' }
 const DEFAULT_VOLUME: Record<Layer, number> = { ambience: 0.35, music: 0.55 }

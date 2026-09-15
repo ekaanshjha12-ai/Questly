@@ -30,6 +30,7 @@ db.run(`
 `)
 db.run('CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at)')
 db.run('CREATE INDEX IF NOT EXISTS idx_post_comments_user ON post_comments(user_id, created_at)')
+db.run('CREATE INDEX IF NOT EXISTS idx_post_appreciations_user ON post_appreciations(user_id, created_at)')
 
 // What a post is about, when it is about something the server can vouch for:
 // a completed quest, a duel result, an achievement, a focus session.
@@ -40,6 +41,9 @@ for (const column of ['ref_kind TEXT', 'ref_id TEXT', 'ref_data TEXT']) {
     // Already present.
   }
 }
+
+// Finding whether something has already been shared, and what a player shared lately.
+db.run('CREATE INDEX IF NOT EXISTS idx_posts_ref ON posts(user_id, ref_kind, ref_id) WHERE ref_kind IS NOT NULL')
 
 export const COMMENT_MAX = 500
 

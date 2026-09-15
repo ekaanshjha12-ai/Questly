@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m as motion, useReducedMotion } from 'framer-motion'
 import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Check, ChevronLeft, ChevronRight, Plus, X, CalendarDays, GripVertical, Search } from 'lucide-react'
 import type { AppState, PlannerView, ScheduleEntry } from '../types'
 import type { GameQuest } from '../lib/api'

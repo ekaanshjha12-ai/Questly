@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m as motion } from 'framer-motion'
 import { Loader2, MessageCircle, SquarePen, X } from 'lucide-react'
 import type { Conversation, FoundPlayer } from '../../lib/api'
 import type { Inbox } from '../../hooks/useMessages'

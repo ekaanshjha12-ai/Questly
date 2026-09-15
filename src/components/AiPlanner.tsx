@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, CalendarCheck, FileText, ListChecks, Loader2, Paperclip, RotateCcw, Sparkles, X } from 'lucide-react'
 import type { PlanItemInput, PlanPlacement } from '../types'
 import { ApiError, askPlannerQuestions, generatePlan, type GeneratedPlan, type PlanDocument } from '../lib/api'
