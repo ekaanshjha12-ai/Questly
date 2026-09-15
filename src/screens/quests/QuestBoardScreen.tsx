@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Brain, CalendarDays, History, Layers, ListTodo, Music, Plus, Scroll, Sparkles, Target } from 'lucide-react'
+import { Brain, CalendarDays, History, Layers, ListTodo, Music, Plus, Scroll, Sparkles, Target, Map as MapIcon } from 'lucide-react'
 import type { GameQuest, QuestType } from '../../lib/api'
 import { game as gameApi } from '../../lib/api'
 import type { Goal } from '../../types'
@@ -25,6 +25,7 @@ const FILTERS: { id: Filter; label: string }[] = [
 ]
 
 const TOOLS = [
+  { to: '/world', label: 'World Map', icon: MapIcon },
   { to: '/planner', label: 'Planner', icon: CalendarDays },
   { to: '/goals', label: 'Goals', icon: Target },
   { to: '/habits', label: 'Habits', icon: ListTodo },

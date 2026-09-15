@@ -942,7 +942,7 @@ export interface Progress {
 export interface GameQuest {
   id: string
   type: QuestType
-  origin: 'user' | 'plan' | 'generated' | 'legacy_todo' | 'club' | 'challenge' | 'onboarding'
+  origin: 'user' | 'plan' | 'generated' | 'world' | 'legacy_todo' | 'club' | 'challenge' | 'onboarding'
   title: string
   description: string | null
   category: GoalCategory
@@ -1050,6 +1050,59 @@ export interface Caps {
   selfReportedXpLeft: number
   focusXpDaily: number
   selfReportedXpDaily: number
+}
+
+export interface WorldRequirement {
+  type: 'level' | 'elite_quests' | 'first_quests'
+  label: string
+  current: number
+  target: number
+  met: boolean
+}
+
+export interface WorldQuestOffer {
+  key: string
+  title: string
+  description: string
+  type: QuestType
+  difficulty: Difficulty
+  durationMin: number
+  progressKind: ProgressKind
+  target: number
+  unit: string | null
+  xp: number
+  rarity: Rarity
+  /** The quest on the board when it has been taken this week. */
+  quest: GameQuest | null
+}
+
+export interface WorldRegion {
+  id: string
+  name: string
+  unlocked: boolean
+  requirements: WorldRequirement[]
+  quests: WorldQuestOffer[]
+}
+
+export interface WorldEvent {
+  id: string
+  title: string
+  region: string
+  blurb: string
+  startsAt: string
+  endsAt: string
+  state: 'upcoming' | 'active' | 'ended'
+  goal: { kind: 'focus_minutes' | 'quests' | 'posts'; label: string; current: number; target: number }
+  xp: number
+  completed: boolean
+}
+
+export interface WorldView {
+  level: number
+  progress: Progress
+  regions: WorldRegion[]
+  events: WorldEvent[]
+  rewards: RewardSummary | null
 }
 
 export interface OnboardingStep {
@@ -1173,6 +1226,9 @@ const id = (value: string) => encodeURIComponent(value)
 export const game = {
   snapshot: () => request<GameSnapshot>('/api/game'),
   setTimezone: (timezone: string) => request<{ progress: Progress }>('/api/game/timezone', { method: 'PUT', body: JSON.stringify({ timezone }) }),
+  world: () => request<WorldView>('/api/world'),
+  takeRegionQuest: (region: string, key: string) =>
+    request<{ quest: GameQuest }>(`/api/world/regions/${encodeURIComponent(region)}/quests/${encodeURIComponent(key)}`, { method: 'POST', body: '{}' }),
   setPath: (path: 'scholar' | 'builder' | 'creator' | 'discipline' | 'explorer') =>
     request<{ path: string }>('/api/game/path', { method: 'PUT', body: JSON.stringify({ path }) }),
   setAppearance: (appearance: Appearance) =>

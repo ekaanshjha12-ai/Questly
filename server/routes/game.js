@@ -48,6 +48,7 @@ import {
 import { ensurePeriodicQuests, refreshGoalQuests } from '../game/slate.js'
 import { activitySeries, progressStats } from '../game/stats.js'
 import { onboardingSteps, PATHS, setFlag } from '../game/onboarding.js'
+import { settleWorldEvents, takeRegionQuest, worldView } from '../game/world.js'
 
 /**
  * Routes for everything a player earns: progress, quests, focus sessions,
@@ -112,6 +113,8 @@ export function gameRoutes({ requireAuth, rateLimit }) {
   router.get('/game', requireAuth, read, game, handle((req) => {
     const userId = req.user.id
     ensurePeriodicQuests(userId)
+    // An event goal reached since the last visit is paid before the numbers are read.
+    settleWorldEvents(userId)
     const board = questBoard(userId)
     const unlocked = achievementsFor(userId).filter((a) => a.unlockedAt)
     const progress = progressView(getProgressRow(userId))
@@ -166,6 +169,21 @@ export function gameRoutes({ requireAuth, rateLimit }) {
     const appearance = setAppearance(req.user.id, req.body?.appearance)
     setFlag(req.user.id, 'appearanceSet', true)
     return { appearance }
+  }))
+
+  /* --- the world ---------------------------------------------------------- */
+
+  router.get('/world', requireAuth, read, game, handle((req) => {
+    const rewards = settleWorldEvents(req.user.id)
+    return { ...worldView(req.user.id), rewards }
+  }))
+
+  router.post('/world/regions/:region/quests/:key', requireAuth, write, game, handle((req, res) => {
+    const region = String(req.params.region ?? '')
+    const key = String(req.params.key ?? '')
+    if (!/^[a-z_]{3,40}$/.test(region) || !/^[a-z-]{2,40}$/.test(key)) throw invalid('That quest is not offered here.', 'key')
+    res.status(201)
+    return { quest: takeRegionQuest(req.user.id, region, key) }
   }))
 
   // The path chosen at the start. Changeable; the first choice is what

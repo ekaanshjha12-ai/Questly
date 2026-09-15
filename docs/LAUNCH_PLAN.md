@@ -105,7 +105,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 5 | Chronicle Log notifications | Done |
 | 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Done: focus duels count server-timed minutes; check-in duels kept; Sent/Completed/Failed states; VS screen with countdown; drafts kept on device |
 | 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Planned |
-| 8 | World map: regions, locks, time of day, club buildings, events | Planned |
+| 8 | World map: regions, locks, time of day, club buildings, events | Done except club buildings (arrive with clubs): pixel overworld, 9 regions with server-judged locks, 2 weekly quests per region, monthly world events paid through the ledger, morning/day/evening/night |
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Planned |
 | 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |

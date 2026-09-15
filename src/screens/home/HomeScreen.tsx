@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
+import { Check, ChevronRight, Flame, Map as MapIcon, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
 import { Link, useRouter } from '../../app/router'
@@ -169,6 +169,21 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
           </Link>
         </div>
       </section>
+
+      {/* --- world -------------------------------------------------------------------------- */}
+      <Link
+        to="/world"
+        className="panel mt-6 flex items-center gap-3 overflow-hidden bg-[radial-gradient(ellipse_at_100%_0%,rgba(122,47,208,0.22),transparent_60%)] px-4 py-3 hover:border-ink-500"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#9a6ae8]/40 bg-[#2a1b4a] text-[#d8c2ff]">
+          <MapIcon className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-100">World Map</span>
+          <span className="block truncate text-xs text-slate-500">Explore regions, take their weekly quests and join world events.</span>
+        </span>
+        <ChevronRight className="h-4 w-4 text-slate-500" aria-hidden />
+      </Link>
 
       {/* --- duel -------------------------------------------------------------------------- */}
       <section className="mt-6" aria-label="Challenges">

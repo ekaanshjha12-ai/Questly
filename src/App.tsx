@@ -40,6 +40,7 @@ const AchievementsScreen = lazy(() => import('./screens/profile/AchievementsScre
 const XpHistoryScreen = lazy(() => import('./screens/profile/XpHistoryScreen'))
 const ProgressScreen = lazy(() => import('./components/ProgressScreen'))
 const ChronicleLogScreen = lazy(() => import('./screens/notifications/ChronicleLogScreen'))
+const WorldMapScreen = lazy(() => import('./screens/world/WorldMapScreen'))
 const Planner = lazy(() => import('./components/Planner'))
 const HabitTracker = lazy(() => import('./components/HabitTracker'))
 const StudyScreen = lazy(() => import('./components/StudyScreen'))
@@ -338,6 +339,7 @@ function Routes({
   if (path === '/quests' || path === '/quests/new' || match('/quests/:id', path)) return <QuestBoardScreen goals={state.goals} />
   if (path === '/focus') return <FocusModeScreen goals={state.goals} nowPlaying={nowPlaying} />
   if (path === '/notifications') return <ChronicleLogScreen />
+  if (path === '/world') return <WorldMapScreen />
 
   if (path === '/sounds') {
     return (

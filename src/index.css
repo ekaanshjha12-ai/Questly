@@ -755,6 +755,28 @@ button[class*='bg-gradient-to-r'][class*='from-gold-5']:active:not(:disabled) {
   }
 }
 
+/* The world map: cloud shadows drifting by day, fireflies after dark. */
+@keyframes world-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(1400px, 0, 0);
+  }
+}
+
+@keyframes world-firefly {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(6px, -8px, 0);
+  }
+}
+
 .hero-bob {
   animation: hero-bob 2.6s ease-in-out infinite;
 }
