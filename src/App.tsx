@@ -41,6 +41,8 @@ const XpHistoryScreen = lazy(() => import('./screens/profile/XpHistoryScreen'))
 const ProgressScreen = lazy(() => import('./components/ProgressScreen'))
 const ChronicleLogScreen = lazy(() => import('./screens/notifications/ChronicleLogScreen'))
 const WorldMapScreen = lazy(() => import('./screens/world/WorldMapScreen'))
+const ClubsScreen = lazy(() => import('./screens/clubs/ClubsScreen'))
+const ClubScreen = lazy(() => import('./screens/clubs/ClubScreen'))
 const Planner = lazy(() => import('./components/Planner'))
 const HabitTracker = lazy(() => import('./components/HabitTracker'))
 const StudyScreen = lazy(() => import('./components/StudyScreen'))
@@ -340,6 +342,8 @@ function Routes({
   if (path === '/focus') return <FocusModeScreen goals={state.goals} nowPlaying={nowPlaying} />
   if (path === '/notifications') return <ChronicleLogScreen />
   if (path === '/world') return <WorldMapScreen />
+  if (path === '/clubs' || path === '/clubs/new') return <ClubsScreen />
+  if (match('/clubs/:slug', path) || match('/clubs/:slug/:tab', path)) return <ClubScreen state={state} user={user} />
 
   if (path === '/sounds') {
     return (

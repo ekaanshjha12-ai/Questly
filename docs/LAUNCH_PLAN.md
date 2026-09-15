@@ -100,12 +100,12 @@ drops metadata, cross-age messaging protections, account export and deletion.
 |---|---|---|
 | 1 | Server progression core: ledger, levels, quests, focus sessions, achievements, inventory, notifications, migration, tests | Done |
 | 2 | Client switches to server progression; existing screens keep working | Done |
-| 3 | Design system, navigation, router, Home hub, Quest Board, Focus Mode + victory, Level Up | Done (Clubs tab arrives with phase 7) |
+| 3 | Design system, navigation, router, Home hub, Quest Board, Focus Mode + victory, Level Up | Done |
 | 4 | Character, wardrobe/inventory, Questly Card upgrade | Done |
 | 5 | Chronicle Log notifications | Done |
 | 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Done: focus duels count server-timed minutes; check-in duels kept; Sent/Completed/Failed states; VS screen with countdown; drafts kept on device |
-| 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Planned |
-| 8 | World map: regions, locks, time of day, club buildings, events | Done except club buildings (arrive with clubs): pixel overworld, 9 regions with server-judged locks, 2 weekly quests per region, monthly world events paid through the ledger, morning/day/evening/night |
+| 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Done: server-judged trials (focus, quests, streak, proof, duels), level gate, owner/officer/member roles, challenges with warning / Club XP loss / removal, Club XP ledger, leaderboard, chat, club feed and announcements, invitations, reports and admin takedown |
+| 8 | World map: regions, locks, time of day, club buildings, events | Done: pixel overworld, 9 regions with server-judged locks, 2 weekly quests per region, monthly world events paid through the ledger, morning/day/evening/night |
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Planned |
 | 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |
@@ -119,8 +119,6 @@ drops metadata, cross-age messaging protections, account export and deletion.
 
 Kept up to date as phases land.
 
-- **Clubs tab.** Navigation has five tabs until clubs exist; a sixth tab with
-  nothing behind it would be fake functionality.
 - **Main bundle** is about 525 kB (166 kB gzipped). The sound engine and
   motion library are the bulk; splitting them is part of phase 15.
 - **Reporting messages** from inside a conversation is not built yet; players

@@ -108,7 +108,13 @@ function ReportRow({ report, onDone }: { report: AdminReport; onDone: () => void
       </header>
 
       <div className="mt-2 rounded-lg border border-ink-700 bg-ink-900/70 px-3 py-2 text-sm text-slate-200">
-        {report.kind === 'post' ? (
+        {report.kind === 'club' ? (
+          <>
+            <p className="font-semibold">{String(snap.name ?? '')}</p>
+            {snap.description ? <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{String(snap.description)}</p> : null}
+            {snap.rules ? <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">Rules: {String(snap.rules)}</p> : null}
+          </>
+        ) : report.kind === 'post' ? (
           <>
             <p className="whitespace-pre-wrap break-words">{String(snap.body ?? '') || <span className="text-slate-500">(no text)</span>}</p>
             {snap.imageId ? <p className="mt-1 text-[11px] text-slate-500">Had a picture.</p> : null}

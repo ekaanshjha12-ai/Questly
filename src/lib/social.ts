@@ -14,7 +14,10 @@ export const POST_KINDS: { id: PostKind; label: string; emoji: string; prompt: s
   { id: 'update', label: 'Update', emoji: '✍️', prompt: 'What are you working on?' },
 ]
 
+const ANNOUNCEMENT = { id: 'announcement' as const, label: 'Announcement', emoji: '📣', prompt: 'What does the club need to know?' }
+
 export function kindMeta(kind: PostKind) {
+  if (kind === 'announcement') return ANNOUNCEMENT
   return POST_KINDS.find((k) => k.id === kind) ?? POST_KINDS[3]
 }
 

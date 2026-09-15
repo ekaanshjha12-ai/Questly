@@ -14,6 +14,8 @@ import { messageOf, useToast } from '../../components/ui/Toast'
 import { timeOfDay, type TimeOfDay } from '../../art/scene'
 import { REGION_POINTS, UNCHARTED_POINT, WALKWAYS, WORLD_H, WORLD_W, worldImage, type RegionId } from '../../art/world'
 import { REGION_META } from '../../data/world'
+import { clubBuilding } from '../../art/club'
+import type { WorldClub } from '../../lib/api'
 import { formatMinutes } from '../../lib/questFormat'
 
 /**
@@ -131,6 +133,7 @@ export default function WorldMapScreen() {
         locked={locked}
         regions={regions}
         events={view.events}
+        clubs={view.clubs}
         onOpen={setOpenRegion}
       />
 
@@ -171,6 +174,7 @@ export default function WorldMapScreen() {
         {region && (
           <RegionDetail
             region={region}
+            clubs={view.clubs[region.id] ?? []}
             events={view.events.filter((e) => e.region === region.id)}
             onTaken={() => {
               void load()
@@ -191,17 +195,26 @@ export default function WorldMapScreen() {
 
 /* --- the map itself ------------------------------------------------------------ */
 
+/** Where a region's club halls stand, around its centre. */
+const CLUB_PLOTS: [number, number][] = [
+  [-40, 26],
+  [40, 26],
+  [0, 46],
+]
+
 function WorldCanvas({
   time,
   locked,
   regions,
   events,
+  clubs,
   onOpen,
 }: {
   time: TimeOfDay
   locked: RegionId[]
   regions: Map<RegionId, WorldRegion>
   events: WorldEvent[]
+  clubs: Record<string, WorldClub[]>
   onOpen: (id: RegionId | 'uncharted') => void
 }) {
   const reduce = useReducedMotion()
@@ -292,6 +305,25 @@ function WorldCanvas({
                 <Walker scale={scale} tint={['#3a78e8', '#e84a5f', '#3ec1a8', '#f2c14e', '#9a6ad0'][i % 5]} lantern={time === 'night'} />
               </motion.span>
             ))}
+
+          {(Object.keys(REGION_POINTS) as RegionId[]).flatMap((id) =>
+            (clubs[id] ?? []).slice(0, CLUB_PLOTS.length).map((club, i) => {
+              const { x, y } = REGION_POINTS[id]
+              const [dx, dy] = CLUB_PLOTS[i]
+              return (
+                <Link
+                  key={club.slug}
+                  to={`/clubs/${club.slug}`}
+                  aria-label={`${club.name}, level ${club.level} club`}
+                  title={`${club.name} · Level ${club.level}`}
+                  className="absolute -translate-x-1/2 -translate-y-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                  style={{ left: (x + dx) * scale, top: (y + dy) * scale }}
+                >
+                  <img src={clubBuilding(club.tier, REGION_META[id].accent)} alt="" draggable={false} className="pixelated select-none" style={{ width: 24 * scale, height: 22 * scale }} />
+                </Link>
+              )
+            }),
+          )}
 
           {(Object.keys(REGION_POINTS) as RegionId[]).map((id) => {
             const r = regions.get(id)
@@ -415,7 +447,7 @@ function EventBanner({ event, onOpen }: { event: WorldEvent; onOpen: () => void 
 
 /* --- a region, opened ------------------------------------------------------------------ */
 
-function RegionDetail({ region, events, onTaken }: { region: WorldRegion; events: WorldEvent[]; onTaken: () => void }) {
+function RegionDetail({ region, clubs, events, onTaken }: { region: WorldRegion; clubs: WorldClub[]; events: WorldEvent[]; onTaken: () => void }) {
   const { navigate } = useRouter()
   const toast = useToast()
   const id = region.id as RegionId
@@ -546,6 +578,32 @@ function RegionDetail({ region, events, onTaken }: { region: WorldRegion; events
           <p className="mt-2 text-[11px] text-slate-500">New quests arrive here every Monday. Taken quests are due by the end of the week.</p>
         </section>
       )}
+
+      <section>
+        <h3 className="eyebrow mb-2">Clubs standing here</h3>
+        {clubs.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-ink-600 px-3 py-3 text-xs text-slate-500">No club has raised a hall here yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {clubs.map((club) => (
+              <li key={club.slug}>
+                <Link to={`/clubs/${club.slug}`} className="panel flex items-center gap-3 px-3 py-2 hover:border-ink-500">
+                  <img src={clubBuilding(club.tier, meta.accent)} alt="" className="pixelated h-11 w-12 object-contain" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-100">{club.name}</span>
+                    <span className="block text-xs text-slate-500">
+                      Level {club.level} · {club.members} member{club.members === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link to="/clubs/new" className="mt-2 inline-block text-xs font-semibold text-gold-400 hover:text-gold-300">
+          Found a club
+        </Link>
+      </section>
     </div>
   )
 }

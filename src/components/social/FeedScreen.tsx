@@ -5,6 +5,7 @@ import type { AppState } from '../../types'
 import {
   ApiError,
   createPost,
+  clubs as clubApi,
   deletePost,
   fetchFeed,
   fetchMediaAvailability,
@@ -28,6 +29,8 @@ import {
 import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
 import { useGame } from '../../game/GameProvider'
+
+const removeClubPost = (slug: string, id: string) => clubApi.removePost(slug, id)
 
 /** A draft handed over from Focus Mode's "Share progress". */
 function takeShareDraft(): ShareMoment | null {
@@ -56,6 +59,7 @@ export default function FeedScreen({
   myName,
   username,
   startSharing,
+  club,
 }: {
   state: AppState
   myName: string
@@ -63,6 +67,8 @@ export default function FeedScreen({
   username?: string
   /** Opened with the composer already up — coming straight from Focus. */
   startSharing?: boolean
+  /** A club's own feed: who may post, announce and remove posts is the server's call; this only shapes the controls. */
+  club?: { slug: string; canPost: boolean; canAnnounce: boolean; canModerate: boolean }
 }) {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [more, setMore] = useState(false)
@@ -73,18 +79,18 @@ export default function FeedScreen({
   const [media, setMedia] = useState<MediaAvailability | null>(null)
   const { snapshot, applyRewards } = useGame()
 
-  const moments = useMemo(() => (username ? [] : shareMoments(state, snapshot)), [state, snapshot, username])
+  const moments = useMemo(() => (username || club ? [] : shareMoments(state, snapshot)), [state, snapshot, username, club])
 
   const load = useCallback(async () => {
     try {
-      const res = await fetchFeed(undefined, username)
+      const res = await fetchFeed(undefined, username, club?.slug)
       setPosts(res.posts)
       setMore(res.more)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the feed.')
     }
-  }, [username])
+  }, [username, club?.slug])
 
   useEffect(() => {
     void load()
@@ -97,7 +103,7 @@ export default function FeedScreen({
     if (!posts?.length) return
     setLoadingMore(true)
     try {
-      const res = await fetchFeed(posts[posts.length - 1].createdAt, username)
+      const res = await fetchFeed(posts[posts.length - 1].createdAt, username, club?.slug)
       setPosts((p) => [...(p ?? []), ...res.posts])
       setMore(res.more)
     } finally {
@@ -107,7 +113,7 @@ export default function FeedScreen({
 
   return (
     <div className="space-y-4">
-      {!username && (
+      {!username && (!club || club.canPost) && (
         <>
           {moments.length > 0 && !composing && (
             <div className="rounded-2xl border border-gold-500/40 bg-gold-500/10 p-3">
@@ -135,6 +141,7 @@ export default function FeedScreen({
               seed={typeof composing === 'string' ? null : composing}
               myName={myName}
               media={media}
+              club={club}
               onCancel={() => setComposing(null)}
               onPosted={(post, rewards) => {
                 setPosts((p) => [post, ...(p ?? [])])
@@ -151,7 +158,7 @@ export default function FeedScreen({
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gold-500 to-ember-500 font-display font-bold text-onAccent">
                 {myName.slice(0, 1).toUpperCase()}
               </span>
-              Share a win, a lesson, your progress…
+              {club ? 'Share with the club…' : 'Share a win, a lesson, your progress…'}
             </button>
           )}
         </>
@@ -166,7 +173,7 @@ export default function FeedScreen({
 
       {posts && posts.length === 0 && (
         <p className="rounded-2xl border border-dashed border-ink-600 px-4 py-8 text-center text-sm text-slate-500">
-          {username ? 'No posts yet.' : 'Nothing here yet. Be the first to share what you are working on.'}
+          {username ? 'No posts yet.' : club ? 'The club feed is quiet. Members’ posts and announcements appear here.' : 'Nothing here yet. Be the first to share what you are working on.'}
         </p>
       )}
 
@@ -175,6 +182,7 @@ export default function FeedScreen({
           <motion.div key={post.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}>
             <PostCard
               post={post}
+              club={club}
               onOpenAuthor={(u) => setViewing(u)}
               onDeleted={() => setPosts((p) => (p ?? []).filter((x) => x.id !== post.id))}
             />
@@ -225,12 +233,14 @@ function Composer({
   seed,
   myName,
   media,
+  club,
   onCancel,
   onPosted,
 }: {
   seed: ShareMoment | null
   myName: string
   media: MediaAvailability | null
+  club?: { slug: string; canAnnounce: boolean }
   onCancel: () => void
   onPosted: (post: Post, rewards: RewardSummary | null) => void
 }) {
@@ -319,6 +329,7 @@ function Composer({
       const { post: created, rewards } = await createPost({
         kind,
         body: body.trim(),
+        ...(club ? { club: club.slug } : {}),
         ...(attachment?.type === 'photo' ? { imageBase64: attachment.base64, mediaType: attachment.mediaType } : {}),
         ...(attachment?.type === 'video' && attachment.video ? { videoId: attachment.video.id } : {}),
       })
@@ -351,7 +362,7 @@ function Composer({
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {POST_KINDS.map((k) => (
+        {[...POST_KINDS, ...(club?.canAnnounce ? [kindMeta('announcement')] : [])].map((k) => (
           <button
             key={k.id}
             type="button"
@@ -516,7 +527,17 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 
 /* --- a post ---------------------------------------------------------------- */
 
-function PostCard({ post, onOpenAuthor, onDeleted }: { post: Post; onOpenAuthor: (username: string) => void; onDeleted: () => void }) {
+function PostCard({
+  post,
+  club,
+  onOpenAuthor,
+  onDeleted,
+}: {
+  post: Post
+  club?: { slug: string; canModerate: boolean }
+  onOpenAuthor: (username: string) => void
+  onDeleted: () => void
+}) {
   const [menu, setMenu] = useState(false)
   const [reported, setReported] = useState(false)
   const meta = kindMeta(post.kind)
@@ -558,6 +579,14 @@ function PostCard({ post, onOpenAuthor, onDeleted }: { post: Post; onOpenAuthor:
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ember-400 hover:bg-ink-800"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Delete post
+                </button>
+              ) : club?.canModerate ? (
+                <button
+                  type="button"
+                  onClick={() => void removeClubPost(club.slug, post.id).then(onDeleted)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ember-400 hover:bg-ink-800"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove from club
                 </button>
               ) : (
                 <button

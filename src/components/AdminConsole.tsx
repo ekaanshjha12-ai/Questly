@@ -8,8 +8,9 @@ import {
   fetchAdminStats, type AdminStats, type AdminUserRow,
 } from '../lib/api'
 import AdminReports from './AdminReports'
+import AdminClubs from './AdminClubs'
 
-type Tab = 'overview' | 'reports' | 'users' | 'analytics' | 'ai'
+type Tab = 'overview' | 'reports' | 'users' | 'clubs' | 'analytics' | 'ai'
 
 /**
  * Single accent for every chart.
@@ -373,7 +374,7 @@ export default function AdminConsole() {
       )}
 
       <div className="mb-5 flex gap-1 rounded-xl border border-ink-600 bg-ink-850/70 p-1">
-        {(['overview', 'reports', 'users', 'analytics', 'ai'] as Tab[]).map((t) => (
+        {(['overview', 'reports', 'users', 'clubs', 'analytics', 'ai'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -389,6 +390,7 @@ export default function AdminConsole() {
       </div>
 
       {tab === 'reports' && <AdminReports onOpenCount={setOpenReports} />}
+      {tab === 'clubs' && <AdminClubs />}
 
       {tab === 'overview' && (
         <div className="space-y-5">

@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 
 export interface TabItem<T extends string> {
@@ -26,6 +26,19 @@ export default function Tabs<T extends string>({
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([])
   const layoutId = useRef(`tabs-${Math.random().toString(36).slice(2)}`).current
+
+  // A row wider than the screen scrolls, so the chosen tab is brought into view.
+  useEffect(() => {
+    const index = tabs.findIndex((t) => t.id === value)
+    const el = refs.current[index]
+    const row = el?.parentElement
+    if (!el || !row) return
+    // Sideways only: the page itself must not move.
+    const r = el.getBoundingClientRect()
+    const b = row.getBoundingClientRect()
+    if (r.left < b.left) row.scrollLeft -= b.left - r.left + 8
+    else if (r.right > b.right) row.scrollLeft += r.right - b.right + 8
+  }, [value, tabs])
 
   function onKey(e: React.KeyboardEvent, index: number) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return

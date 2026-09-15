@@ -505,7 +505,7 @@ export type ReportStatus = 'open' | 'actioned' | 'dismissed'
 
 export interface AdminReport {
   id: string
-  kind: 'player' | 'post' | 'message' | 'challenge'
+  kind: 'player' | 'post' | 'message' | 'challenge' | 'club'
   targetId: string
   status: ReportStatus
   reason: string | null
@@ -528,6 +528,20 @@ export function adminResolveReport(id: string, body: { outcome: 'dismissed' | 'a
     method: 'POST',
     body: JSON.stringify(body),
   })
+}
+
+export interface AdminClub extends ClubSummary {
+  owner: { username: string | null; email: string }
+  archivedAt: string | null
+  createdAt: string
+}
+
+export function adminClubs() {
+  return request<{ clubs: AdminClub[] }>('/api/admin/clubs')
+}
+
+export function adminSetClubArchived(id: string, archived: boolean) {
+  return request<{ clubs: AdminClub[] }>(`/api/admin/clubs/${encodeURIComponent(id)}/archive`, { method: 'POST', body: JSON.stringify({ archived }) })
 }
 
 export function fetchAudit(limit = 100) {
@@ -752,7 +766,7 @@ export function sendChallengeMessage(id: string, body: string) {
 
 /* --- feed ------------------------------------------------------------------ */
 
-export type PostKind = 'update' | 'learned' | 'achievement' | 'progress'
+export type PostKind = 'update' | 'learned' | 'achievement' | 'progress' | 'announcement'
 
 /** A video that has been uploaded, checked and converted. */
 export interface PostVideo {
@@ -775,15 +789,16 @@ export interface Post {
   mine: boolean
 }
 
-export function fetchFeed(before?: string, user?: string) {
+export function fetchFeed(before?: string, user?: string, club?: string) {
   const params = new URLSearchParams()
   if (before) params.set('before', before)
   if (user) params.set('user', user)
   const q = params.toString()
-  return request<{ posts: Post[]; more: boolean }>(`/api/feed${q ? `?${q}` : ''}`)
+  const base = club ? `/api/clubs/${encodeURIComponent(club)}/feed` : '/api/feed'
+  return request<{ posts: Post[]; more: boolean }>(`${base}${q ? `?${q}` : ''}`)
 }
 
-export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string; videoId?: string }) {
+export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string; videoId?: string; club?: string }) {
   return request<{ post: Post; rewards: RewardSummary | null }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
 }
 
@@ -1097,12 +1112,128 @@ export interface WorldEvent {
   completed: boolean
 }
 
+export interface WorldClub {
+  slug: string
+  name: string
+  level: number
+  tier: ClubTierId
+  members: number
+}
+
 export interface WorldView {
   level: number
   progress: Progress
   regions: WorldRegion[]
   events: WorldEvent[]
+  clubs: Record<string, WorldClub[]>
   rewards: RewardSummary | null
+}
+
+/* --- clubs ------------------------------------------------------------------ */
+
+export type ClubConsequence = 'warning' | 'standing' | 'removal'
+export type ClubRole = 'owner' | 'officer' | 'member'
+export type ClubTierId = 'workshop' | 'hall' | 'headquarters' | 'landmark'
+export type TrialKind = 'focus_minutes' | 'quests' | 'streak' | 'proof' | 'duels'
+
+export interface ClubSummary {
+  id: string
+  slug: string
+  name: string
+  description: string
+  region: string
+  minLevel: number
+  xp: number
+  level: number
+  tier: { id: ClubTierId; name: string }
+  reputation: number
+  members: number
+  trials: number
+  myStatus: 'active' | 'trial' | null
+}
+
+export interface ClubTrial {
+  id: string
+  kind: TrialKind
+  title: string
+  target: number
+  current: number
+  met: boolean
+}
+
+export interface ClubPlayer {
+  username: string
+  name: string
+  level: number
+  look: Look | null
+}
+
+export interface ClubDetail extends ClubSummary {
+  rules: string
+  consequence: ClubConsequence
+  createdAt: string
+  levelXp: number
+  nextLevelXp: number
+  activity: { weeklyClubXp: number }
+  owner: ClubPlayer | null
+  trialsList: ClubTrial[]
+  me: {
+    status: 'active' | 'trial' | 'removed'
+    role: ClubRole
+    clubXp: number
+    rank: string
+    warnings: number
+    trialStartedAt?: string | null
+    joinedAt?: string | null
+    removedReason?: string | null
+  } | null
+  permissions: { edit: boolean; manage: boolean; chat: boolean; post: boolean; announce: boolean }
+  playerLevel: number
+}
+
+export interface ClubLeaderboardRow {
+  position: number
+  player: ClubPlayer
+  role: ClubRole
+  clubXp: number
+  rank: string
+  warnings?: number
+  joinedAt: string | null
+  you: boolean
+}
+
+export interface ClubChallenge {
+  id: string
+  title: string
+  description: string
+  visibility: 'mandatory' | 'optional' | 'public'
+  kind: 'focus_minutes' | 'checkin'
+  target: number
+  durationDays: number
+  clubXp: number
+  startsAt: string
+  endsAt: string
+  state: 'active' | 'ended'
+  participants: number
+  completed: number
+  mine: { status: 'joined' | 'completed' | 'failed'; progress: number; checkedInToday: boolean } | null
+}
+
+export interface ClubMessage {
+  id: number
+  body: string
+  at: string
+  mine: boolean
+  author: { username: string; name: string }
+}
+
+export interface ClubInput {
+  name: string
+  description: string
+  rules: string
+  region: string
+  minLevel: number
+  consequence: ClubConsequence
 }
 
 export interface OnboardingStep {
@@ -1222,6 +1353,46 @@ export interface QuestResult {
 
 const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) })
 const id = (value: string) => encodeURIComponent(value)
+
+const clubPath = (slug: string) => `/api/clubs/${encodeURIComponent(slug)}`
+
+export const clubs = {
+  list: (options: { q?: string; region?: string; mine?: boolean } = {}) => {
+    const params = new URLSearchParams()
+    if (options.q) params.set('q', options.q)
+    if (options.region) params.set('region', options.region)
+    if (options.mine) params.set('mine', '1')
+    const q = params.toString()
+    return request<{ clubs: ClubSummary[] }>(`/api/clubs${q ? `?${q}` : ''}`)
+  },
+  create: (input: ClubInput) => request<{ club: ClubDetail }>('/api/clubs', { method: 'POST', body: JSON.stringify(input) }),
+  get: (slug: string) => request<{ club: ClubDetail }>(clubPath(slug)),
+  update: (slug: string, input: Partial<ClubInput>) => request<{ club: ClubDetail }>(clubPath(slug), { method: 'PATCH', body: JSON.stringify(input) }),
+  setTrials: (slug: string, trials: { kind: TrialKind; target: number; title?: string }[]) =>
+    request<{ club: ClubDetail }>(`${clubPath(slug)}/trials`, { method: 'PUT', body: JSON.stringify({ trials }) }),
+  close: (slug: string) => request<{ ok: true }>(`${clubPath(slug)}/close`, { method: 'POST', body: '{}' }),
+  beginTrials: (slug: string) => request<{ club: ClubDetail }>(`${clubPath(slug)}/trials/begin`, { method: 'POST', body: '{}' }),
+  completeTrials: (slug: string) => request<{ club: ClubDetail }>(`${clubPath(slug)}/trials/complete`, { method: 'POST', body: '{}' }),
+  leave: (slug: string) => request<{ club: ClubDetail }>(`${clubPath(slug)}/leave`, { method: 'POST', body: '{}' }),
+  leaderboard: (slug: string) => request<{ leaderboard: ClubLeaderboardRow[] }>(`${clubPath(slug)}/leaderboard`),
+  removeMember: (slug: string, username: string, reason?: string) =>
+    request<{ leaderboard: ClubLeaderboardRow[] }>(`${clubPath(slug)}/members/${encodeURIComponent(username)}/remove`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  setRole: (slug: string, username: string, role: 'officer' | 'member') =>
+    request<{ leaderboard: ClubLeaderboardRow[] }>(`${clubPath(slug)}/members/${encodeURIComponent(username)}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+  invite: (slug: string, username: string) => request<{ ok: true }>(`${clubPath(slug)}/invite`, { method: 'POST', body: JSON.stringify({ username }) }),
+  challenges: (slug: string) => request<{ challenges: ClubChallenge[] }>(`${clubPath(slug)}/challenges`),
+  createChallenge: (
+    slug: string,
+    input: { title: string; description: string; visibility: ClubChallenge['visibility']; kind: ClubChallenge['kind']; target: number; durationDays: number },
+  ) => request<{ challenge: ClubChallenge }>(`${clubPath(slug)}/challenges`, { method: 'POST', body: JSON.stringify(input) }),
+  joinChallenge: (slug: string, id: string) => request<{ challenge: ClubChallenge }>(`${clubPath(slug)}/challenges/${encodeURIComponent(id)}/join`, { method: 'POST', body: '{}' }),
+  checkIn: (slug: string, id: string) => request<{ challenge: ClubChallenge }>(`${clubPath(slug)}/challenges/${encodeURIComponent(id)}/checkin`, { method: 'POST', body: '{}' }),
+  messages: (slug: string, after = 0) => request<{ messages: ClubMessage[] }>(`${clubPath(slug)}/messages${after ? `?after=${after}` : ''}`),
+  sendMessage: (slug: string, body: string) => request<{ message: ClubMessage }>(`${clubPath(slug)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
+  deleteMessage: (slug: string, id: number) => request<void>(`${clubPath(slug)}/messages/${id}`, { method: 'DELETE' }),
+  removePost: (slug: string, id: string) => request<void>(`${clubPath(slug)}/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  report: (slug: string, reason: string) => request<{ ok: true }>(`${clubPath(slug)}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
+}
 
 export const game = {
   snapshot: () => request<GameSnapshot>('/api/game'),

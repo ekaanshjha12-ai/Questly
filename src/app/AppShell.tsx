@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Bell, CircleUserRound, House, LibraryBig, Swords, UsersRound, Zap, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, Bell, Castle, CircleUserRound, House, LibraryBig, Swords, UsersRound, Zap, type LucideIcon } from 'lucide-react'
 import { Link, useRouter } from './router'
 import { NowPlayingButton } from './NowPlaying'
 import { useGame } from '../game/GameProvider'
@@ -35,6 +35,7 @@ export function useNavItems({ socialBadge = 0, challengeBadge = 0 }: { socialBad
     },
     { id: 'social', to: '/social', label: 'Social', icon: UsersRound, match: (p) => p.startsWith('/social') || p.startsWith('/u/'), badge: socialBadge },
     { id: 'challenges', to: '/challenges', label: 'Challenges', icon: Zap, match: (p) => p.startsWith('/challenges') || p.startsWith('/leaderboard'), badge: challengeBadge },
+    { id: 'clubs', to: '/clubs', label: 'Clubs', icon: Castle, match: (p) => p.startsWith('/clubs') },
     { id: 'profile', to: '/profile', label: 'Profile', icon: CircleUserRound, match: (p) => p.startsWith('/profile') },
   ]
 }
@@ -61,7 +62,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
               <Link
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 text-[9.5px] font-bold uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400 ${
+                className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 text-[8.5px] font-bold uppercase tracking-[0.02em] transition-colors min-[400px]:text-[9.5px] min-[400px]:tracking-[0.06em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400 ${
                   active ? 'text-gold-400' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >

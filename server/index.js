@@ -44,6 +44,8 @@ import { rateLimit, sameOriginOnly, securityHeaders } from './security.js'
 import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { levelFromXp } from './game/levels.js'
 import { gameRoutes } from './routes/game.js'
+import { clubRoutes } from './routes/clubs.js'
+import { clubPostRights, notifyAnnouncement } from './game/clubs.js'
 import { ensureGame, stripServerOwned } from './game/migrate.js'
 import { rewardProof } from './game/quests.js'
 import { getProgressRow, startRewards, transaction } from './game/rewards.js'
@@ -2114,11 +2116,39 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
       res.status(403).json({ error: 'Finish your profile first.', code: 'profile_incomplete' })
       return
     }
-    const post = validatePost(req.body ?? {})
+    // A club post goes to that club's feed only, from a member; an announcement
+    // only from its leaders.
+    let club = null
+    const announcement = req.body?.kind === 'announcement'
+    if (typeof req.body?.club === 'string' && req.body.club) {
+      try {
+        const rights = clubPostRights(viewer.id, req.body.club)
+        if (!rights.post) {
+          res.status(403).json({ error: 'Only members can post in this club.', code: 'members_only' })
+          return
+        }
+        if (announcement && !rights.announce) {
+          res.status(403).json({ error: 'Only club leaders can post announcements.', code: 'forbidden' })
+          return
+        }
+        club = rights.club
+      } catch (err) {
+        if (err instanceof GameError) {
+          res.status(err.status).json({ error: err.message, code: err.code })
+          return
+        }
+        throw err
+      }
+    } else if (announcement) {
+      res.status(400).json({ error: 'Announcements belong to a club.' })
+      return
+    }
+    const post = validatePost(announcement ? { ...req.body, kind: 'update' } : req.body ?? {})
     if (!post.ok) {
       res.status(400).json({ error: post.error })
       return
     }
+    if (announcement) post.value.kind = 'announcement'
     const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
     if (countRecentPosts(viewer.id, hourAgo) >= 10) {
       res.status(429).json({ error: 'That is a lot of posting for one hour. Take a breather and try again soon.' })
@@ -2175,8 +2205,9 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
     }
 
     const id = randomUUID()
-    insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId, videoId })
-    track(viewer.id, 'post_created', { kind: post.value.kind, media: imageId ? 'image' : videoId ? 'video' : 'none' })
+    insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId, videoId, clubId: club?.id ?? null })
+    track(viewer.id, 'post_created', { kind: post.value.kind, media: imageId ? 'image' : videoId ? 'video' : 'none', club: Boolean(club) })
+    if (club && announcement) notifyAnnouncement(club, viewer.id, post.value.body)
     let rewards = null
     try {
       ensureGame(viewer.id)
@@ -3026,6 +3057,53 @@ app.post('/api/tour', requireAuth, throttleAi, async (req, res) => {
 
 // Progress, quests, focus sessions, inventory and the Chronicle Log.
 app.use('/api', gameRoutes({ requireAuth, rateLimit }))
+
+/**
+ * A message for a group — a club chat — screened as strictly as the strictest
+ * pair in it could need: the word filter, no contact details, and the checks
+ * that otherwise apply between an adult and an under-18.
+ */
+function screenGroupMessage(req, res, context) {
+  const message = validateMessage(req.body?.body)
+  if (!message.ok) {
+    if (/content filter/.test(message.error)) audit({ userId: req.user.id, email: req.user.email, event: 'moderation.club_chat', outcome: 'blocked', ip: req.ip, detail: context })
+    res.status(400).json({ error: message.error })
+    return null
+  }
+  const contact = contactDetails(message.value)
+  if (contact) {
+    audit({ userId: req.user.id, email: req.user.email, event: 'moderation.club_contact', outcome: 'blocked', ip: req.ip, detail: `${context}: ${contact}` })
+    res.status(400).json({ error: "To keep everyone safe, phone numbers, emails, links and other apps can't be shared in club chats.", code: 'contact_details' })
+    return null
+  }
+  const risk = riskyAcrossAges(message.value)
+  if (risk) {
+    audit({ userId: req.user.id, email: req.user.email, event: 'moderation.club_unsafe', outcome: 'blocked', ip: req.ip, detail: `${context} (${risk}): ${message.value.slice(0, 160)}` })
+    res.status(400).json({ error: "That message can't be sent in a club chat.", code: 'unsafe' })
+    return null
+  }
+  return message.value
+}
+
+// Clubs: membership, trials, challenges, chat, the club feed and club admin.
+app.use(
+  '/api',
+  clubRoutes({
+    requireAuth,
+    requireAdmin,
+    rateLimit,
+    publicLook,
+    findUserRowByUsername,
+    isBlockedEitherWay,
+    listFeed,
+    postView,
+    screenGroupMessage,
+    fileReport,
+    audit,
+    softDeleteAnyPost: adminRemovePost,
+    getPost,
+  }),
+)
 
 // Unmatched API routes must answer in JSON — the client parses every response
 // body as JSON, and Express's default HTML error page would blow up there.

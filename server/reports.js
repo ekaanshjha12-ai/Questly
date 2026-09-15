@@ -30,7 +30,7 @@ db.run(`
 db.run('CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at)')
 db.run("CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_open ON reports(reporter_id, target_kind, target_id) WHERE status = 'open'")
 
-export const REPORT_KINDS = ['player', 'post', 'message', 'challenge']
+export const REPORT_KINDS = ['player', 'post', 'message', 'challenge', 'club']
 export const REPORT_STATUSES = ['open', 'actioned', 'dismissed']
 
 /** @returns {{ id: string | null, duplicate: boolean }} */

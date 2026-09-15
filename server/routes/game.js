@@ -49,6 +49,7 @@ import { ensurePeriodicQuests, refreshGoalQuests } from '../game/slate.js'
 import { activitySeries, progressStats } from '../game/stats.js'
 import { onboardingSteps, PATHS, setFlag } from '../game/onboarding.js'
 import { settleWorldEvents, takeRegionQuest, worldView } from '../game/world.js'
+import { clubsByRegion, creditClubFocus } from '../game/clubs.js'
 
 /**
  * Routes for everything a player earns: progress, quests, focus sessions,
@@ -175,7 +176,7 @@ export function gameRoutes({ requireAuth, rateLimit }) {
 
   router.get('/world', requireAuth, read, game, handle((req) => {
     const rewards = settleWorldEvents(req.user.id)
-    return { ...worldView(req.user.id), rewards }
+    return { ...worldView(req.user.id), clubs: clubsByRegion(), rewards }
   }))
 
   router.post('/world/regions/:region/quests/:key', requireAuth, write, game, handle((req, res) => {
@@ -264,7 +265,16 @@ export function gameRoutes({ requireAuth, rateLimit }) {
   }))
   router.post('/focus/:id/pause', requireAuth, write, game, handle((req) => ({ session: pauseSession(req.user.id, req.params.id) })))
   router.post('/focus/:id/resume', requireAuth, write, game, handle((req) => ({ session: resumeSession(req.user.id, req.params.id) })))
-  router.post('/focus/:id/finish', requireAuth, write, game, handle((req) => finishSession(req.user.id, req.params.id)))
+  router.post('/focus/:id/finish', requireAuth, write, game, handle((req) => {
+    const result = finishSession(req.user.id, req.params.id)
+    // Focus a member puts in also counts for their clubs.
+    try {
+      creditClubFocus(req.user.id, result.session)
+    } catch (err) {
+      console.error('club focus credit failed', err)
+    }
+    return result
+  }))
   router.post('/focus/:id/abandon', requireAuth, write, game, handle((req) => ({ session: abandonSession(req.user.id, req.params.id) })))
   router.put('/focus/:id/plan', requireAuth, write, game, handle((req) => ({ session: updatePlan(req.user.id, req.params.id, req.body?.plan) })))
   router.delete('/focus/:id', requireAuth, write, game, handle((req, res) => {
