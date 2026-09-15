@@ -1,24 +1,12 @@
 import type { ClubChallenge, ClubConsequence, TrialKind } from '../../lib/api'
-import { REGION_META } from '../../data/world'
-import type { RegionId } from '../../art/world'
+import { REGION_META, REGION_ORDER, regionName as worldRegionName, type RegionId } from '../../data/world'
 
 /** Words for the club system, shared by every club screen. */
 
-export const REGION_NAMES: Record<RegionId, string> = {
-  focus_sanctum: 'Focus Sanctum',
-  scholars_sanctuary: "Scholar's Sanctuary",
-  builders_district: "Builder's District",
-  creators_quarter: "Creator's Quarter",
-  training_grounds: 'Training Grounds',
-  archive: 'The Archive',
-  digital_workshop: 'Digital Workshop',
-  innovation_district: 'Innovation District',
-  elite_region: 'Elite Region',
-}
+/** Region names in map order, for pickers and filters. */
+export const REGION_NAMES = Object.fromEntries(REGION_ORDER.map((id) => [id, REGION_META[id].name])) as Record<RegionId, string>
 
-export function regionName(id: string): string {
-  return REGION_NAMES[id as RegionId] ?? 'The world'
-}
+export const regionName = worldRegionName
 
 export function regionAccent(id: string): string {
   return REGION_META[id as RegionId]?.accent ?? '#3fe0a0'

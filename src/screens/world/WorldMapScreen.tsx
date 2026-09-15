@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { CalendarClock, Check, CircleHelp, Flag, Lock, Minus, Moon, Plus, Sun, Sunrise, Sunset, Swords, Trophy } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useReducedMotion } from 'framer-motion'
+import { CalendarClock, Castle, Check, Compass, Flag, Lock, Minus, Moon, Plus, Sun, Sunrise, Sunset, Swords, Trophy, type LucideIcon } from 'lucide-react'
 import { game, type WorldEvent, type WorldQuestOffer, type WorldRegion, type WorldView } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
 import { Link, useRouter } from '../../app/router'
@@ -12,19 +12,22 @@ import { ErrorState, LoadingState } from '../../components/ui/States'
 import { RarityTag } from '../../components/ui/Tag'
 import { messageOf, useToast } from '../../components/ui/Toast'
 import { timeOfDay, type TimeOfDay } from '../../art/scene'
-import { REGION_POINTS, UNCHARTED_POINT, WALKWAYS, WORLD_H, WORLD_W, worldImage, type RegionId } from '../../art/world'
-import { REGION_META } from '../../data/world'
+import { GUILD_POINT, HORIZON_POINT, NIGHT_LIGHTS, REGION_META, WORLD_H, WORLD_W, type RegionId } from '../../data/world'
 import { clubBuilding } from '../../art/club'
 import type { WorldClub } from '../../lib/api'
 import { formatMinutes } from '../../lib/questFormat'
+import worldArt from '../../assets/world/questly-world.webp'
+import worldArtSmall from '../../assets/world/questly-world-768.webp'
+import worldArtTiny from '../../assets/world/questly-world-tiny.webp'
 
 /**
- * The World Map: the Questly overworld with every region on it.
+ * The World Map: the Questly archipelago with every region on it.
  *
- * The picture is drawn for the player's time of day; the markers over it are
- * real buttons. A region opens a sheet with where it leads, the quests it
- * offers this week and any event running there — or, while it is locked,
- * exactly what opens it. Locks, quests and events all come from the server.
+ * The painting is lit for the player's time of day and locked lands lie under
+ * mist; the labels over it are real buttons. A region opens a sheet with where
+ * it leads, the quests it offers this week and any event running there — or,
+ * while it is locked, exactly what opens it. Locks, quests and events all come
+ * from the server.
  */
 
 const TIME_LABEL: Record<TimeOfDay, { label: string; icon: typeof Sun }> = {
@@ -51,7 +54,8 @@ export default function WorldMapScreen() {
   // Players can look at the world at another hour; it follows the clock otherwise.
   const [viewing, setViewing] = useState<TimeOfDay | null>(null)
   const time = viewing ?? clock
-  const [openRegion, setOpenRegion] = useState<RegionId | 'uncharted' | null>(null)
+  const [openRegion, setOpenRegion] = useState<RegionId | 'guild' | 'horizon' | null>(null)
+  const { navigate } = useRouter()
 
   const load = useCallback(async () => {
     try {
@@ -72,7 +76,6 @@ export default function WorldMapScreen() {
   }, [load])
 
   const regions = useMemo(() => new Map((view?.regions ?? []).map((r) => [r.id as RegionId, r])), [view])
-  const locked = useMemo(() => (view?.regions ?? []).filter((r) => !r.unlocked).map((r) => r.id as RegionId), [view])
   const activeEvent = view?.events.find((e) => e.state === 'active') ?? null
   const TimeIcon = TIME_LABEL[time].icon
 
@@ -85,7 +88,7 @@ export default function WorldMapScreen() {
     )
   }
 
-  const region = openRegion && openRegion !== 'uncharted' ? regions.get(openRegion) ?? null : null
+  const region = openRegion && openRegion !== 'guild' && openRegion !== 'horizon' ? regions.get(openRegion) ?? null : null
 
   return (
     <div>
@@ -130,7 +133,6 @@ export default function WorldMapScreen() {
 
       <WorldCanvas
         time={time}
-        locked={locked}
         regions={regions}
         events={view.events}
         clubs={view.clubs}
@@ -142,7 +144,7 @@ export default function WorldMapScreen() {
       <section className="mt-5" aria-label="Regions">
         <h2 className="eyebrow mb-2.5">Regions</h2>
         <ul className="grid gap-2 sm:grid-cols-2">
-          {view.regions.map((r) => {
+          {[...view.regions].sort((a, b) => regionRank(a.id) - regionRank(b.id)).map((r) => {
             const meta = REGION_META[r.id as RegionId]
             const Icon = meta.icon
             const open = r.quests.filter((q) => !q.quest).length
@@ -153,7 +155,7 @@ export default function WorldMapScreen() {
                     {r.unlocked ? <Icon className="h-5 w-5" aria-hidden /> : <Lock className="h-4 w-4 text-slate-500" aria-hidden />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-sm font-semibold ${r.unlocked ? 'text-slate-100' : 'text-slate-400'}`}>{r.name}</span>
+                    <span className={`block truncate text-sm font-semibold ${r.unlocked ? 'text-slate-100' : 'text-slate-400'}`}>{meta.name}</span>
                     <span className="block truncate text-xs text-slate-500">
                       {r.unlocked ? (open ? `${open} quest${open === 1 ? '' : 's'} to take this week` : meta.tagline) : r.requirements.filter((q) => !q.met).map((q) => q.label).join(' · ')}
                     </span>
@@ -168,7 +170,7 @@ export default function WorldMapScreen() {
       <Sheet
         open={Boolean(region)}
         onClose={() => setOpenRegion(null)}
-        title={region?.name}
+        title={region ? REGION_META[region.id as RegionId].name : undefined}
         subtitle={region ? REGION_META[region.id as RegionId].tagline : undefined}
       >
         {region && (
@@ -184,9 +186,24 @@ export default function WorldMapScreen() {
         )}
       </Sheet>
 
-      <Sheet open={openRegion === 'uncharted'} onClose={() => setOpenRegion(null)} title="The Uncharted Isles" subtitle="Beyond the mist" size="sm">
+      <Sheet open={openRegion === 'guild'} onClose={() => setOpenRegion(null)} title="The Grand Guild" subtitle="All paths meet here" size="sm">
         <p className="text-sm leading-relaxed text-slate-300">
-          Nobody has mapped these islands yet. New regions open here as Questly grows — when one does, it will appear on your map and in the Chronicle Log.
+          The great hall at the heart of Questly. Every road on the map leads here: quests are handed out, rivals are matched, and clubs gather before raising halls of their own across the world.
+        </p>
+        <div className="mt-4 grid gap-2">
+          <Button onClick={() => navigate('/quests')}>Open the Quest Board</Button>
+          <Button variant="secondary" onClick={() => navigate('/clubs')}>
+            Find a club
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/challenges')}>
+            Duels
+          </Button>
+        </div>
+      </Sheet>
+
+      <Sheet open={openRegion === 'horizon'} onClose={() => setOpenRegion(null)} title="Horizon Islands" subtitle="Beyond the known map" size="sm">
+        <p className="text-sm leading-relaxed text-slate-300">
+          Nobody has charted these islands yet. They are where new lands will open as the world of Questly grows.
         </p>
       </Sheet>
     </div>
@@ -195,43 +212,81 @@ export default function WorldMapScreen() {
 
 /* --- the map itself ------------------------------------------------------------ */
 
-/** Where a region's club halls stand, around its centre. */
+const MAX_SCALE = 1.25
+const REGION_RANK = new Map((Object.keys(REGION_META) as RegionId[]).map((id, i) => [id as string, i]))
+const regionRank = (id: string) => REGION_RANK.get(id) ?? 99
+
+/** Where a region's club halls stand, around its marker, in map pixels. */
 const CLUB_PLOTS: [number, number][] = [
-  [-40, 26],
-  [40, 26],
-  [0, 46],
+  [-90, 48],
+  [90, 48],
+  [0, 92],
 ]
+
+/** How the painting is lit at each time of day. */
+const LIGHTING: Record<TimeOfDay, { filter: string; wash: string | null; blend: 'soft-light' | 'multiply' }> = {
+  morning: { filter: 'saturate(1.06) sepia(0.12) brightness(1.03)', wash: 'linear-gradient(160deg, rgba(255,196,130,0.34), transparent 60%)', blend: 'soft-light' },
+  day: { filter: 'none', wash: null, blend: 'soft-light' },
+  evening: { filter: 'saturate(1.12) sepia(0.26) brightness(0.84) hue-rotate(-6deg)', wash: 'linear-gradient(180deg, rgba(255,128,64,0.34), rgba(120,50,150,0.36))', blend: 'soft-light' },
+  night: { filter: 'brightness(0.46) saturate(0.72) contrast(1.08) hue-rotate(8deg)', wash: 'radial-gradient(ellipse at 50% 45%, rgba(40,70,160,0.10), rgba(4,8,30,0.45))', blend: 'multiply' },
+}
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
 
 function WorldCanvas({
   time,
-  locked,
   regions,
   events,
   clubs,
   onOpen,
 }: {
   time: TimeOfDay
-  locked: RegionId[]
   regions: Map<RegionId, WorldRegion>
   events: WorldEvent[]
   clubs: Record<string, WorldClub[]>
-  onOpen: (id: RegionId | 'uncharted') => void
+  onOpen: (id: RegionId | 'guild' | 'horizon') => void
 }) {
   const reduce = useReducedMotion()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(2)
-  const image = useMemo(() => worldImage(time, locked), [time, locked])
+  const [scale, setScale] = useState<number | null>(null)
+  const [minScale, setMinScale] = useState(0.3)
+  const [loaded, setLoaded] = useState(false)
+  // The map point to keep at the centre of the view after the next zoom.
+  const pendingCentre = useRef<{ x: number; y: number } | null>(GUILD_POINT)
   const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null)
 
-  // Open on the heart of the world.
-  useEffect(() => {
+  // The smallest zoom still fills the frame; the first one shows a good piece of the world.
+  useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const { x, y } = REGION_POINTS.focus_sanctum
-    el.scrollLeft = Math.max(0, x * scale - el.clientWidth / 2)
-    el.scrollTop = Math.max(0, y * scale - el.clientHeight / 2)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const measure = () => {
+      const min = Math.max(el.clientWidth / WORLD_W, el.clientHeight / WORLD_H)
+      setMinScale(min)
+      setScale((s) => (s === null ? clamp(el.clientWidth < 640 ? 0.62 : 0.8, min, MAX_SCALE) : clamp(s, min, MAX_SCALE)))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    const centre = pendingCentre.current
+    if (!el || !centre || scale === null) return
+    el.scrollLeft = centre.x * scale - el.clientWidth / 2
+    el.scrollTop = centre.y * scale - el.clientHeight / 2
+    pendingCentre.current = null
   }, [scale])
+
+  function zoomBy(step: number) {
+    const el = scrollRef.current
+    if (!el || scale === null) return
+    const next = clamp(Math.round((scale + step) * 100) / 100, minScale, MAX_SCALE)
+    if (next === scale) return
+    pendingCentre.current = { x: (el.scrollLeft + el.clientWidth / 2) / scale, y: (el.scrollTop + el.clientHeight / 2) / scale }
+    setScale(next)
+  }
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if (e.pointerType !== 'mouse' || !scrollRef.current) return
@@ -250,14 +305,18 @@ function WorldCanvas({
     window.setTimeout(() => (drag.current = null), 0)
   }
 
+  const s = scale ?? 0.62
   const eventRegions = new Set(events.filter((e) => e.state === 'active').map((e) => e.region))
-  const walkers = time === 'night' ? 1 : time === 'evening' ? 3 : WALKWAYS.length
+  const lighting = LIGHTING[time]
+  const px = (n: number) => n * s
+  // Halls stay big enough to see when zoomed out, and do not balloon when zoomed in.
+  const hall = Math.round(clamp(s * 60, 30, 56))
 
   return (
     <div className="relative">
       <div
         ref={scrollRef}
-        className="no-scrollbar relative h-[62dvh] max-h-[640px] min-h-[320px] cursor-grab overflow-auto rounded-2xl border border-ink-700 bg-[#1b2a1c] active:cursor-grabbing"
+        className="no-scrollbar relative isolate h-[62dvh] max-h-[680px] min-h-[340px] cursor-grab overflow-auto rounded-2xl border border-ink-700 bg-[#123a63] active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -269,46 +328,68 @@ function WorldCanvas({
           }
         }}
       >
-        <div className="relative" style={{ width: WORLD_W * scale, height: WORLD_H * scale }}>
-          <img src={image} alt="The Questly world map" draggable={false} className="pixelated absolute inset-0 h-full w-full select-none" />
+        {/* Clipped, so mist and glows at the edges never widen the scrollable area past the painting. */}
+        <div className="relative overflow-hidden" style={{ width: px(WORLD_W), height: px(WORLD_H), visibility: scale === null ? 'hidden' : undefined }}>
+          {/* A few hundred bytes of blur hold the place while the painting arrives. */}
+          <div aria-hidden className="absolute inset-0 scale-105 bg-cover blur-md" style={{ backgroundImage: `url(${worldArtTiny})`, filter: lighting.filter === 'none' ? undefined : lighting.filter }} />
+          <img
+            src={worldArt}
+            srcSet={`${worldArtSmall} 768w, ${worldArt} 1536w`}
+            sizes={`${Math.round(px(WORLD_W))}px`}
+            alt="The Questly world: forests, snowy peaks, a volcano, a desert of pyramids, farmland, a harbour city, old ruins and islands around a great central guild hall"
+            draggable={false}
+            decoding="async"
+            onLoad={() => setLoaded(true)}
+            className={`absolute inset-0 h-full w-full select-none transition-[opacity,filter] duration-700 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+            style={{ filter: lighting.filter }}
+          />
+          {lighting.wash && <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: lighting.wash, mixBlendMode: lighting.blend }} />}
 
-          {/* Cloud shadows by day, fireflies by night. */}
+          {/* Cloud shadows by day; lanterns, lighthouses and forge fires by night. */}
           {!reduce && (time === 'day' || time === 'morning') && (
             <>
-              <span className="pointer-events-none absolute left-[-20%] top-[30%] h-24 w-56 rounded-full bg-black/10 blur-2xl [animation:world-drift_80s_linear_infinite]" />
-              <span className="pointer-events-none absolute left-[-30%] top-[65%] h-20 w-48 rounded-full bg-black/10 blur-2xl [animation:world-drift_110s_linear_infinite] [animation-delay:-40s]" />
+              <span className="pointer-events-none absolute left-[-20%] top-[28%] h-40 w-96 rounded-full bg-black/15 blur-3xl [animation:world-drift_90s_linear_infinite]" />
+              <span className="pointer-events-none absolute left-[-35%] top-[64%] h-32 w-80 rounded-full bg-black/15 blur-3xl [animation:world-drift_120s_linear_infinite] [animation-delay:-50s]" />
             </>
           )}
-          {!reduce &&
-            time === 'night' &&
-            [
-              [30, 150], [60, 175], [300, 140], [320, 230], [190, 330], [340, 340], [455, 150], [20, 80], [200, 80], [120, 250],
-            ].map(([x, y], i) => (
+          {(time === 'night' || time === 'evening') &&
+            NIGHT_LIGHTS.map(([x, y, r, rgb], i) => (
               <span
                 key={i}
-                className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#d8ff8a] shadow-[0_0_8px_3px_rgba(216,255,138,0.6)] [animation:world-firefly_4s_ease-in-out_infinite]"
-                style={{ left: x * scale, top: y * scale, animationDelay: `${i * 0.43}s` }}
+                aria-hidden
+                className={`pointer-events-none absolute rounded-full ${reduce ? '' : '[animation:world-flicker_5s_ease-in-out_infinite]'}`}
+                style={{
+                  left: px(x - r),
+                  top: px(y - r),
+                  width: px(r * 2),
+                  height: px(r * 2),
+                  background: `radial-gradient(circle, rgba(${rgb},${time === 'night' ? 0.9 : 0.45}) 0%, rgba(${rgb},0.25) 38%, transparent 70%)`,
+                  mixBlendMode: 'screen',
+                  animationDelay: `${(i % 7) * -0.7}s`,
+                }}
               />
             ))}
 
-          {!reduce &&
-            WALKWAYS.slice(0, walkers).map(([x0, y0, x1, y1], i) => (
-              <motion.span
-                key={i}
-                aria-hidden
-                className="pointer-events-none absolute"
-                style={{ left: 0, top: 0 }}
-                initial={{ x: x0 * scale, y: y0 * scale }}
-                animate={{ x: [x0 * scale, x1 * scale], y: [y0 * scale, y1 * scale] }}
-                transition={{ duration: Math.hypot(x1 - x0, y1 - y0) / 4, repeat: Infinity, repeatType: 'reverse', ease: 'linear', delay: i * 1.3 }}
-              >
-                <Walker scale={scale} tint={['#3a78e8', '#e84a5f', '#3ec1a8', '#f2c14e', '#9a6ad0'][i % 5]} lantern={time === 'night'} />
-              </motion.span>
-            ))}
+          {/* Mist over lands that are still locked. */}
+          {(Object.keys(REGION_META) as RegionId[]).map((id) => {
+            const r = regions.get(id)
+            if (!r || r.unlocked) return null
+            const { cx, cy, rx, ry } = REGION_META[id].area
+            const mask = 'radial-gradient(closest-side, #000 58%, transparent 100%)'
+            return (
+              <div key={`fog-${id}`} aria-hidden className="pointer-events-none absolute" style={{ left: px(cx - rx), top: px(cy - ry), width: px(rx * 2), height: px(ry * 2) }}>
+                <div className="absolute inset-0" style={{ backdropFilter: 'grayscale(0.85) brightness(0.62) blur(2px)', WebkitBackdropFilter: 'grayscale(0.85) brightness(0.62) blur(2px)', maskImage: mask, WebkitMaskImage: mask }} />
+                <div
+                  className={`absolute inset-0 ${reduce ? '' : '[animation:world-mist_14s_ease-in-out_infinite]'}`}
+                  style={{ background: 'radial-gradient(closest-side, rgba(214,222,255,0.30), rgba(214,222,255,0.12) 60%, transparent)', maskImage: mask, WebkitMaskImage: mask }}
+                />
+              </div>
+            )
+          })}
 
-          {(Object.keys(REGION_POINTS) as RegionId[]).flatMap((id) =>
+          {(Object.keys(REGION_META) as RegionId[]).flatMap((id) =>
             (clubs[id] ?? []).slice(0, CLUB_PLOTS.length).map((club, i) => {
-              const { x, y } = REGION_POINTS[id]
+              const { x, y } = REGION_META[id].point
               const [dx, dy] = CLUB_PLOTS[i]
               return (
                 <Link
@@ -316,48 +397,61 @@ function WorldCanvas({
                   to={`/clubs/${club.slug}`}
                   aria-label={`${club.name}, level ${club.level} club`}
                   title={`${club.name} · Level ${club.level}`}
-                  className="absolute -translate-x-1/2 -translate-y-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-                  style={{ left: (x + dx) * scale, top: (y + dy) * scale }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_3px_4px_rgba(0,0,0,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                  style={{ left: px(x + dx), top: px(y + dy) }}
                 >
-                  <img src={clubBuilding(club.tier, REGION_META[id].accent)} alt="" draggable={false} className="pixelated select-none" style={{ width: 24 * scale, height: 22 * scale }} />
+                  <img src={clubBuilding(club.tier, REGION_META[id].accent)} alt="" draggable={false} className="pixelated select-none" style={{ width: hall, height: Math.round(hall * 0.92) }} />
                 </Link>
               )
             }),
           )}
 
-          {(Object.keys(REGION_POINTS) as RegionId[]).map((id) => {
+          <PlaceMarker
+            x={px(GUILD_POINT.x)}
+            y={px(GUILD_POINT.y)}
+            name="The Grand Guild"
+            icon={Castle}
+            accent="#f1c75b"
+            prominent
+            ariaLabel="The Grand Guild: quest board, clubs and duels"
+            onOpen={() => onOpen('guild')}
+          />
+
+          {(Object.keys(REGION_META) as RegionId[]).map((id) => {
             const r = regions.get(id)
             if (!r) return null
+            const meta = REGION_META[id]
+            const openQuests = r.quests.filter((q) => !q.quest).length
+            const needLevel = r.requirements.find((q) => q.type === 'level' && !q.met)
+            const event = eventRegions.has(id)
             return (
-              <RegionMarker
+              <PlaceMarker
                 key={id}
-                region={r}
-                scale={scale}
-                event={eventRegions.has(id)}
+                x={px(meta.point.x)}
+                y={px(meta.point.y)}
+                name={meta.name}
+                icon={meta.icon}
+                accent={meta.accent}
+                locked={!r.unlocked}
+                lockLabel={!r.unlocked ? (needLevel ? `Level ${needLevel.target}` : 'Sealed') : undefined}
+                quests={r.unlocked ? openQuests : 0}
+                event={event}
+                ariaLabel={`${meta.name}${r.unlocked ? '' : ', locked'}${openQuests && r.unlocked ? `, ${openQuests} quests to take` : ''}${event ? ', event running' : ''}`}
                 onOpen={() => onOpen(id)}
               />
             )
           })}
 
-          <button
-            type="button"
-            onClick={() => onOpen('uncharted')}
-            className="absolute flex -translate-x-1/2 -translate-y-full flex-col items-center focus-visible:outline-none"
-            style={{ left: UNCHARTED_POINT.x * scale, top: (UNCHARTED_POINT.y - 8) * scale }}
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-400/50 bg-ink-950/80 text-slate-300">
-              <CircleHelp className="h-4 w-4" aria-hidden />
-            </span>
-            <span className="mt-1 whitespace-nowrap rounded bg-ink-950/80 px-1.5 py-0.5 font-pixel text-[9px] uppercase tracking-wider text-slate-300">Uncharted</span>
-          </button>
+          <PlaceMarker x={px(HORIZON_POINT.x)} y={px(HORIZON_POINT.y)} name="Horizon Islands" icon={Compass} accent="#9fb4cc" muted ariaLabel="Horizon Islands, not yet charted" onOpen={() => onOpen('horizon')} />
         </div>
       </div>
 
-      <div className="absolute right-2 top-2 flex flex-col gap-1">
-        <button type="button" onClick={() => setScale((s) => Math.min(3, s + 0.5))} aria-label="Zoom in" className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-600 bg-ink-950/85 text-slate-200 hover:text-white">
+      {/* Above the map, so a place label scrolled underneath never takes the tap. */}
+      <div className="absolute right-2 top-2 z-20 flex flex-col gap-1">
+        <button type="button" onClick={() => zoomBy(0.15)} disabled={scale !== null && scale >= MAX_SCALE} aria-label="Zoom in" className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-600 bg-ink-950/85 text-slate-200 hover:text-white disabled:cursor-default disabled:text-slate-600 disabled:hover:text-slate-600">
           <Plus className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => setScale((s) => Math.max(1, s - 0.5))} aria-label="Zoom out" className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-600 bg-ink-950/85 text-slate-200 hover:text-white">
+        <button type="button" onClick={() => zoomBy(-0.15)} disabled={scale !== null && scale <= minScale + 0.001} aria-label="Zoom out" className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-600 bg-ink-950/85 text-slate-200 hover:text-white disabled:cursor-default disabled:text-slate-600 disabled:hover:text-slate-600">
           <Minus className="h-4 w-4" />
         </button>
       </div>
@@ -365,54 +459,74 @@ function WorldCanvas({
   )
 }
 
-function Walker({ scale, tint, lantern }: { scale: number; tint: string; lantern: boolean }) {
-  const px = Math.max(2, Math.round(scale))
-  return (
-    <span className="relative block" style={{ width: px, height: px * 4, transform: `translate(-50%, -100%)` }}>
-      <span className="absolute left-0 top-0" style={{ width: px, height: px, background: '#f0c6a3' }} />
-      <span className="absolute left-0" style={{ top: px, width: px, height: px * 2, background: tint }} />
-      <span className="absolute left-0" style={{ top: px * 3, width: px, height: px, background: '#3a2a1c' }} />
-      {lantern && <span className="absolute -right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ffc45a] shadow-[0_0_10px_4px_rgba(255,196,90,0.55)]" />}
-    </span>
-  )
-}
-
-function RegionMarker({ region, scale, event, onOpen }: { region: WorldRegion; scale: number; event: boolean; onOpen: () => void }) {
-  const id = region.id as RegionId
-  const meta = REGION_META[id]
-  const { x, y } = REGION_POINTS[id]
-  const Icon = meta.icon
-  const openQuests = region.quests.filter((q) => !q.quest).length
-  const needLevel = region.requirements.find((r) => r.type === 'level' && !r.met)
+/**
+ * A place on the map: a label pinned to its landmark. Its size does not follow
+ * the zoom, so names stay readable however far out the map is.
+ */
+function PlaceMarker({
+  x,
+  y,
+  name,
+  icon: Icon,
+  accent,
+  locked = false,
+  lockLabel,
+  quests = 0,
+  event = false,
+  prominent = false,
+  muted = false,
+  ariaLabel,
+  onOpen,
+}: {
+  x: number
+  y: number
+  name: string
+  icon: LucideIcon
+  accent: string
+  locked?: boolean
+  lockLabel?: string
+  quests?: number
+  event?: boolean
+  prominent?: boolean
+  muted?: boolean
+  ariaLabel: string
+  onOpen: () => void
+}) {
+  const border = locked ? 'rgba(148,163,184,0.5)' : muted ? 'rgba(159,180,204,0.45)' : `${accent}b3`
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`${region.name}${region.unlocked ? '' : ', locked'}${openQuests ? `, ${openQuests} quests to take` : ''}${event ? ', event running' : ''}`}
-      className="group absolute flex -translate-x-1/2 flex-col items-center focus-visible:outline-none"
-      style={{ left: x * scale, top: (y + 18) * scale }}
+      aria-label={ariaLabel}
+      className="group absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center focus-visible:outline-none"
+      style={{ left: x, top: y }}
     >
-      <span className="relative">
+      <span
+        className={`relative flex items-center gap-1.5 rounded-full border bg-[#07101d]/80 py-1 pl-1 pr-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.5)] backdrop-blur-[3px] transition-transform duration-150 group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-gold-400 ${prominent ? 'border-2 py-1.5 pl-1.5 pr-3' : ''}`}
+        style={{ borderColor: border }}
+      >
         <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 bg-ink-950/85 shadow-lg transition-transform group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-gold-400 ${region.unlocked ? '' : 'border-slate-500/60'}`}
-          style={region.unlocked ? { borderColor: meta.accent, color: meta.accent } : undefined}
+          className={`flex items-center justify-center rounded-full ${prominent ? 'h-7 w-7' : 'h-6 w-6'}`}
+          style={{ background: locked ? 'rgba(71,85,105,0.65)' : `${accent}2e`, color: locked ? '#cbd5e1' : accent }}
         >
-          {region.unlocked ? <Icon className="h-4 w-4" aria-hidden /> : <Lock className="h-4 w-4 text-slate-300" aria-hidden />}
+          {locked ? <Lock className="h-3.5 w-3.5" aria-hidden /> : <Icon className={prominent ? 'h-4 w-4' : 'h-3.5 w-3.5'} aria-hidden />}
         </span>
-        {region.unlocked && openQuests > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-reward-400 font-pixel text-[9px] font-bold text-[#281a04] ring-2 ring-ink-950">!</span>
+        <span className={`whitespace-nowrap font-display font-bold tracking-wide ${prominent ? 'text-[13px] text-[#fbe3a1]' : 'text-[12px]'} ${locked || muted ? 'text-slate-300' : prominent ? '' : 'text-white'}`}>{name}</span>
+        {quests > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-reward-400 px-1 text-[9px] font-bold tabular-nums text-[#281a04] ring-2 ring-[#07101d]">
+            {quests}
+          </span>
         )}
         {event && (
-          <span className="absolute -left-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#7a2fd0] text-white ring-2 ring-ink-950">
+          <span className="absolute -left-1.5 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#7a2fd0] text-white ring-2 ring-[#07101d]">
             <Flag className="h-3 w-3" aria-hidden />
           </span>
         )}
       </span>
-      <span className="mt-1 whitespace-nowrap rounded bg-ink-950/85 px-1.5 py-0.5 font-pixel text-[9px] uppercase tracking-wider text-slate-100 shadow">
-        {region.name}
-      </span>
-      {!region.unlocked && needLevel && (
-        <span className="mt-0.5 whitespace-nowrap rounded bg-[#2a1b4a]/90 px-1.5 py-0.5 font-pixel text-[8px] uppercase tracking-wider text-[#d8c2ff]">LV {needLevel.target}</span>
+      {lockLabel && (
+        <span className="mt-1 whitespace-nowrap rounded-full border border-[#9a6ae8]/40 bg-[#1e1336]/90 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#d8c2ff]">
+          {lockLabel}
+        </span>
       )}
     </button>
   )

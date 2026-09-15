@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States
 import { messageOf, useToast } from '../../components/ui/Toast'
 import { clubBuilding } from '../../art/club'
 import { CONSEQUENCE_LABEL, REGION_NAMES, regionAccent, regionName } from './clubFormat'
-import type { RegionId } from '../../art/world'
+import type { RegionId } from '../../data/world'
 
 /**
  * Clubs: the ones you belong to, and the rest of the world's to discover —

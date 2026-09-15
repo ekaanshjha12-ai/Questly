@@ -33,7 +33,7 @@ import {
   regionName,
   timeLeft,
 } from './clubFormat'
-import type { RegionId } from '../../art/world'
+import type { RegionId } from '../../data/world'
 
 /**
  * One club: its hall, its standing, the way in, and — for members — its feed,

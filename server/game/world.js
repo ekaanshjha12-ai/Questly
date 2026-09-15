@@ -21,21 +21,24 @@ import { getProgressRow, progressView, startRewards, transaction } from './rewar
 /* --- regions -------------------------------------------------------------- */
 
 /**
+ * Ids are stable — quests and clubs refer to them — while the names are the
+ * places on the painted map.
+ *
  * Requirement kinds:
  *   level        reach a level
  *   elite_quests completed quests of epic or legendary rarity
  *   first_quests the four first quests every new player is given
  */
 export const REGIONS = [
-  { id: 'focus_sanctum', name: 'Focus Sanctum', requires: [] },
-  { id: 'scholars_sanctuary', name: "Scholar's Sanctuary", requires: [] },
-  { id: 'builders_district', name: "Builder's District", requires: [] },
-  { id: 'creators_quarter', name: "Creator's Quarter", requires: [] },
-  { id: 'training_grounds', name: 'Training Grounds', requires: [] },
-  { id: 'archive', name: 'The Archive', requires: [] },
-  { id: 'digital_workshop', name: 'Digital Workshop', requires: [{ type: 'level', level: 3 }] },
-  { id: 'innovation_district', name: 'Innovation District', requires: [{ type: 'level', level: 8 }, { type: 'first_quests' }] },
-  { id: 'elite_region', name: 'Elite Region', requires: [{ type: 'level', level: 15 }, { type: 'elite_quests', count: 3 }] },
+  { id: 'focus_sanctum', name: 'Verdant Woods', requires: [] },
+  { id: 'scholars_sanctuary', name: 'Mistveil Swamp', requires: [] },
+  { id: 'builders_district', name: 'Golden Plains', requires: [] },
+  { id: 'creators_quarter', name: 'Coastal Crown', requires: [] },
+  { id: 'training_grounds', name: 'Frostpeak', requires: [] },
+  { id: 'archive', name: 'The Lost Ruins', requires: [] },
+  { id: 'digital_workshop', name: 'Emberlands', requires: [{ type: 'level', level: 3 }] },
+  { id: 'innovation_district', name: 'Sunscorch', requires: [{ type: 'level', level: 8 }, { type: 'first_quests' }] },
+  { id: 'elite_region', name: 'The Summit', requires: [{ type: 'level', level: 15 }, { type: 'elite_quests', count: 3 }] },
 ]
 
 const REGION_IDS = new Set(REGIONS.map((r) => r.id))
