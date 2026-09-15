@@ -20,8 +20,10 @@ export default function AuthScreen({ onAuthed }: Props) {
   const [password, setPassword] = useState('')
   const [inviteRequired, setInviteRequired] = useState(false)
   const [recoveryInput, setRecoveryInput] = useState('')
-  /** Held after signup so the code can be shown once before entering the app. */
-  const [issuedCode, setIssuedCode] = useState<{ code: string; user: AuthUser } | null>(null)
+  /** Held after signup, or after a reset spends the old code, so the new code can be
+   * shown once. After signup `user` is set and the app follows; after a reset it is
+   * null and sign-in follows. */
+  const [issuedCode, setIssuedCode] = useState<{ code: string; user: AuthUser | null } | null>(null)
   /** Then the card, before the app itself. */
   const [revealFor, setRevealFor] = useState<AuthUser | null>(null)
   const [copied, setCopied] = useState(false)
@@ -56,11 +58,13 @@ export default function AuthScreen({ onAuthed }: Props) {
     setBusy(true)
     try {
       if (mode === 'reset') {
-        await resetPassword(email, recoveryInput, password)
+        const { recoveryCode } = await resetPassword(email, recoveryInput, password)
         setNotice('Password changed. Sign in with your new one.')
         setMode('login')
         setRecoveryInput('')
         setPassword('')
+        setCopied(false)
+        setIssuedCode({ code: recoveryCode, user: null })
         return
       }
       const { user } = await login(email, password, mfaCode || undefined)
@@ -94,11 +98,15 @@ export default function AuthScreen({ onAuthed }: Props) {
         >
           <div className="mb-3 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-gold-400" />
-            <h1 className="font-display text-lg font-bold text-gold-300">Save your recovery code</h1>
+            <h1 className="font-display text-lg font-bold text-gold-300">
+              {issuedCode.user ? 'Save your recovery code' : 'Save your new recovery code'}
+            </h1>
           </div>
           <p className="text-xs leading-relaxed text-slate-400">
-            This is the only way to get back in if you forget your password. It is shown once and cannot
-            be retrieved later — screenshot it or write it down now.
+            {issuedCode.user
+              ? 'This is the only way to get back in if you forget your password.'
+              : 'The code you just used has stopped working. This one replaces it, and is now the only way back in if you forget your password again.'}{' '}
+            It is shown once and cannot be retrieved later — screenshot it or write it down now.
           </p>
 
           <p className="my-4 select-all rounded-xl border border-ink-600 bg-ink-950 px-3 py-3 text-center font-mono text-base tracking-widest text-slate-100">
@@ -121,10 +129,13 @@ export default function AuthScreen({ onAuthed }: Props) {
 
           <button
             type="button"
-            onClick={() => setRevealFor(issuedCode.user)}
+            onClick={() => {
+              if (issuedCode.user) setRevealFor(issuedCode.user)
+              else setIssuedCode(null)
+            }}
             className="mt-3 w-full rounded-xl bg-gradient-to-r from-gold-500 to-ember-500 py-3 font-semibold text-onAccent hover:opacity-90"
           >
-            I've saved it — continue
+            {issuedCode.user ? "I've saved it — continue" : "I've saved it — sign in"}
           </button>
         </motion.div>
       </div>

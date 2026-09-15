@@ -140,8 +140,9 @@ export function avatarUrl(version: string | null | undefined): string | null {
   return version ? `/api/me/avatar?v=${encodeURIComponent(version)}` : null
 }
 
+/** Spends the recovery code and answers with its replacement, shown once. */
 export function resetPassword(email: string, code: string, password: string) {
-  return request<{ ok: true }>('/api/auth/reset', {
+  return request<{ ok: true; recoveryCode: string }>('/api/auth/reset', {
     method: 'POST',
     body: JSON.stringify({ email, code, password }),
   })

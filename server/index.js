@@ -609,15 +609,18 @@ app.post('/api/auth/reset', throttleAuth, async (req, res) => {
       return
     }
     if (refuseIfLocked(email, res)) return
-    const ok = await resetWithCode(email, code, password)
-    if (!ok) {
+    const reset = await resetWithCode(email, code, password)
+    if (!reset) {
       recordLoginFailure(email)
+      audit({ email, event: 'auth.reset', outcome: 'bad_code', ip: req.ip })
       // Deliberately vague: this must not reveal which accounts exist.
       res.status(401).json({ error: 'That email and recovery code do not match.' })
       return
     }
     clearLoginFailures(email)
-    res.json({ ok: true })
+    audit({ email, event: 'auth.reset', outcome: 'success', ip: req.ip })
+    // The old code is spent. This one is readable only now, like the first.
+    res.json({ ok: true, recoveryCode: reset.recoveryCode })
   } catch (err) {
     console.error('password reset failed', err)
     res.status(500).json({ error: 'Could not reset the password.' })
@@ -3544,6 +3547,23 @@ if (hasBuild) {
     res.sendFile(join(distDir, 'index.html'))
   })
 }
+
+/**
+ * The last word on anything that went wrong: logged here, never shown.
+ *
+ * Express's own error page prints the stack, server file paths included, whenever
+ * NODE_ENV is anything but "production" — one misconfigured deploy away from
+ * handing that to anyone who sends a malformed URL — and an HTML page is no use
+ * to a client that reads every API answer as JSON.
+ */
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err)
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500
+  if (status >= 500) console.error('request failed', req.method, req.path, err)
+  const message = status >= 500 ? 'Something went wrong.' : 'That request could not be read.'
+  if (req.path.startsWith('/api/')) res.status(status).json({ error: message })
+  else res.status(status).type('text/plain').send(message)
+})
 
 app.listen(PORT, () => {
   const mode = IS_PRODUCTION ? 'production' : 'development'

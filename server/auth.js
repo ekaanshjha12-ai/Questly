@@ -151,6 +151,12 @@ export async function completeAdminSetup(userId, password) {
  * possible. A code the user saves at signup gives genuine self-service recovery
  * with no infrastructure — at the cost that losing the code means losing the
  * account, which is the same trade-off password managers make.
+ *
+ * A code opens the account once. Using it issues a replacement, returned here
+ * and never stored in the clear, so a code someone once glimpsed stops being a
+ * permanent way in the moment the owner recovers the account.
+ *
+ * @returns {Promise<{ recoveryCode: string } | null>}
  */
 export async function resetWithCode(email, code, newPassword) {
   const user = findUserByEmail(email)
@@ -160,16 +166,26 @@ export async function resetWithCode(email, code, newPassword) {
     // Hash regardless so a missing account cannot be spotted by how fast this
     // returns.
     await hashPassword(normalized || 'x', 'decoy-salt')
-    return false
+    return null
   }
 
   const candidate = await hashPassword(normalized, user.recovery_salt)
-  if (!safeEqualHex(candidate, user.recovery_hash)) return false
+  if (!safeEqualHex(candidate, user.recovery_hash)) return null
 
+  // Everything slow is done before anything is written, and the writes happen
+  // only if the code was not used by another request in the meantime, so one
+  // code can never be spent twice.
   const salt = randomBytes(16).toString('hex')
-  updatePassword(user.id, await hashPassword(newPassword, salt), salt)
+  const passwordHash = await hashPassword(newPassword, salt)
+  const recoveryCode = makeRecoveryCode()
+  const recoverySalt = randomBytes(16).toString('hex')
+  const recoveryHash = await hashPassword(normalizeCode(recoveryCode), recoverySalt)
+  if (findUserById(user.id)?.recovery_hash !== user.recovery_hash) return null
+
+  updatePassword(user.id, passwordHash, salt)
+  setRecovery(user.id, recoveryHash, recoverySalt)
   deleteSessionsForUser(user.id)
-  return true
+  return { recoveryCode }
 }
 
 export async function verifyUser(email, password) {

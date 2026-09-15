@@ -239,3 +239,60 @@ describe('hardening', () => {
     assert.ok(notes.body.notifications.some((n) => n.title === 'Your report was reviewed'))
   })
 })
+
+// A server of its own: the suite above spends most of a minute's sign-in allowance.
+describe('recovery and failure', () => {
+  const world = makeWorld()
+  const url = (path) => `http://127.0.0.1:${world.port}${path}`
+
+  before(async () => {
+    await world.start()
+  })
+
+  after(async () => {
+    await world.destroy()
+  })
+
+  it('spends a recovery code once, signs every device out and issues the next', async () => {
+    const anon = world.client()
+    const email = 'forgetful@example.test'
+    const signup = await anon('POST', '/api/auth/signup', {
+      email, password: 'correct horse battery', name: 'Forgetful', username: 'forgetful', birthdate: '1994-04-04', acceptTerms: true,
+    })
+    assert.equal(signup.status, 201)
+    const first = signup.body.recoveryCode
+
+    const login = await fetch(url('/api/auth/login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'correct horse battery' }) })
+    const device = world.client(login.headers.get('set-cookie').match(/questly_session=([^;]+)/)[1])
+    assert.equal((await device('GET', '/api/me')).status, 200)
+
+    const reset = await anon('POST', '/api/auth/reset', { email, code: first.toLowerCase(), password: 'a brand new passphrase' })
+    assert.equal(reset.status, 200, 'case and dashes do not matter')
+    assert.match(reset.body.recoveryCode, /^[A-Z2-9]{5}(-[A-Z2-9]{5}){3}$/)
+    assert.notEqual(reset.body.recoveryCode, first)
+    assert.equal((await device('GET', '/api/me')).status, 401, 'the device signed in before the reset is signed out')
+
+    const replay = await anon('POST', '/api/auth/reset', { email, code: first, password: 'somebody elses passphrase' })
+    assert.equal(replay.status, 401, 'the spent code opens nothing')
+    assert.equal((await anon('POST', '/api/auth/login', { email, password: 'somebody elses passphrase' })).status, 401)
+
+    const again = await anon('POST', '/api/auth/reset', { email, code: reset.body.recoveryCode, password: 'and another passphrase' })
+    assert.equal(again.status, 200, 'the new code works, once')
+    assert.equal((await anon('POST', '/api/auth/login', { email, password: 'and another passphrase' })).status, 200)
+  })
+
+  it('answers a malformed request in JSON, without the server’s insides', async () => {
+    for (const path of ['/api/users/%E0%A4%A', '/api/clubs/%ZZ', '/api/posts/%E0%A4%A/comments']) {
+      const res = await fetch(url(path))
+      const text = await res.text()
+      assert.equal(res.status, 400, path)
+      assert.match(res.headers.get('content-type') ?? '', /application\/json/, path)
+      assert.doesNotMatch(text, /URIError|node_modules|at \w+ \(|[\\/]server[\\/]/, `${path} gives away nothing`)
+    }
+    const garbled = await fetch(url('/api/auth/login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"email": ' })
+    assert.equal(garbled.status, 400)
+    assert.deepEqual(await garbled.json(), { error: 'That request could not be read.' })
+    const huge = await fetch(url('/api/support'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: 'x'.repeat(300_000) }) })
+    assert.equal(huge.status, 413)
+  })
+})
