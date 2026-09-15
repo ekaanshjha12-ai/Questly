@@ -23,7 +23,9 @@ mkdirSync(dataDir, { recursive: true })
  * same volume. */
 export const MEDIA_DIR = join(dataDir, 'media')
 
-export const db = new Database(join(dataDir, 'questly.db'))
+export const DB_FILE = join(dataDir, 'questly.db')
+
+export const db = new Database(DB_FILE)
 
 db.run('PRAGMA journal_mode = WAL')
 db.run('PRAGMA foreign_keys = ON')

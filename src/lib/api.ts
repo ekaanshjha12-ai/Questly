@@ -639,10 +639,131 @@ export function adminCloseSupport(id: string, reply?: string) {
   })
 }
 
-export function fetchAudit(limit = 100) {
-  return request<{ entries: { id: number; at: string; email: string | null; event: string; outcome: string; ip: string | null; detail: string | null }[] }>(
-    `/api/admin/audit?limit=${limit}`,
-  )
+export interface AuditEntry {
+  id: number
+  at: string
+  user_id: string | null
+  email: string | null
+  event: string
+  outcome: string
+  ip: string | null
+  detail: string | null
+}
+
+export function adminAudit(filters: { prefix?: string; event?: string; outcome?: string; q?: string; before?: number; limit?: number } = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') params.set(key, String(value))
+  return request<{ entries: AuditEntry[]; more: boolean }>(`/api/admin/audit?${params}`)
+}
+
+export interface AdminPost {
+  id: string
+  kind: PostKind
+  body: string
+  image: string | null
+  hasImage: boolean
+  hasVideo: boolean
+  attached: string | null
+  club: string | null
+  createdAt: string
+  removedAt: string | null
+  author: { id: string; username: string | null; email: string }
+  comments: number
+  appreciations: number
+  openReports: number
+}
+
+export function adminPosts(view: 'live' | 'reported' | 'removed', before?: string) {
+  return request<{ posts: AdminPost[]; more: boolean }>(`/api/admin/posts?view=${view}${before ? `&before=${encodeURIComponent(before)}` : ''}`)
+}
+
+export function adminRemovePostById(id: string, note?: string) {
+  return request<{ ok: true }>(`/api/admin/posts/${encodeURIComponent(id)}/remove`, { method: 'POST', body: JSON.stringify({ note }) })
+}
+
+export interface AdminComment {
+  id: string
+  postId: string
+  body: string
+  createdAt: string
+  author: { id: string; username: string | null; email: string }
+  openReports: number
+}
+
+export function adminComments(before?: string) {
+  return request<{ comments: AdminComment[]; more: boolean }>(`/api/admin/comments${before ? `?before=${encodeURIComponent(before)}` : ''}`)
+}
+
+export function adminRemoveComment(id: string, note?: string) {
+  return request<{ ok: true }>(`/api/admin/comments/${encodeURIComponent(id)}/remove`, { method: 'POST', body: JSON.stringify({ note }) })
+}
+
+export interface AdminDuel {
+  id: string
+  name: string
+  objective: string
+  mode: DuelMode
+  status: string
+  durationDays: number
+  rewardXp: number
+  createdAt: string
+  startsAt: string | null
+  endsAt: string | null
+  creator: { id: string; username: string | null }
+  opponent: { id: string; username: string | null }
+  cancellable: boolean
+}
+
+export function adminDuels(view: 'open' | 'recent', before?: string) {
+  return request<{ duels: AdminDuel[]; more: boolean }>(`/api/admin/duels?view=${view}${before ? `&before=${encodeURIComponent(before)}` : ''}`)
+}
+
+export function adminCancelDuel(id: string, note?: string) {
+  return request<{ ok: true }>(`/api/admin/duels/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: JSON.stringify({ note }) })
+}
+
+export interface SystemHealth {
+  generatedAt: string
+  process: { startedAt: string; uptimeSeconds: number; node: string; platform: string; rssBytes: number; heapUsedBytes: number }
+  requests: {
+    lastHour: number
+    clientErrors: number
+    serverErrors: number
+    averageMs: number | null
+    p95Ms: number | null
+    perMinute: { at: string; count: number; errors: number }[]
+    recentErrors: { at: string; method: string; route: string; status: number }[]
+  }
+  storage: { databaseBytes: number; mediaBytes: number; mediaFiles: number }
+  records: Record<string, number | null>
+  features: { ai: boolean; video: boolean; inviteOnly: boolean }
+  retention: {
+    deletedContentDays: number
+    auditLogDays: number
+    reportDays: number
+    supportDays: number
+    lastSweep: { at: string; removed: Record<string, number> } | null
+  }
+}
+
+export function adminSystem() {
+  return request<SystemHealth>('/api/admin/system')
+}
+
+export interface ProductAnalytics {
+  generatedAt: string
+  cohortDays: number
+  funnel: { key: string; label: string; count: number }[]
+  active: { dau: number; wau: number; mau: number; stickiness: number | null }
+  retention: {
+    windows: { key: string; label: string }[]
+    cohorts: { week: string; size: number; windows: { key: string; eligible: number; retained: number; rate: number | null }[] }[]
+  }
+  trends: { event: string; label: string; total: number; series: { day: string; n: number }[] }[]
+}
+
+export function adminAnalytics(force = false) {
+  return request<ProductAnalytics>(`/api/admin/analytics${force ? '?force=1' : ''}`)
 }
 
 // --- leaderboard -----------------------------------------------------------

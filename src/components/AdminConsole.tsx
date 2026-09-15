@@ -11,8 +11,66 @@ import AdminReports from './AdminReports'
 import AdminClubs from './AdminClubs'
 import AdminSupport from './AdminSupport'
 import AdminPolicies from './AdminPolicies'
+import AdminContent from './admin/AdminContent'
+import AdminDuels from './admin/AdminDuels'
+import AdminAudit from './admin/AdminAudit'
+import AdminSystem from './admin/AdminSystem'
+import AdminProductAnalytics from './admin/AdminProductAnalytics'
+import { adminSystem, type SystemHealth } from '../lib/api'
 
-type Tab = 'overview' | 'reports' | 'support' | 'users' | 'clubs' | 'policies' | 'analytics' | 'ai'
+type Tab = 'overview' | 'analytics' | 'system' | 'ai' | 'reports' | 'support' | 'content' | 'duels' | 'clubs' | 'users' | 'audit' | 'policies'
+
+/** The console's sections, grouped by the job they are for. */
+const NAV: { group: string; tabs: { id: Tab; label: string }[] }[] = [
+  { group: 'Insights', tabs: [{ id: 'overview', label: 'Overview' }, { id: 'analytics', label: 'Analytics' }, { id: 'system', label: 'System' }, { id: 'ai', label: 'AI usage' }] },
+  {
+    group: 'Moderation',
+    tabs: [
+      { id: 'reports', label: 'Reports' },
+      { id: 'support', label: 'Support' },
+      { id: 'content', label: 'Posts & comments' },
+      { id: 'duels', label: 'Duels' },
+      { id: 'clubs', label: 'Clubs' },
+    ],
+  },
+  { group: 'People', tabs: [{ id: 'users', label: 'Users' }, { id: 'audit', label: 'Security log' }] },
+  { group: 'Settings', tabs: [{ id: 'policies', label: 'Policies' }] },
+]
+
+/** What needs a person: open reports and requests, errors, blocked content. */
+function Attention({ onOpen }: { onOpen: (tab: Tab) => void }) {
+  const [health, setHealth] = useState<SystemHealth | null>(null)
+  useEffect(() => {
+    adminSystem()
+      .then(setHealth)
+      .catch(() => setHealth(null))
+  }, [])
+  if (!health) return null
+  const items: { label: string; value: number; tab: Tab }[] = [
+    { label: 'Open reports', value: health.records.openReports ?? 0, tab: 'reports' },
+    { label: 'Open support requests', value: health.records.openSupport ?? 0, tab: 'support' },
+    { label: 'Server errors, last hour', value: health.requests.serverErrors, tab: 'system' },
+    { label: 'Blocked by filters, 24 hours', value: health.records.blockedLastDay ?? 0, tab: 'audit' },
+  ]
+  return (
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          onClick={() => onOpen(item.tab)}
+          className={`rounded-2xl border p-3.5 text-left transition-colors hover:border-ink-500 ${item.value ? 'border-reward-500/40 bg-reward-500/5' : 'border-ink-600 bg-ink-850/60'}`}
+        >
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            {item.value ? <AlertTriangle className="h-3.5 w-3.5 text-reward-400" aria-hidden /> : null}
+            {item.label}
+          </p>
+          <p className="mt-1.5 text-2xl font-semibold leading-none text-slate-50">{item.value.toLocaleString()}</p>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /**
  * Single accent for every chart.
@@ -376,30 +434,45 @@ export default function AdminConsole() {
         <p className="mb-4 rounded-lg border border-gold-500/40 bg-gold-500/5 px-3 py-2 text-xs text-gold-300">{notice}</p>
       )}
 
-      <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-ink-600 bg-ink-850/70 p-1">
-        {(['overview', 'reports', 'support', 'users', 'clubs', 'policies', 'analytics', 'ai'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-              tab === t ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {t}
-            {t === 'reports' && openReports ? <span className="ml-1 rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{openReports}</span> : null}
-            {t === 'support' && openSupport ? <span className="ml-1 rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{openSupport}</span> : null}
-          </button>
+      <div className="lg:grid lg:grid-cols-[12rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <nav aria-label="Console sections" className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-ink-600 bg-ink-850/70 p-1 lg:sticky lg:top-4 lg:mb-0 lg:flex-col lg:gap-3 lg:overflow-visible lg:p-2">
+        {NAV.map((section) => (
+          <div key={section.group} className="flex shrink-0 gap-1 lg:flex-col">
+            <p className="hidden px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 lg:block">{section.group}</p>
+            {section.tabs.map((t) => {
+              const count = t.id === 'reports' ? openReports : t.id === 'support' ? openSupport : null
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  aria-current={tab === t.id ? 'page' : undefined}
+                  className={`flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors ${
+                    tab === t.id ? 'bg-gradient-to-r from-gold-500 to-ember-500 text-onAccent' : 'text-slate-400 hover:bg-ink-800 hover:text-slate-200'
+                  }`}
+                >
+                  {t.label}
+                  {count ? <span className="rounded-full bg-ember-500 px-1.5 text-[10px] font-bold text-onAccent">{count}</span> : null}
+                </button>
+              )
+            })}
+          </div>
         ))}
-      </div>
+      </nav>
 
+      <div className="min-w-0">
       {tab === 'reports' && <AdminReports onOpenCount={setOpenReports} />}
+      {tab === 'content' && <AdminContent />}
+      {tab === 'duels' && <AdminDuels />}
+      {tab === 'audit' && <AdminAudit />}
+      {tab === 'system' && <AdminSystem />}
       {tab === 'clubs' && <AdminClubs />}
       {tab === 'support' && <AdminSupport onOpenCount={setOpenSupport} />}
       {tab === 'policies' && <AdminPolicies />}
 
       {tab === 'overview' && (
         <div className="space-y-5">
+          <Attention onOpen={setTab} />
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
             <Tile icon={Users} label="Total users" value={nf(live.totalUsers)} />
             <Tile icon={Activity} label="Active today" value={nf(live.activeToday)} />
@@ -490,6 +563,8 @@ export default function AdminConsole() {
 
       {tab === 'analytics' && (
         <div className="space-y-2.5">
+          <AdminProductAnalytics />
+          <h3 className="pt-4 text-xs uppercase tracking-wide text-slate-500">Sign-ups, activity and checks</h3>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <Tile icon={ShieldCheck} label="Verification rate" value={analytics.verificationRate === null ? '—' : String(analytics.verificationRate)} unit="%" hint="accepted of attempted" />
             <Tile icon={TrendingUp} label="7-day retention" value={analytics.retention7d === null ? '—' : String(analytics.retention7d)} unit="%" />
@@ -521,6 +596,8 @@ export default function AdminConsole() {
           />
         </div>
       )}
+      </div>
+      </div>
     </div>
   )
 }

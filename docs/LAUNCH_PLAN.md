@@ -108,9 +108,9 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 8 | World map: regions, locks, time of day, club buildings, events | Done: painted archipelago (Verdant Woods, Mistveil Swamp, Frostpeak, Golden Plains, Coastal Crown, The Lost Ruins, Emberlands, Sunscorch, The Summit around The Grand Guild), 9 regions with server-judged locks shown as mist, 2 weekly quests per region, monthly world events paid through the ledger, club halls on the map, morning/day/evening/night lighting; the art ships as WebP (508 kB full, 152 kB half size, a 446-byte blur placeholder) and loads only with the map |
 | 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Done: appreciate, comments (filtered for abuse, contact details and cross-age risks; rate-limited; hidden across blocks; removable by author, post owner or club leader), challenge from a post, share link and post pages, quests / duels / achievements / focus sessions attached from the server's records, comment and conversation reports with saved content, new Chronicle Log alerts |
 | 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
-| 11 | Admin: reports, moderation, clubs, metrics | Planned |
+| 11 | Admin: reports, moderation, clubs, metrics | Done: console grouped into Insights / Moderation / People / Settings; posts and comments with takedowns that tell the author; duels with a cancel for open ones; searchable security log (sign-ins, admin actions, blocked content, reports, account changes, denied access); system health (uptime, memory, database and media size, requests, 4xx/5xx, response times, recent server errors, records, features, retention sweep); a needs-attention row |
 | 12 | Legal and policy pages, privacy controls | Done: Terms, Privacy Policy, Community Guidelines and Safety Centre readable signed in or out, filled in from the environment and edited with version history by the superadmin; terms agreed to at sign-up and again after a significant change; Contact & support (also for people who cannot sign in) with an admin queue and in-app replies; retention sweep erasing deleted posts and comments, old security log entries, closed reports and support requests, and video files left behind by deleted accounts |
-| 13 | Analytics events and retention | Planned |
+| 13 | Analytics events and retention | Done: events for sign-up, onboarding, first quest and focus session, quests, focus, level-ups, duels, clubs and posts; active players and stickiness; how far new accounts get; weekly-cohort retention (next day, week 1, 2, 4); 30-day trends with a table view — aggregates only, no personal data |
 | 14 | Security hardening (S3–S10) | Done |
 | 15 | Performance: code splitting, lazy world/3D | Started: every screen away from the hub and the 3D viewer load on demand |
 | 16 | Full QA pass and final security review | Planned |
@@ -121,8 +121,6 @@ Kept up to date as phases land.
 
 - **Main bundle** is about 532 kB (168 kB gzipped). The sound engine and
   motion library are the bulk; splitting them is part of phase 15.
-- **Admin phase 11** still has to add metrics; the report queue already takes
-  posts, comments, conversations, players, duels and clubs.
 - Fixed along the way: the inline theme script in `index.html` was blocked by
   the Content Security Policy in production, so the saved theme never applied
   before first paint. It now loads from `/theme-init.js`.

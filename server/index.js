@@ -46,8 +46,10 @@ import { levelFromXp } from './game/levels.js'
 import { gameRoutes } from './routes/game.js'
 import { clubRoutes } from './routes/clubs.js'
 import { legalRoutes } from './routes/legal.js'
+import { adminRoutes } from './routes/admin.js'
+import { requestMetrics } from './adminmetrics.js'
 import { acceptPolicies, pendingAcceptances } from './policies.js'
-import { purgeExpiredRecords } from './retention.js'
+import { purgeExpiredRecords, RETENTION } from './retention.js'
 import { clubPostRights, isClubLeader as clubLeaderOf, isClubMember, notifyAnnouncement } from './game/clubs.js'
 import {
   appreciationFor,
@@ -175,7 +177,7 @@ import {
   setConversationStatus,
   getState,
   insertSetupToken,
-  listAudit,
+
   listPhotoHashes,
   leaderboard,
   listUsers,
@@ -205,6 +207,8 @@ const PORT = Number(process.env.API_PORT ?? (IS_PRODUCTION ? process.env.PORT : 
 if (IS_PRODUCTION) app.set('trust proxy', 1)
 
 app.use(securityHeaders(IS_PRODUCTION))
+// Counts API requests by route and outcome for the console's health panel — never who made them.
+app.use(requestMetrics)
 
 // Most requests are a few hundred bytes of JSON. Only the routes that carry a
 // photo, attached documents or the notebook document get room for megabytes,
@@ -237,9 +241,12 @@ app.use((err, req, res, next) => {
 app.use(cookieParser())
 app.use(sameOriginOnly(IS_PRODUCTION))
 
+let lastRetentionSweep = null
+
 function purgeOldRecords() {
   try {
     const removed = purgeExpiredRecords()
+    lastRetentionSweep = { at: new Date().toISOString(), removed }
     if (Object.values(removed).some(Boolean)) console.log('retention sweep', removed)
   } catch (err) {
     console.error('retention sweep failed', err)
@@ -3210,12 +3217,6 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, throttleAdmin, (req, res)
   }
 })
 
-app.get('/api/admin/audit', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
-  const event = typeof req.query.event === 'string' ? req.query.event : null
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100))
-  res.json({ entries: listAudit({ limit, event }) })
-})
-
 app.post('/api/admin/users/:id/disabled', requireAuth, requireAdmin, throttleAdmin, (req, res) => {
   const target = findUserById(req.params.id)
   if (!target) {
@@ -3444,6 +3445,22 @@ app.use(
 )
 
 app.use('/api', legalRoutes({ requireAuth, requireAdmin, requireSuperadmin, rateLimit, audit, notify, sessionCookie: SESSION_COOKIE }))
+
+app.use(
+  '/api',
+  adminRoutes({
+    requireAuth,
+    requireAdmin,
+    rateLimit,
+    audit,
+    notify,
+    adminRemovePost,
+    softDeleteComment,
+    features: () => ({ ai: imageSafetyConfigured(), video: imageSafetyConfigured() && videoConfigured(), inviteOnly: Boolean(INVITE_CODE) }),
+    retention: RETENTION,
+    lastSweep: () => lastRetentionSweep,
+  }),
+)
 
 // Unmatched API routes must answer in JSON — the client parses every response
 // body as JSON, and Express's default HTML error page would blow up there.
