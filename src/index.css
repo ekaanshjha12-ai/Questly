@@ -586,6 +586,22 @@ body::before {
     image-rendering: crisp-edges;
   }
 
+  /* Home's room, faded into the page: nearly solid behind the title and greeting
+   * (they sit in the top 17% at every width, and at 78% or more the greeting
+   * keeps 4.5:1 over the brightest or darkest pixel of any room, in either
+   * theme), clear across the floor where the hero stands, gone by the bottom. */
+  .base-scrim {
+    background: linear-gradient(
+      180deg,
+      rgb(var(--ink-950) / 0.94) 0%,
+      rgb(var(--ink-950) / 0.78) 17%,
+      rgb(var(--ink-950) / 0) 36%,
+      rgb(var(--ink-950) / 0) 72%,
+      rgb(var(--ink-950) / 0.75) 90%,
+      rgb(var(--ink-950)) 100%
+    );
+  }
+
   .text-rarity-common {
     color: rgb(var(--rarity-common));
   }

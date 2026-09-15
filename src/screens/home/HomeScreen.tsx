@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { m as motion, useReducedMotion } from 'framer-motion'
 import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
@@ -9,28 +8,41 @@ import Button from '../../components/ui/Button'
 import { XpBar } from '../../components/ui/Bars'
 import { ErrorState, LoadingState } from '../../components/ui/States'
 import HeroSprite from '../../components/art/HeroSprite'
-import { baseScene, timeOfDay } from '../../art/scene'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useTimeOfDay } from '../../hooks/useTimeOfDay'
 import { formatDurationMs, formatMinutes, greeting, isFocusQuest, questIcon } from '../../lib/questFormat'
 import worldBanner from '../../assets/world/questly-world-banner.webp'
+import BaseBackdrop from './BaseBackdrop'
+
+/*
+ * The greeting is a step brighter than other pages' subtitles: it sits over the
+ * room, where the usual quiet grey would not hold its contrast.
+ */
+
+/** The open floor of the room between the title and the quest card, where the hero stands. */
+const STAGE = 'relative h-[13.5rem] sm:h-[17rem] lg:h-[clamp(20rem,26vw,27rem)]'
 
 /**
  * Home: today's adventure.
  *
- * The first thing on screen is the player's hero in their base and the one
- * quest worth doing next, with the button that starts it. Standing and
- * progress sit below it — they explain the adventure, they are not the point.
+ * The first thing on screen is the player's hero in their base — a room that
+ * follows their clock — and the one quest worth doing next, with the button
+ * that starts it. Standing and progress sit below it — they explain the
+ * adventure, they are not the point.
  */
 export default function HomeScreen({ name, challenges }: { name: string; challenges: Challenge[] | null }) {
   const reduce = useReducedMotion()
   const { snapshot, status, error, refresh } = useGame()
   const { navigate } = useRouter()
-  const time = timeOfDay()
-  const scene = useMemo(() => baseScene(time), [time])
+  const time = useTimeOfDay()
+  const wide = useMediaQuery('(min-width: 1024px)')
 
   if (!snapshot) {
     return (
-      <div>
-        <PageHeader title="Questly" subtitle={`${greeting()}, ${name}`} />
+      <div className="relative isolate">
+        <BaseBackdrop time={time} />
+        <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} />
+        <div className={STAGE} />
         {status === 'error' ? <ErrorState message={error ?? 'Could not load your quest hub.'} onRetry={() => void refresh()} /> : <LoadingState lines={3} label="Loading your quest hub" />}
       </div>
     )
@@ -47,28 +59,29 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
   const FeaturedIcon = featured ? questIcon(featured) : ScrollText
 
   return (
-    <div>
-      <PageHeader title="Questly" subtitle={`${greeting()}, ${name}`} />
+    <div className="relative isolate">
+      <BaseBackdrop time={time} />
+      <PageHeader title="Questly" subtitle={<span className="text-slate-200">{`${greeting()}, ${name}`}</span>} />
 
       {/* --- the base and today's quest --------------------------------------------- */}
-      <section className="panel-raised overflow-hidden" aria-label="Today's quest">
-        <div className="relative aspect-[16/9] w-full overflow-hidden sm:aspect-[21/9]">
-          <img src={scene} alt="" className="pixelated absolute inset-0 h-full w-full object-cover" draggable={false} />
-          <div className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/10 to-transparent" />
-          <span className="tag absolute left-3 top-3 border-reward-500/40 bg-ink-950/70 text-reward-300">
+      <section aria-label="Today's quest">
+        <div className={STAGE}>
+          <span className="tag absolute left-0 top-0 border-reward-500/40 bg-ink-950/75 text-reward-300 backdrop-blur-sm">
             {progress.rank.name}&apos;s base
           </span>
-          <span className="tag absolute right-3 top-3 border-ink-600 bg-ink-950/70 text-slate-300">
+          <span className="tag absolute right-0 top-0 border-ink-600 bg-ink-950/75 text-slate-300 backdrop-blur-sm">
             <Flame className="h-3 w-3 text-[#f08a3c]" /> {progress.streak.current} day streak
           </span>
-          <div className="absolute bottom-1 left-1/2 -translate-x-[70%]">
-            <HeroSprite look={snapshot.look} height={124} still={Boolean(reduce)} label="Your character" />
+          {/* Feet on the quest card's top edge: the card overlaps the stage by the same 1.25rem. */}
+          <div className="absolute bottom-5 left-1/2 -translate-x-[70%]">
+            <span aria-hidden className="absolute bottom-0 left-1/2 h-3 w-[80%] -translate-x-1/2 rounded-[50%] bg-black/45 blur-[4px]" />
+            <HeroSprite look={snapshot.look} height={wide ? 200 : 150} still={Boolean(reduce)} label="Your character" className="relative" />
           </div>
         </div>
 
-        <div className="relative -mt-6 px-4 pb-4">
+        <div className="relative -mt-5">
           {focus ? (
-            <div className="rounded-xl border border-gold-500/40 bg-ink-900/95 p-4">
+            <div className="rounded-2xl border border-gold-500/40 bg-ink-900/95 p-4 shadow-[0_24px_48px_-24px_rgba(0,0,0,0.8)] backdrop-blur-md">
               <p className="eyebrow flex items-center gap-1.5 text-gold-300">
                 <Timer className="h-3.5 w-3.5" /> Focus session {focus.status === 'paused' ? 'paused' : 'running'}
               </p>
@@ -78,7 +91,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
               </Button>
             </div>
           ) : featured ? (
-            <div className="rounded-xl border border-ink-600 bg-ink-900/95 p-4">
+            <div className="rounded-2xl border border-ink-600 bg-ink-900/95 p-4 shadow-[0_24px_48px_-24px_rgba(0,0,0,0.8)] backdrop-blur-md">
               <p className="eyebrow flex items-center gap-1.5 text-reward-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-reward-400" /> Your next quest
               </p>
@@ -105,7 +118,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
               </Button>
             </div>
           ) : (
-            <div className="rounded-xl border border-ink-600 bg-ink-900/95 p-4">
+            <div className="rounded-2xl border border-ink-600 bg-ink-900/95 p-4 shadow-[0_24px_48px_-24px_rgba(0,0,0,0.8)] backdrop-blur-md">
               <p className="eyebrow text-reward-300">Your next quest</p>
               <h2 className="mt-1 font-display text-2xl font-bold text-slate-50">Write today&apos;s adventure</h2>
               <p className="mt-1 text-sm text-slate-400">Your board is clear. Add a quest, or start a focus block and earn XP for the time.</p>

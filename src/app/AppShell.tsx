@@ -217,7 +217,8 @@ export default function AppShell({
   const items = useNavItems({ socialBadge, challengeBadge })
   if (immersive) return <div className="min-h-dvh">{children}</div>
   return (
-    <div className="min-h-dvh">
+    // Clipped sideways so a page can run a picture edge to edge without the page scrolling sideways.
+    <div className="min-h-dvh overflow-x-clip">
       <SideNav items={items} />
       <main className="page-foot mx-auto w-full max-w-3xl px-4 [padding-left:max(1rem,env(safe-area-inset-left))] [padding-right:max(1rem,env(safe-area-inset-right))] lg:ml-60 lg:w-auto lg:max-w-none lg:px-10">
         <div className="mx-auto w-full max-w-3xl xl:max-w-5xl">{children}</div>

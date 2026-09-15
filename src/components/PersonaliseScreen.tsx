@@ -84,7 +84,7 @@ export default function PersonaliseScreen({
         <ProfileFields state={state} user={user} onRename={onRename} onUserChange={onUserChange} />
       </Section>
 
-      <Section icon={Sun} title="Theme" note="The day/night switch on the side does the same thing.">
+      <Section icon={Sun} title="Theme" note="Night is dark, Parchment is light, and Match device follows your phone or computer.">
         <ThemePicker />
       </Section>
 
@@ -481,8 +481,7 @@ const THEMES: { id: ThemeChoice; label: string; icon: typeof Sun; page: string; 
   { id: 'system', label: 'Match device', icon: MonitorSmartphone, page: '', card: '' },
 ]
 
-/** The three-way choice the switch on the rail cannot offer — "match my device"
- * lives here, since a switch only has two positions. */
+/** Night, Parchment, or whichever the device is set to — the only place the theme is chosen. */
 function ThemePicker() {
   const { choice, setChoice } = useTheme()
 
