@@ -162,7 +162,9 @@ function ClubBanner({ club, onManage }: { club: ClubDetail; onManage?: () => voi
             Level {club.level} · {club.tier.name}
           </p>
           <p className="mt-0.5 font-display text-sm font-bold text-slate-100">{hall.name}</p>
-          <p className="text-[11px] text-slate-500">{next ? `Grows into a ${next.art.name} at level ${next.level}` : 'A landmark of the world'}</p>
+          <p className="text-[11px] text-slate-500">
+            {next ? `Grows into ${/^[AEIOU]/.test(next.art.name) ? 'an' : 'a'} ${next.art.name} at level ${next.level}` : 'A landmark of the world'}
+          </p>
           <p className="mt-1 text-xs text-slate-400">
             {club.xp.toLocaleString()} Club XP · {Math.max(0, club.nextLevelXp - club.xp).toLocaleString()} to level {club.level + 1}
           </p>
