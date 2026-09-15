@@ -61,6 +61,10 @@ faked in the UI.
 | S8 | Low | Uploaded images keep metadata (EXIF/GPS) if sent directly to the API. | Server strips JPEG APP1/PNG text/WebP EXIF chunks. | Fixed (`server/imagemeta.js`; JPEG orientation kept) |
 | S9 | Low | Names shown to other players come from the client document. | Use the server-held display name. | Fixed |
 | S10 | Low | Card designs from the client document are passed to other players with light validation. | Validate/normalise card payloads server-side. | Fixed (`server/card.js`, on save and on view) |
+| S11 | Medium | A recovery code kept working after it was used, so anyone who had once seen it could take the account again after the owner recovered it. | Using a code issues a new one (shown once) and spends the old; one code cannot be used twice. | Fixed (phase 16) |
+| S12 | Low | A malformed URL reached Express's own error page: HTML, with the stack and server paths whenever `NODE_ENV` is not exactly `production`. | A final handler logs the error and answers with a plain message, JSON on the API. | Fixed (phase 16) |
+| S13 | Moderate | `qs` 6.15 (query parsing, through Express): two denial-of-service advisories. | Updated to 6.16. | Fixed (phase 16); production dependencies audit clean |
+| S14 | Low | The data export left out direct messages, duel chat and check-ins, support requests, accepted policies, blocks, reports filed, product events, sessions and the profile picture. | Export everything held about the account; other people's messages and moderation records about the player stay out. | Fixed (phase 16) |
 
 Already sound: parameterised SQL with column allow-lists, CSP without inline
 script, `nosniff`, frame denial, SameSite cookies + Origin check, roles read
@@ -85,9 +89,11 @@ drops metadata, cross-age messaging protections, account export and deletion.
    clothing, head, back, tool, pet), so it renders anywhere cheaply and every
    item is visible on the character. The 3D models stay as legendary specials,
    loaded only when viewed.
-5. **World map is a tile-based canvas** generated from code, rendered once
-   per time of day and cached; markers are DOM elements for accessibility.
-   Loaded as its own chunk.
+5. **World map is a painted illustration** lit per time of day with CSS
+   filters; region labels, club halls and markers are DOM elements laid over
+   it, so they stay buttons and links for accessibility. Loaded as its own
+   chunk. (The first plan was a tile canvas drawn from code; the painted map
+   replaced it.)
 6. **No new runtime dependencies** unless unavoidable; a tiny history router
    replaces view state so screens have URLs.
 7. **No gambling or stakes of any kind.** Challenge and club rewards are XP,
@@ -113,7 +119,18 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 13 | Analytics events and retention | Done: events for sign-up, onboarding, first quest and focus session, quests, focus, level-ups, duels, clubs and posts; active players and stickiness; how far new accounts get; weekly-cohort retention (next day, week 1, 2, 4); 30-day trends with a table view — aggregates only, no personal data |
 | 14 | Security hardening (S3–S10) | Done |
 | 15 | Performance: code splitting, lazy world/3D | Done: every screen away from the hub, the 3D viewer, the music composer, the animation features and the sign-in screens load on demand (main script 538 kB to 370 kB, 99 kB over the wire); built text files ship as Brotli and gzip copies; larger API answers are gzipped; images stay separate cacheable files; indexes for club feeds, shared records, reports, deleted posts and open duels |
-| 16 | Full QA pass and final security review | Planned |
+| 16 | Full QA pass and final security review | Done: 62 API tests in 10 suites, run against a real server on a throwaway database (see below); S11–S14 found and fixed; every route's guard, every dynamic SQL fragment, the client bundle and the dependencies reviewed |
+
+### What the tests walk through (phase 16)
+
+- **Accounts:** sign-up (terms required, under-15s refused, a `role` in the body ignored), sign-out ending the session on the server, sign-in, the per-account lockout, recovery codes spent once and replaced, profile edits with the birthdate locked, the export, deletion needing the password and taking posts and conversations with it, the email free again afterwards.
+- **Progression:** quests paid once at the server's rate, progress smuggled into a save or a request body ignored, the daily self-reported cap, server-timed focus, the admin XP adjustment through the ledger.
+- **Duels:** offer, accept, decline, withdraw, one open offer per pair, reward caps, closed challenges, focus duels counting timed minutes only, settlement paid once; outsiders get 404 on every duel route.
+- **Clubs:** founding standing, trials judged from what happened, the level gate, leaders' powers, chat and posts kept to members, Club XP, consequences, platform takedown.
+- **Social and messaging:** appreciation, comments with filters, rate limits and blocks, club-only posts, records attached only from the server's data, reports with snapshots; message requests only the recipient can answer, contact details refused, adult-to-under-18 risks refused, and contact with adults switched off closing every way in.
+- **Staff:** every console route 404s for players and is logged; admins cannot promote themselves, delete accounts or touch the superadmin; suspending or disabling ends open sessions at once.
+- **Requests themselves:** cross-site changes refused, no CORS, malformed URLs and bodies answered in JSON without internals, oversized bodies refused, uploaded pictures stripped of metadata, sessions stored hashed.
+- **World, legal, retention:** region locks and quests, events paid once, policy versions and re-acceptance, support for signed-out visitors, the retention sweep.
 
 ## Remaining
 
@@ -122,3 +139,17 @@ Kept up to date as phases land.
 - Fixed along the way: the inline theme script in `index.html` was blocked by
   the Content Security Policy in production, so the saved theme never applied
   before first paint. It now loads from `/theme-init.js`.
+- **Dev tooling advisory:** Vite 5's bundled esbuild has a moderate advisory
+  for its development server. It never runs in production (the build is
+  static files); clearing it needs the Vite 6+ major upgrade, worth doing
+  after launch rather than the week of it.
+- **Single instance:** rate limits and request metrics are held in memory, so
+  they reset on a restart and would need shared storage before running more
+  than one server process.
+- **Admin second factor is optional** (`mfaRequiredFor` returns false): the
+  operator has no authenticator device today. Admin passwords are held to 16
+  characters meanwhile; turn the requirement on as soon as a device is set up.
+- **Age is self-declared** at sign-up and locked afterwards. There is no
+  document or payment-based age check.
+- **No email delivery:** password recovery is by the code saved at sign-up,
+  and support replies appear in the app rather than by email.

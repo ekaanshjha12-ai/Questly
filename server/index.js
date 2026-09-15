@@ -3343,6 +3343,32 @@ app.get('/api/account/export', requireAuth, rateLimit({ name: 'export', max: 5, 
     clubMessages: mine('SELECT c.name AS club, x.body, x.created_at, x.deleted_at FROM club_messages x JOIN clubs c ON c.id = x.club_id WHERE x.user_id = ? ORDER BY x.id'),
     challenges: db.all('SELECT * FROM challenges WHERE creator_id = ? OR opponent_id = ? ORDER BY created_at LIMIT 5000', [req.user.id, req.user.id]),
     notifications: mine('SELECT kind, title, body, created_at, read_at FROM notifications WHERE user_id = ? ORDER BY id DESC', 500),
+    // What they wrote to others. The other side's messages are that person's to download.
+    messages: mine(
+      `SELECT u.username AS with_username, m.body, m.created_at FROM direct_messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       LEFT JOIN users u ON u.id = CASE WHEN c.user_a = m.user_id THEN c.user_b ELSE c.user_a END
+       WHERE m.user_id = ? ORDER BY m.id`,
+    ),
+    duelMessages: mine('SELECT challenge_id, body, created_at FROM challenge_messages WHERE user_id = ? ORDER BY id'),
+    duelCheckins: mine('SELECT challenge_id, day, note, created_at FROM challenge_checkins WHERE user_id = ? ORDER BY created_at'),
+    clubChallenges: mine('SELECT challenge_id, status, checkins, joined_at, finished_at FROM club_challenge_entries WHERE user_id = ? ORDER BY joined_at'),
+    clubXp: mine('SELECT c.name AS club, x.source, x.xp, x.created_at FROM club_xp_ledger x JOIN clubs c ON c.id = x.club_id WHERE x.user_id = ? ORDER BY x.id'),
+    supportRequests: mine('SELECT kind, body, page, status, reply, created_at, closed_at FROM support_requests WHERE user_id = ? ORDER BY created_at'),
+    policiesAccepted: mine('SELECT slug, version, accepted_at FROM policy_acceptances WHERE user_id = ? ORDER BY accepted_at'),
+    blocked: mine('SELECT u.username, b.created_at FROM user_blocks b LEFT JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at'),
+    // Reports they made. Reports about them are moderation records, kept only as long as the privacy policy says.
+    reportsFiled: mine('SELECT target_kind, reason, status, created_at, resolved_at FROM reports WHERE reporter_id = ? ORDER BY created_at'),
+    productEvents: mine('SELECT at, event, props FROM analytics_events WHERE user_id = ? ORDER BY id'),
+    daysActive: mine('SELECT day FROM daily_active WHERE user_id = ? ORDER BY day').map((r) => r.day),
+    // When each signed-in device started and lapses. Never the tokens.
+    sessions: mine('SELECT created_at, expires_at FROM sessions WHERE user_id = ? ORDER BY created_at'),
+    photoChecks: mine('SELECT created_at FROM photo_proofs WHERE user_id = ? ORDER BY created_at').map((r) => r.created_at),
+    notebookBackups: mine('SELECT created_at FROM state_backups WHERE user_id = ? ORDER BY created_at').map((r) => r.created_at),
+    avatar: (() => {
+      const picture = getAvatar(req.user.id)
+      return picture ? { mime: picture.mime, base64: picture.data } : null
+    })(),
   })
 })
 
