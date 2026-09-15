@@ -972,7 +972,11 @@ export function canModeratePost(userId, clubId) {
 }
 
 export function isClubMember(userId, clubId) {
-  return isActive(membership(clubId, userId))
+  return Boolean(isActive(membership(clubId, userId)))
+}
+
+export function isClubLeader(userId, clubId) {
+  return Boolean(canManage(membership(clubId, userId)))
 }
 
 /* --- admin ------------------------------------------------------------------------------------- */

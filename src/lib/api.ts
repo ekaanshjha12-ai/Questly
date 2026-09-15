@@ -505,7 +505,7 @@ export type ReportStatus = 'open' | 'actioned' | 'dismissed'
 
 export interface AdminReport {
   id: string
-  kind: 'player' | 'post' | 'message' | 'challenge' | 'club'
+  kind: 'player' | 'post' | 'comment' | 'message' | 'challenge' | 'club'
   targetId: string
   status: ReportStatus
   reason: string | null
@@ -523,7 +523,7 @@ export function adminReports(status: ReportStatus = 'open') {
   return request<{ reports: AdminReport[]; more: boolean; open: number }>(`/api/admin/reports?status=${status}`)
 }
 
-export function adminResolveReport(id: string, body: { outcome: 'dismissed' | 'actioned'; removePost?: boolean; suspendDays?: number; note?: string }) {
+export function adminResolveReport(id: string, body: { outcome: 'dismissed' | 'actioned'; removePost?: boolean; removeComment?: boolean; suspendDays?: number; note?: string }) {
   return request<{ report: AdminReport; open: number }>(`/api/admin/reports/${encodeURIComponent(id)}/resolve`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -778,6 +778,19 @@ export interface PostVideo {
   height: number
 }
 
+export type PostRefKind = 'quest' | 'duel' | 'achievement' | 'focus'
+
+/**
+ * Something from Questly's own records attached to a post — a finished quest,
+ * a duel's result, an achievement, a timed focus session. The server looks it
+ * up and keeps a copy; nothing here is typed in by the poster.
+ */
+export type PostRef =
+  | { kind: 'quest'; id: string; title: string; xp: number; rarity: Rarity; questType: QuestType; verifiedBy: string | null; completedAt: string | null }
+  | { kind: 'duel'; id: string; title: string; objective: string; result: 'completed' | 'failed'; xp: number; opponent: string | null; days: number }
+  | { kind: 'achievement'; id: string; title: string; description: string; icon: string; unlockedAt: string }
+  | { kind: 'focus'; id: string; title: string; minutes: number; completed: boolean; endedAt: string | null }
+
 export interface Post {
   id: string
   kind: PostKind
@@ -787,6 +800,21 @@ export interface Post {
   video: PostVideo | null
   author: PlayerSummary | null
   mine: boolean
+  ref: PostRef | null
+  appreciations: { count: number; mine: boolean }
+  comments: number
+  clubId: string | null
+  /** Whether this player may appreciate and comment: club posts are for club members. */
+  canRespond: boolean
+}
+
+export interface PostComment {
+  id: string
+  body: string
+  createdAt: string
+  mine: boolean
+  author: { username: string | null; name: string }
+  canDelete: boolean
 }
 
 export function fetchFeed(before?: string, user?: string, club?: string) {
@@ -795,10 +823,47 @@ export function fetchFeed(before?: string, user?: string, club?: string) {
   if (user) params.set('user', user)
   const q = params.toString()
   const base = club ? `/api/clubs/${encodeURIComponent(club)}/feed` : '/api/feed'
-  return request<{ posts: Post[]; more: boolean }>(`${base}${q ? `?${q}` : ''}`)
+  return request<{ posts: Post[]; more: boolean; shared?: string[] }>(`${base}${q ? `?${q}` : ''}`)
 }
 
-export function createPost(input: { kind: PostKind; body: string; imageBase64?: string; mediaType?: string; videoId?: string; club?: string }) {
+export function fetchPost(id: string) {
+  return request<{ post: Post }>(`/api/posts/${encodeURIComponent(id)}`)
+}
+
+export function appreciatePost(id: string, on: boolean) {
+  return request<{ appreciations: Post['appreciations'] }>(`/api/posts/${encodeURIComponent(id)}/appreciate`, { method: 'POST', body: JSON.stringify({ on }) })
+}
+
+export function fetchComments(postId: string, after?: string) {
+  const q = after ? `?after=${encodeURIComponent(after)}` : ''
+  return request<{ comments: PostComment[]; more: boolean }>(`/api/posts/${encodeURIComponent(postId)}/comments${q}`)
+}
+
+export function addComment(postId: string, body: string) {
+  return request<{ comment: PostComment; comments: number }>(`/api/posts/${encodeURIComponent(postId)}/comments`, { method: 'POST', body: JSON.stringify({ body }) })
+}
+
+export function deleteComment(postId: string, commentId: string) {
+  return request<void>(`/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' })
+}
+
+export function reportComment(commentId: string, reason: string) {
+  return request<{ ok: true }>(`/api/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+export function reportConversation(conversationId: string, reason: string) {
+  return request<{ ok: true }>(`/api/messages/${encodeURIComponent(conversationId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+export function createPost(input: {
+  kind: PostKind
+  body: string
+  imageBase64?: string
+  mediaType?: string
+  videoId?: string
+  club?: string
+  ref?: { kind: PostRefKind; id: string }
+}) {
   return request<{ post: Post; rewards: RewardSummary | null }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
 }
 

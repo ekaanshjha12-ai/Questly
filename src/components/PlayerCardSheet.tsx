@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Ban, Check, Flag, Loader2, MessageCircle, Swords, UserRound, X } from 'lucide-react'
 import { blockPlayer, fetchPlayer, reportPlayer, type Challenge, type PublicPlayer } from '../lib/api'
@@ -23,10 +23,13 @@ export default function PlayerCardSheet({
   onClose,
   onChallengeSent,
   onMessage,
+  startChallenge = false,
 }: {
   username: string
   myName: string
   onClose: () => void
+  /** Opened from a post's Challenge: go straight to the offer if this player can be challenged. */
+  startChallenge?: boolean
   onChallengeSent?: (challenge: Challenge) => void
   /** Where Message goes when the caller already has the conversation open.
    * Without it, the conversation opens as a sheet over this one. */
@@ -59,6 +62,14 @@ export default function PlayerCardSheet({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [composing, messaging, onClose])
+
+  // Once only, so closing the composer leaves the card rather than reopening it.
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    if (!startChallenge || autoOpened.current || !player) return
+    autoOpened.current = true
+    if (player.canChallenge) setComposing(true)
+  }, [startChallenge, player])
 
   const data = useMemo(() => (player ? publicCardData(player) : null), [player])
   const design = useMemo(() => player?.card ?? publicDefaultCard(), [player])

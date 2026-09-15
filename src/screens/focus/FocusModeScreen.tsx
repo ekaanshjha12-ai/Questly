@@ -13,6 +13,7 @@ import { Parchment } from '../../components/ui/Panel'
 import HeroSprite from '../../components/art/HeroSprite'
 import { formatClock } from '../../lib/time'
 import { formatMinutes, isFocusQuest } from '../../lib/questFormat'
+import { putShareDraft } from '../../lib/social'
 import VictoryScreen from './VictoryScreen'
 
 const PRESETS = [15, 25, 45, 60, 90, 120]
@@ -57,15 +58,21 @@ export default function FocusModeScreen({ goals, nowPlaying }: { goals: Goal[]; 
         }}
         onShare={() => {
           celebrate(finished.rewards, { includeXp: false })
-          try {
-            const minutes = Math.round(finished.session.activeMs / 60_000)
-            const text = finished.quest?.status === 'completed'
-              ? `Quest complete: ${finished.quest.title}. ${minutes} minutes of deep focus (+${finished.rewards.xp} XP).`
-              : `Put in ${minutes} minutes of deep focus${finished.session.label ? ` on ${finished.session.label}` : ''} (+${finished.rewards.xp} XP).`
-            sessionStorage.setItem('questly:share', JSON.stringify({ kind: finished.quest?.status === 'completed' ? 'achievement' : 'progress', text }))
-          } catch {
-            // Sharing still opens, just without the draft.
-          }
+          const minutes = Math.round(finished.session.activeMs / 60_000)
+          const quest = finished.quest?.status === 'completed' ? finished.quest : null
+          putShareDraft({
+            kind: quest ? 'achievement' : 'progress',
+            label: 'From Focus Mode',
+            text: quest
+              ? `Quest complete: ${quest.title}. ${minutes} minutes of deep focus (+${finished.rewards.xp} XP).`
+              : `Put in ${minutes} minutes of deep focus${finished.session.label ? ` on ${finished.session.label}` : ''} (+${finished.rewards.xp} XP).`,
+            // The server attaches a session only from five minutes up.
+            ref: quest
+              ? { kind: 'quest', id: quest.id, title: quest.title, detail: `+${quest.xp} XP` }
+              : finished.session.activeMs >= 5 * 60_000
+                ? { kind: 'focus', id: finished.session.id, title: finished.session.label || 'Focus session', detail: `${minutes} min of timed focus` }
+                : undefined,
+          })
           setFinished(null)
           navigate('/social?share=1', { replace: true })
         }}

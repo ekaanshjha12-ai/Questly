@@ -28,6 +28,8 @@ export const NOTIFICATION_KINDS = new Set([
   'club_removed',
   'club_request',
   'message',
+  'post_appreciated',
+  'post_comment',
   'world_event',
   'system',
 ])

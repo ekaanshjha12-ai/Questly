@@ -8,6 +8,7 @@ import {
   declineConversation,
   fetchConversation,
   lookupConversation,
+  reportConversation,
   reportPlayer,
   sendDirectMessage,
   startConversation,
@@ -167,7 +168,9 @@ export default function ConversationView({
   async function report() {
     setMenu(false)
     try {
-      await reportPlayer(handle, 'Reported from messages')
+      // With a conversation, the report keeps what they wrote for the moderators.
+      if (conversationId) await reportConversation(conversationId, 'Reported from messages')
+      else await reportPlayer(handle, 'Reported from messages')
       setReported(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not report.')

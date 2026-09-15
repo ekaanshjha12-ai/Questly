@@ -6,6 +6,7 @@ import type { Inbox } from '../../hooks/useMessages'
 import { match, useRouter } from '../../app/router'
 import FeedScreen from './FeedScreen'
 import MessagesScreen from './MessagesScreen'
+import PostDetail from './PostDetail'
 import PlayerCardSheet from '../PlayerCardSheet'
 import Tabs from '../ui/Tabs'
 
@@ -23,6 +24,7 @@ export type SocialTab = 'feed' | 'messages' | 'mine'
 export default function SocialHome({ state, user, inbox }: { state: AppState; user: AuthUser; inbox: Inbox }) {
   const { path, search, navigate } = useRouter()
   const conversation = match('/social/messages/:id', path)
+  const openPost = match('/social/post/:id', path)
   const player = match('/u/:username', path)
   const tab: SocialTab = path.startsWith('/social/messages') ? 'messages' : path === '/social/mine' ? 'mine' : 'feed'
 
@@ -49,7 +51,8 @@ export default function SocialHome({ state, user, inbox }: { state: AppState; us
         onChange={(id) => navigate(id === 'feed' ? '/social' : id === 'messages' ? '/social/messages' : '/social/mine', { keepScroll: false })}
       />
 
-      {tab === 'feed' && <FeedScreen state={state} myName={state.player.name} startSharing={startSharing} />}
+      {tab === 'feed' && openPost && <PostDetail id={openPost.id} myName={state.player.name} />}
+      {tab === 'feed' && !openPost && <FeedScreen state={state} myName={state.player.name} startSharing={startSharing} />}
 
       {tab === 'messages' && (
         <MessagesScreen

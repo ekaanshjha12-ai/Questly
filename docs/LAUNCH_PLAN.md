@@ -106,7 +106,7 @@ drops metadata, cross-age messaging protections, account export and deletion.
 | 6 | Duels: states, VS screen, focus-validated progress, rewards via ledger | Done: focus duels count server-timed minutes; check-in duels kept; Sent/Completed/Failed states; VS screen with countdown; drafts kept on device |
 | 7 | Clubs: entry trials, mandatory/optional/public challenges, Club XP, ranks, leaderboard, chat, owner controls | Done: server-judged trials (focus, quests, streak, proof, duels), level gate, owner/officer/member roles, challenges with warning / Club XP loss / removal, Club XP ledger, leaderboard, chat, club feed and announcements, invitations, reports and admin takedown |
 | 8 | World map: regions, locks, time of day, club buildings, events | Done: pixel overworld, 9 regions with server-judged locks, 2 weekly quests per region, monthly world events paid through the ledger, morning/day/evening/night |
-| 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Planned |
+| 9 | Adventure Log upgrades, comments, appreciation, report queue, message filters | Done: appreciate, comments (filtered for abuse, contact details and cross-age risks; rate-limited; hidden across blocks; removable by author, post owner or club leader), challenge from a post, share link and post pages, quests / duels / achievements / focus sessions attached from the server's records, comment and conversation reports with saved content, new Chronicle Log alerts |
 | 10 | Onboarding paths and first quests | Done: path (Scholar, Builder, Creator, Discipline, Explorer), pixel hero, goals, first-quest contract |
 | 11 | Admin: reports, moderation, clubs, metrics | Planned |
 | 12 | Legal and policy pages, privacy controls | Planned |
@@ -119,10 +119,10 @@ drops metadata, cross-age messaging protections, account export and deletion.
 
 Kept up to date as phases land.
 
-- **Main bundle** is about 525 kB (166 kB gzipped). The sound engine and
+- **Main bundle** is about 532 kB (168 kB gzipped). The sound engine and
   motion library are the bulk; splitting them is part of phase 15.
-- **Reporting messages** from inside a conversation is not built yet; players
-  can report the person from their card. Comes with phase 9.
+- **Admin phase 11** still has to add metrics; the report queue already takes
+  posts, comments, conversations, players, duels and clubs.
 - Fixed along the way: the inline theme script in `index.html` was blocked by
   the Content Security Policy in production, so the saved theme never applied
   before first paint. It now loads from `/theme-init.js`.

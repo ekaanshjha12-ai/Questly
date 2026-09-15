@@ -1,5 +1,5 @@
 import type { AppState } from '../types'
-import type { GameSnapshot, PostKind } from './api'
+import type { GameSnapshot, PostKind, PostRefKind } from './api'
 import { dailyKey } from './period'
 
 /**
@@ -11,7 +11,7 @@ export const POST_KINDS: { id: PostKind; label: string; emoji: string; prompt: s
   { id: 'achievement', label: 'Achievement', emoji: '🏆', prompt: 'What did you get done?' },
   { id: 'learned', label: 'Learned', emoji: '💡', prompt: 'What did you learn today?' },
   { id: 'progress', label: 'Progress', emoji: '📈', prompt: 'How far along are you?' },
-  { id: 'update', label: 'Update', emoji: '✍️', prompt: 'What are you working on?' },
+  { id: 'update', label: 'Project update', emoji: '🛠️', prompt: 'What are you building, and where is it at?' },
 ]
 
 const ANNOUNCEMENT = { id: 'announcement' as const, label: 'Announcement', emoji: '📣', prompt: 'What does the club need to know?' }
@@ -72,7 +72,80 @@ export interface ShareMoment {
   kind: PostKind
   label: string
   text: string
+  /** Something from Questly's records to attach. The title and detail are only
+   * the composer's preview — the server looks the record up and writes its own. */
+  ref?: ShareRef
 }
+
+export interface ShareRef {
+  kind: PostRefKind
+  id: string
+  title: string
+  detail: string
+}
+
+export const refKey = (ref: { kind: string; id: string }) => `${ref.kind}:${ref.id}`
+
+const SHARE_DRAFT_KEY = 'questly:share'
+
+/** Hands a ready-written post to the Adventure Log, for "Share" buttons elsewhere in the app. */
+export function putShareDraft(draft: { kind: PostKind; text: string; label?: string; ref?: ShareRef }) {
+  try {
+    sessionStorage.setItem(SHARE_DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // Sharing still opens, just without the draft.
+  }
+}
+
+/**
+ * The draft handed over. Reading leaves it in place — a render can be thrown
+ * away and run again — so whoever shows it calls clearShareDraft once shown.
+ */
+export function readShareDraft(): ShareMoment | null {
+  try {
+    const raw = sessionStorage.getItem(SHARE_DRAFT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { kind?: PostKind; text?: string; label?: string; ref?: ShareRef }
+    if (!parsed.text) return null
+    const ref =
+      parsed.ref && ['quest', 'duel', 'achievement', 'focus'].includes(parsed.ref.kind) && typeof parsed.ref.id === 'string'
+        ? { kind: parsed.ref.kind, id: parsed.ref.id, title: String(parsed.ref.title ?? ''), detail: String(parsed.ref.detail ?? '') }
+        : undefined
+    return { id: 'draft', kind: parsed.kind ?? 'progress', label: parsed.label ?? 'Shared', text: String(parsed.text).slice(0, 1000), ref }
+  } catch {
+    return null
+  }
+}
+
+export function clearShareDraft() {
+  try {
+    sessionStorage.removeItem(SHARE_DRAFT_KEY)
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/**
+ * Shares a post's address — never its words, which stay behind sign-in with
+ * everything else people post. The system share sheet where there is one,
+ * otherwise the link is copied.
+ */
+export async function sharePostLink(postId: string): Promise<'shared' | 'copied' | 'cancelled'> {
+  const url = `${window.location.origin}/social/post/${encodeURIComponent(postId)}`
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: 'A post on the Questly Adventure Log', url })
+      return 'shared'
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled'
+      // Fall through to copying.
+    }
+  }
+  await navigator.clipboard.writeText(url)
+  return 'copied'
+}
+
+const RARITY_WORD = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' } as const
 
 /**
  * Today's finished work, turned into posts ready to share.
@@ -86,9 +159,19 @@ export function shareMoments(state: AppState, snapshot: GameSnapshot | null, now
   const moments: ShareMoment[] = []
 
   if (snapshot) {
-    // The board holds what was finished today.
+    // The board holds what was finished today. The biggest few can go out on
+    // their own, with the quest itself attached.
     const quests = snapshot.quests.filter((q) => q.status === 'completed')
-    if (quests.length) {
+    for (const q of [...quests].sort((a, b) => b.xp - a.xp).slice(0, 3)) {
+      moments.push({
+        id: `quest-${q.id}`,
+        kind: 'achievement',
+        label: q.title.length > 26 ? `${q.title.slice(0, 25)}…` : q.title,
+        text: `Quest complete: ${q.title}.`,
+        ref: { kind: 'quest', id: q.id, title: q.title, detail: `${RARITY_WORD[q.rarity]} · +${q.xp} XP` },
+      })
+    }
+    if (quests.length > 1) {
       const xp = quests.reduce((sum, q) => sum + q.xpPaid, 0)
       const names = quests.slice(0, 3).map((q) => `• ${q.title}`).join('\n')
       moments.push({
@@ -107,7 +190,13 @@ export function shareMoments(state: AppState, snapshot: GameSnapshot | null, now
 
     for (const a of snapshot.achievements.recent) {
       if (!a.unlockedAt || dailyKey(new Date(a.unlockedAt)) !== today) continue
-      moments.push({ id: `ach-${a.id}`, kind: 'achievement', label: a.title, text: `Unlocked "${a.title}" — ${a.description.toLowerCase()}` })
+      moments.push({
+        id: `ach-${a.id}`,
+        kind: 'achievement',
+        label: a.title,
+        text: `Unlocked "${a.title}" — ${a.description.charAt(0).toLowerCase()}${a.description.slice(1)}`,
+        ref: { kind: 'achievement', id: a.id, title: a.title, detail: a.description },
+      })
     }
 
     const streak = snapshot.progress.streak

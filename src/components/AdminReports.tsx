@@ -114,6 +114,27 @@ function ReportRow({ report, onDone }: { report: AdminReport; onDone: () => void
             {snap.description ? <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{String(snap.description)}</p> : null}
             {snap.rules ? <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">Rules: {String(snap.rules)}</p> : null}
           </>
+        ) : report.kind === 'comment' ? (
+          <>
+            <p className="whitespace-pre-wrap break-words">{String(snap.body ?? '')}</p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Comment by @{String(snap.author ?? 'unknown')} on post {String(snap.postId ?? '')}
+            </p>
+          </>
+        ) : report.kind === 'message' && Array.isArray(snap.messages) ? (
+          <>
+            <p className="text-[11px] text-slate-500">
+              What @{String(snap.username ?? 'unknown')} wrote, most recent last ({snap.messages.length} message{snap.messages.length === 1 ? '' : 's'} kept):
+            </p>
+            <ol className="mt-1.5 max-h-56 space-y-1 overflow-y-auto">
+              {(snap.messages as { body?: unknown; at?: unknown }[]).map((m, i) => (
+                <li key={i} className="rounded-md bg-ink-800/80 px-2 py-1 text-xs">
+                  <span className="whitespace-pre-wrap break-words">{String(m.body ?? '')}</span>
+                  <span className="ml-2 text-[10px] text-slate-500">{m.at ? new Date(String(m.at)).toLocaleString() : ''}</span>
+                </li>
+              ))}
+            </ol>
+          </>
         ) : report.kind === 'post' ? (
           <>
             <p className="whitespace-pre-wrap break-words">{String(snap.body ?? '') || <span className="text-slate-500">(no text)</span>}</p>
@@ -153,14 +174,19 @@ function ReportRow({ report, onDone }: { report: AdminReport; onDone: () => void
                 <Trash2 className="h-3.5 w-3.5" /> Take post down
               </button>
             )}
+            {report.kind === 'comment' && (
+              <button type="button" disabled={busy} onClick={() => void resolve({ outcome: 'actioned', removeComment: true })} className="flex items-center gap-1.5 rounded-lg border border-danger-500/40 px-2.5 py-1.5 text-xs text-danger-400 hover:bg-danger-500/10 disabled:opacity-40">
+                <Trash2 className="h-3.5 w-3.5" /> Remove comment
+              </button>
+            )}
             {report.target && (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void resolve({ outcome: 'actioned', removePost: report.kind === 'post', suspendDays: 7 })}
+                onClick={() => void resolve({ outcome: 'actioned', removePost: report.kind === 'post', removeComment: report.kind === 'comment', suspendDays: 7 })}
                 className="flex items-center gap-1.5 rounded-lg border border-danger-500/40 px-2.5 py-1.5 text-xs text-danger-400 hover:bg-danger-500/10 disabled:opacity-40"
               >
-                <Ban className="h-3.5 w-3.5" /> {report.kind === 'post' ? 'Take down + suspend 7 days' : 'Suspend 7 days'}
+                <Ban className="h-3.5 w-3.5" /> {report.kind === 'post' || report.kind === 'comment' ? 'Take down + suspend 7 days' : 'Suspend 7 days'}
               </button>
             )}
             {busy && <Loader2 className="h-4 w-4 animate-spin self-center text-gold-400" />}

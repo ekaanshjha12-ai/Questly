@@ -45,7 +45,22 @@ import { REFUSAL_MESSAGE, screenInput, screenOutputDeep } from './moderation.js'
 import { levelFromXp } from './game/levels.js'
 import { gameRoutes } from './routes/game.js'
 import { clubRoutes } from './routes/clubs.js'
-import { clubPostRights, notifyAnnouncement } from './game/clubs.js'
+import { clubPostRights, isClubLeader as clubLeaderOf, isClubMember, notifyAnnouncement } from './game/clubs.js'
+import {
+  appreciationFor,
+  COMMENT_MAX,
+  commentCount,
+  countRecentAppreciations,
+  countRecentComments,
+  findPostWithRef,
+  getComment,
+  insertComment,
+  listComments,
+  setAppreciation,
+  setPostRef,
+  softDeleteComment,
+} from './engagement.js'
+import { ACHIEVEMENTS } from './game/achievements.js'
 import { ensureGame, stripServerOwned } from './game/migrate.js'
 import { rewardProof } from './game/quests.js'
 import { getProgressRow, startRewards, transaction } from './game/rewards.js'
@@ -1327,11 +1342,16 @@ app.post('/api/admin/reports/:id/resolve', requireAuth, requireAdmin, throttleAd
     return
   }
   const removePost = outcome === 'actioned' && req.body?.removePost === true
+  const removeComment = outcome === 'actioned' && req.body?.removeComment === true
   const days = outcome === 'actioned' ? Number(req.body?.suspendDays) : 0
   const suspend = Number.isFinite(days) && days > 0
   const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : ''
-  if (outcome === 'actioned' && !removePost && !suspend) {
-    res.status(400).json({ error: 'Pick an action: take the post down, suspend the account, or both.' })
+  if (outcome === 'actioned' && !removePost && !removeComment && !suspend) {
+    res.status(400).json({ error: 'Pick an action: take the content down, suspend the account, or both.' })
+    return
+  }
+  if (removeComment && report.kind !== 'comment') {
+    res.status(400).json({ error: 'Only a reported comment can be removed that way.' })
     return
   }
   if (removePost && report.kind !== 'post') {
@@ -1356,6 +1376,7 @@ app.post('/api/admin/reports/:id/resolve', requireAuth, requireAdmin, throttleAd
 
   const actions = []
   if (removePost && adminRemovePost(report.targetId)) actions.push('post_removed')
+  if (removeComment && softDeleteComment(report.targetId)) actions.push('comment_removed')
   if (suspend) {
     const until = new Date(Date.now() + Math.min(365, days) * 86_400_000).toISOString()
     setSuspendedUntil(target.id, until)
@@ -2074,6 +2095,14 @@ function videoView(video) {
 function postView(row, viewerId) {
   const author = findUserById(row.user_id)
   const video = row.video_id ? getPostVideo(row.video_id) : null
+  let ref = null
+  if (row.ref_kind && row.ref_data) {
+    try {
+      ref = { kind: row.ref_kind, id: row.ref_id, ...JSON.parse(row.ref_data) }
+    } catch {
+      ref = null
+    }
+  }
   return {
     id: row.id,
     kind: row.kind,
@@ -2083,8 +2112,235 @@ function postView(row, viewerId) {
     video: video ? videoView(video) : null,
     author: author ? playerSummary(author) : null,
     mine: row.user_id === viewerId,
+    ref,
+    appreciations: appreciationFor(row.id, viewerId),
+    comments: commentCount(row.id),
+    clubId: row.club_id ?? null,
+    // Club posts are answered by club members only.
+    canRespond: !row.club_id || isClubMember(viewerId, row.club_id),
   }
 }
+
+/**
+ * What a post can be about, checked against the author's own record and kept
+ * as a snapshot so the post keeps saying what was true when it was shared.
+ * Returns null when there is nothing attached; throws a status-carrying error
+ * when the attachment is not the author's to share.
+ */
+function postRefFor(userId, input) {
+  if (!input || typeof input !== 'object') return null
+  const kind = String(input.kind ?? '')
+  const id = String(input.id ?? '').slice(0, 120)
+  const refuse = (message) => {
+    const err = new Error(message)
+    err.status = 400
+    throw err
+  }
+  if (!id) refuse('Nothing to attach.')
+  if (kind === 'quest') {
+    const q = db.get("SELECT id, title, xp_reward, rarity, verified_by, completed_at, type FROM quests WHERE id = ? AND user_id = ? AND status = 'completed'", [id, userId])
+    if (!q) refuse('Only a quest you have completed can be shared.')
+    return { kind, id, data: { title: q.title, xp: q.xp_reward, rarity: q.rarity, questType: q.type, verifiedBy: q.verified_by, completedAt: q.completed_at } }
+  }
+  if (kind === 'duel') {
+    const c = db.get("SELECT * FROM challenges WHERE id = ? AND status = 'completed' AND (creator_id = ? OR opponent_id = ?)", [id, userId, userId])
+    if (!c) refuse('Only a finished duel you took part in can be shared.')
+    const mine = c.creator_id === userId ? c.creator_reward : c.opponent_reward
+    const other = findUserById(c.creator_id === userId ? c.opponent_id : c.creator_id)
+    return { kind, id, data: { title: c.name, objective: c.objective, result: mine > 0 ? 'completed' : 'failed', xp: mine ?? 0, opponent: other ? playerSummary(other).name : null, days: c.duration_days } }
+  }
+  if (kind === 'achievement') {
+    const unlocked = db.get('SELECT unlocked_at FROM user_achievements WHERE user_id = ? AND achievement_id = ?', [userId, id])
+    const a = ACHIEVEMENTS.find((x) => x.id === id)
+    if (!unlocked || !a) refuse('Only an achievement you have unlocked can be shared.')
+    return { kind, id, data: { title: a.title, description: a.description, icon: a.icon, unlockedAt: unlocked.unlocked_at } }
+  }
+  if (kind === 'focus') {
+    const s = db.get("SELECT id, label, active_ms, status, ended_at FROM focus_sessions WHERE id = ? AND user_id = ? AND status IN ('completed', 'ended') AND active_ms >= 300000", [id, userId])
+    if (!s) refuse('Only a focus session of five minutes or more can be shared.')
+    return { kind, id, data: { title: s.label, minutes: Math.floor(s.active_ms / 60_000), completed: s.status === 'completed', endedAt: s.ended_at } }
+  }
+  refuse('That cannot be attached to a post.')
+  return null
+}
+
+/** A post this viewer may see: not deleted, not from someone either has blocked, not in a closed club. */
+function visiblePost(viewer, postId) {
+  const post = getPost(String(postId ?? ''))
+  if (!post) return null
+  const author = findUserById(post.user_id)
+  if (!author || author.disabled) return null
+  if (post.user_id !== viewer.id && isBlockedEitherWay(viewer.id, post.user_id)) return null
+  if (post.club_id && db.get('SELECT archived_at FROM clubs WHERE id = ?', [post.club_id])?.archived_at) return null
+  return post
+}
+
+/** Club posts are answered by club members; everything else by any signed-in player who can see it. */
+function mayEngage(viewer, post) {
+  if (!viewer.username || !viewer.birthdate) return 'Finish your profile first.'
+  if (post.club_id && !isClubMember(viewer.id, post.club_id)) return 'Only club members can respond to club posts.'
+  return null
+}
+
+function commentView(row, viewerId, post, leader = false) {
+  return {
+    id: row.id,
+    body: row.body,
+    createdAt: row.created_at,
+    mine: row.user_id === viewerId,
+    author: { username: row.username, name: String(row.display_name ?? row.username ?? 'Adventurer').slice(0, 40) },
+    // The post's author may tidy their own thread, and a club's leaders its club's.
+    canDelete: row.user_id === viewerId || post.user_id === viewerId || leader,
+  }
+}
+
+const throttleEngage = rateLimit({ name: 'engage', max: 90, windowMs: 10 * 60_000, by: 'user' })
+
+app.get('/api/posts/:id', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const post = visiblePost(viewer, req.params.id)
+  if (!post) {
+    res.status(404).json({ error: 'That post is not available.' })
+    return
+  }
+  res.json({ post: postView(post, viewer.id) })
+})
+
+app.post('/api/posts/:id/appreciate', requireAuth, throttleEngage, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const post = visiblePost(viewer, req.params.id)
+  if (!post) {
+    res.status(404).json({ error: 'That post is not available.' })
+    return
+  }
+  const problem = mayEngage(viewer, post)
+  if (problem) {
+    res.status(403).json({ error: problem })
+    return
+  }
+  if (post.user_id === viewer.id) {
+    res.status(400).json({ error: 'Appreciation is for other people’s posts.' })
+    return
+  }
+  const on = req.body?.on !== false
+  if (on && countRecentAppreciations(viewer.id, new Date(Date.now() - 60 * 60_000).toISOString()) >= 200) {
+    res.status(429).json({ error: 'That is a lot of appreciation for one hour. Try again soon.' })
+    return
+  }
+  const before = appreciationFor(post.id, viewer.id)
+  const after = setAppreciation(post.id, viewer.id, on)
+  if (on && !before.mine) {
+    const name = playerSummary(viewer).name
+    notify(post.user_id, {
+      kind: 'post_appreciated',
+      title: after.count > 1 ? `${name} and ${after.count - 1} other${after.count === 2 ? '' : 's'} appreciated your post` : `${name} appreciated your post`,
+      body: post.body.length > 90 ? `${post.body.slice(0, 90)}…` : post.body,
+      link: `/social/post/${post.id}`,
+      dedupeKey: `appreciate:${post.id}`,
+    })
+  }
+  res.json({ appreciations: after })
+})
+
+app.get('/api/posts/:id/comments', requireAuth, throttleSocialRead, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const post = visiblePost(viewer, req.params.id)
+  if (!post) {
+    res.status(404).json({ error: 'That post is not available.' })
+    return
+  }
+  const after = typeof req.query.after === 'string' ? req.query.after : null
+  const { rows, more } = listComments(post.id, { after })
+  const visible = rows.filter((c) => !c.disabled && (c.user_id === viewer.id || !isBlockedEitherWay(viewer.id, c.user_id)))
+  const leader = post.club_id ? clubLeaderOf(viewer.id, post.club_id) : false
+  res.json({ comments: visible.map((c) => commentView(c, viewer.id, post, leader)), more })
+})
+
+app.post('/api/posts/:id/comments', requireAuth, throttleEngage, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const post = visiblePost(viewer, req.params.id)
+  if (!post) {
+    res.status(404).json({ error: 'That post is not available.' })
+    return
+  }
+  const problem = mayEngage(viewer, post)
+  if (problem) {
+    res.status(403).json({ error: problem })
+    return
+  }
+  const body = String(req.body?.body ?? '').trim().replace(/\n{3,}/g, '\n\n')
+  if (!body) {
+    res.status(400).json({ error: 'Write something first.' })
+    return
+  }
+  if (body.length > COMMENT_MAX) {
+    res.status(400).json({ error: `Comments can be at most ${COMMENT_MAX} characters.` })
+    return
+  }
+  if (!screenInput(body, { allowLength: COMMENT_MAX }).ok) {
+    audit({ userId: viewer.id, email: viewer.email, event: 'moderation.comment', outcome: 'blocked', ip: req.ip, detail: post.id })
+    res.status(400).json({ error: 'That comment was blocked by the content filter.' })
+    return
+  }
+  // Comments are public to everyone who can see the post, of every age.
+  const contact = contactDetails(body)
+  const risk = riskyAcrossAges(body)
+  if (contact || risk) {
+    audit({ userId: viewer.id, email: viewer.email, event: 'moderation.comment_unsafe', outcome: 'blocked', ip: req.ip, detail: `${post.id} (${contact ?? risk})` })
+    res.status(400).json({ error: "To keep everyone safe, contact details and personal requests can't go in comments.", code: 'unsafe' })
+    return
+  }
+  if (countRecentComments(viewer.id, new Date(Date.now() - 10 * 60_000).toISOString()) >= 20) {
+    res.status(429).json({ error: 'That is a lot of commenting in a few minutes. Take a breather.' })
+    return
+  }
+  const id = randomUUID()
+  insertComment({ id, postId: post.id, userId: viewer.id, body })
+  if (post.user_id !== viewer.id) {
+    notify(post.user_id, {
+      kind: 'post_comment',
+      title: `${playerSummary(viewer).name} commented on your post`,
+      body: body.length > 90 ? `${body.slice(0, 90)}…` : body,
+      link: `/social/post/${post.id}`,
+      dedupeKey: `comment:${post.id}`,
+    })
+  }
+  const row = { ...getComment(id), username: viewer.username, display_name: viewer.display_name }
+  const leader = post.club_id ? clubLeaderOf(viewer.id, post.club_id) : false
+  res.status(201).json({ comment: commentView(row, viewer.id, post, leader), comments: commentCount(post.id) })
+})
+
+app.delete('/api/posts/:postId/comments/:id', requireAuth, throttleEngage, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const post = visiblePost(viewer, req.params.postId)
+  const comment = post ? getComment(req.params.id) : null
+  if (!post || !comment || comment.post_id !== post.id) {
+    res.status(404).json({ error: 'That comment is not available.' })
+    return
+  }
+  const leader = post.club_id ? clubLeaderOf(viewer.id, post.club_id) : false
+  if (comment.user_id !== viewer.id && post.user_id !== viewer.id && !leader) {
+    res.status(403).json({ error: 'You can remove your own comments, and comments on your own posts.' })
+    return
+  }
+  softDeleteComment(comment.id)
+  res.status(204).end()
+})
+
+app.post('/api/comments/:id/report', requireAuth, throttleChallengeWrite, (req, res) => {
+  const viewer = findUserById(req.user.id)
+  const comment = getComment(req.params.id)
+  const post = comment ? visiblePost(viewer, comment.post_id) : null
+  if (!comment || !post || comment.user_id === viewer.id) {
+    res.status(404).json({ error: 'That comment is not available.' })
+    return
+  }
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+  const author = findUserById(comment.user_id)
+  fileReport({ reporterId: viewer.id, kind: 'comment', targetId: comment.id, targetUserId: comment.user_id, reason, snapshot: { body: comment.body, postId: post.id, author: author?.username ?? null } })
+  audit({ userId: viewer.id, email: viewer.email, event: 'social.report_comment', outcome: 'filed', ip: req.ip, detail: `comment ${comment.id}: ${reason || 'no reason given'}` })
+  res.json({ ok: true })
+})
 
 app.get('/api/feed', requireAuth, throttleSocialRead, (req, res) => {
   const viewer = findUserById(req.user.id)
@@ -2106,7 +2362,17 @@ app.get('/api/feed', requireAuth, throttleSocialRead, (req, res) => {
   const visible = rows
     .filter((row) => row.user_id === viewer.id || !isBlockedEitherWay(viewer.id, row.user_id))
     .slice(0, 20)
-  res.json({ posts: visible.map((row) => postView(row, viewer.id)), more: rows.length >= 20 })
+  // What this player has shared lately, so today's work already posted is not offered again.
+  const shared =
+    !before && !userId
+      ? db
+          .all("SELECT ref_kind, ref_id FROM posts WHERE user_id = ? AND ref_kind IS NOT NULL AND deleted_at IS NULL AND created_at > ? LIMIT 200", [
+            viewer.id,
+            new Date(Date.now() - 8 * 86_400_000).toISOString(),
+          ])
+          .map((r) => `${r.ref_kind}:${r.ref_id}`)
+      : undefined
+  res.json({ posts: visible.map((row) => postView(row, viewer.id)), more: rows.length >= 20, shared })
 })
 
 app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => {
@@ -2149,6 +2415,17 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
       return
     }
     if (announcement) post.value.kind = 'announcement'
+    let ref = null
+    try {
+      ref = postRefFor(viewer.id, req.body?.ref)
+    } catch (err) {
+      res.status(err.status ?? 400).json({ error: err.message })
+      return
+    }
+    if (ref && findPostWithRef(viewer.id, ref.kind, ref.id)) {
+      res.status(409).json({ error: 'You have already shared that.', code: 'already_shared' })
+      return
+    }
     const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
     if (countRecentPosts(viewer.id, hourAgo) >= 10) {
       res.status(429).json({ error: 'That is a lot of posting for one hour. Take a breather and try again soon.' })
@@ -2206,6 +2483,7 @@ app.post('/api/posts', requireAuth, throttleChallengeWrite, async (req, res) => 
 
     const id = randomUUID()
     insertPost({ id, userId: viewer.id, kind: post.value.kind, body: post.value.body, imageId, videoId, clubId: club?.id ?? null })
+    if (ref) setPostRef(id, ref)
     track(viewer.id, 'post_created', { kind: post.value.kind, media: imageId ? 'image' : videoId ? 'video' : 'none', club: Boolean(club) })
     if (club && announcement) notifyAnnouncement(club, viewer.id, post.value.body)
     let rewards = null
@@ -2713,6 +2991,29 @@ app.post('/api/messages/:id', requireAuth, throttleChat, (req, res) => {
   res.status(201).json({ message: { id, mine: true, body, at: new Date().toISOString() } })
 })
 
+/**
+ * Reporting a conversation keeps what the other person wrote — the last
+ * twenty of their messages — so a moderator sees the conversation as it was.
+ * It works after a block too: people often block first and report second.
+ */
+app.post('/api/messages/:id/report', requireAuth, throttleChallengeWrite, (req, res) => {
+  const row = getConversation(String(req.params.id ?? ''))
+  if (!row || (row.user_a !== req.user.id && row.user_b !== req.user.id)) {
+    res.status(404).json({ error: 'No such conversation.' })
+    return
+  }
+  const otherId = row.user_a === req.user.id ? row.user_b : row.user_a
+  const other = findUserById(otherId)
+  const theirs = listDirectMessages(row.id, 0, 200)
+    .filter((m) => m.user_id === otherId)
+    .slice(-20)
+    .map((m) => ({ body: m.body.slice(0, 600), at: m.created_at }))
+  const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+  fileReport({ reporterId: req.user.id, kind: 'message', targetId: row.id, targetUserId: otherId, reason, snapshot: { username: other?.username ?? null, messages: theirs } })
+  audit({ userId: req.user.id, email: req.user.email, event: 'social.report_conversation', outcome: 'filed', ip: req.ip, detail: `${row.id} against ${otherId}` })
+  res.json({ ok: true })
+})
+
 app.post('/api/messages/:id/accept', requireAuth, throttleChat, (req, res) => {
   const row = loadConversation(req, res)
   if (!row) return
@@ -2979,7 +3280,11 @@ app.get('/api/account/export', requireAuth, rateLimit({ name: 'export', max: 5, 
     achievements: mine('SELECT achievement_id, unlocked_at FROM user_achievements WHERE user_id = ?'),
     items: mine('SELECT item_id, source, acquired_at FROM user_items WHERE user_id = ?'),
     equipment: mine('SELECT slot, item_id FROM user_equipment WHERE user_id = ?'),
-    posts: mine('SELECT id, kind, body, created_at, deleted_at FROM posts WHERE user_id = ? ORDER BY created_at'),
+    posts: mine('SELECT id, kind, body, ref_kind, ref_data, created_at, deleted_at FROM posts WHERE user_id = ? ORDER BY created_at'),
+    comments: mine('SELECT post_id, body, created_at, deleted_at FROM post_comments WHERE user_id = ? ORDER BY created_at'),
+    appreciated: mine('SELECT post_id, created_at FROM post_appreciations WHERE user_id = ? ORDER BY created_at'),
+    clubs: mine('SELECT c.name, m.role, m.status, m.club_xp, m.warnings, m.joined_at, m.left_at FROM club_members m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ?'),
+    clubMessages: mine('SELECT c.name AS club, x.body, x.created_at, x.deleted_at FROM club_messages x JOIN clubs c ON c.id = x.club_id WHERE x.user_id = ? ORDER BY x.id'),
     challenges: db.all('SELECT * FROM challenges WHERE creator_id = ? OR opponent_id = ? ORDER BY created_at LIMIT 5000', [req.user.id, req.user.id]),
     notifications: mine('SELECT kind, title, body, created_at, read_at FROM notifications WHERE user_id = ? ORDER BY id DESC', 500),
   })

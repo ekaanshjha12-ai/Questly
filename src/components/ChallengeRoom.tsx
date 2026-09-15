@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Check, Flag, Loader2, MessageCircle, Play, ScrollText, Send, ShieldAlert, Timer, TrendingUp, X, XCircle } from 'lucide-react'
+import { Check, Flag, Loader2, MessageCircle, Play, ScrollText, Send, Share2, ShieldAlert, Timer, TrendingUp, X, XCircle } from 'lucide-react'
 import {
   ApiError,
   checkInChallenge,
@@ -17,6 +17,7 @@ import {
 import { PlayerAvatar, StatusPill, TermsSheet, formatWhen, statusInfo, timeLeft } from './ChallengeParts'
 import HeroSprite from './art/HeroSprite'
 import { useRouter } from '../app/router'
+import { putShareDraft } from '../lib/social'
 
 /**
  * One duel, from offer to result.
@@ -530,6 +531,7 @@ function ProgressView({
   const needsNote = challenge.proof === 'required'
   const checkins = challenge.checkins ?? []
   const finished = challenge.status === 'completed' || challenge.status === 'failed'
+  const myXp = challenge.rewards ? (mySide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent) : 0
 
   async function checkIn() {
     setBusy(true)
@@ -625,10 +627,30 @@ function ProgressView({
       )}
 
       {finished && challenge.rewards && (
-        <div className="grid grid-cols-2 gap-2">
-          <Result name="You" xp={mySide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} met={mine.met} need={challenge.minCheckins} />
-          <Result name={them.name} xp={theirSide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} met={theirs.met} need={challenge.minCheckins} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Result name="You" xp={myXp} met={mine.met} need={challenge.minCheckins} />
+            <Result name={them.name} xp={theirSide === 'creator' ? challenge.rewards.creator : challenge.rewards.opponent} met={theirs.met} need={challenge.minCheckins} />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              putShareDraft({
+                kind: myXp > 0 ? 'achievement' : 'progress',
+                label: 'Duel result',
+                text:
+                  myXp > 0
+                    ? `Finished "${challenge.name}" against ${them.name}: ${mine.met} of ${challenge.durationDays} days (+${myXp} XP).`
+                    : `"${challenge.name}" against ${them.name} is over. ${mine.met} of ${challenge.minCheckins} days this time — next one's mine.`,
+                ref: { kind: 'duel', id: challenge.id, title: challenge.name, detail: `vs ${them.name} · ${challenge.durationDays} days` },
+              })
+              navigate('/social?share=1')
+            }}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-600 bg-ink-850 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-200 hover:border-ink-500"
+          >
+            <Share2 className="h-3.5 w-3.5" /> Share result on the Adventure Log
+          </button>
+        </>
       )}
 
       <div className="space-y-3 rounded-xl border border-ink-600 bg-ink-850 p-3">

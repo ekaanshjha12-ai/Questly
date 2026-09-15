@@ -30,10 +30,19 @@ db.run(`
 db.run('CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at)')
 db.run("CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_open ON reports(reporter_id, target_kind, target_id) WHERE status = 'open'")
 
-export const REPORT_KINDS = ['player', 'post', 'message', 'challenge', 'club']
+export const REPORT_KINDS = ['player', 'post', 'comment', 'message', 'challenge', 'club']
 export const REPORT_STATUSES = ['open', 'actioned', 'dismissed']
 
 /** @returns {{ id: string | null, duplicate: boolean }} */
+const SNAPSHOT_MAX = 16_000
+
+/** The snapshot as stored: whole JSON or, if it will not fit, a note saying so — never JSON cut in half. */
+function snapshotText(snapshot) {
+  if (!snapshot) return null
+  const text = JSON.stringify(snapshot)
+  return text.length <= SNAPSHOT_MAX ? text : JSON.stringify({ note: 'The reported content was too large to keep in full.' })
+}
+
 export function fileReport({ reporterId, kind, targetId, targetUserId = null, reason = '', snapshot = null }) {
   if (!REPORT_KINDS.includes(kind)) throw new Error(`unknown report kind ${kind}`)
   const id = randomUUID()
@@ -47,7 +56,7 @@ export function fileReport({ reporterId, kind, targetId, targetUserId = null, re
       String(targetId).slice(0, 120),
       targetUserId,
       String(reason ?? '').trim().slice(0, 300) || null,
-      snapshot ? JSON.stringify(snapshot).slice(0, 4000) : null,
+      snapshotText(snapshot),
       new Date().toISOString(),
     ],
   )

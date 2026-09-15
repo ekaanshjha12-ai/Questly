@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { CheckSquare, Loader2, Swords, Timer, X } from 'lucide-react'
 import { ApiError, sendChallenge, type Challenge, type ChallengeTermsInput, type DuelMode, type PlayerSummary } from '../lib/api'
 import { StatusPill, TermsSheet } from './ChallengeParts'
+import { formatMinutes } from '../lib/questFormat'
 
 /**
  * Writing a challenge offer.
@@ -276,7 +277,7 @@ export default function ChallengeComposer({
               <div className="flex flex-wrap gap-1.5">
                 {DAILY_MINUTES.map((m) => (
                   <Choice key={m} active={minutes === m} onClick={() => setMinutes(m)}>
-                    {m >= 60 ? `${m / 60}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m} min`}
+                    {formatMinutes(m)}
                   </Choice>
                 ))}
               </div>

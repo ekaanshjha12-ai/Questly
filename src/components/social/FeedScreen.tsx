@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Film, Flag, ImagePlus, Loader2, MoreHorizontal, RotateCcw, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, Film, ImagePlus, Loader2, RotateCcw, ShieldCheck, Sparkles, X } from 'lucide-react'
 import type { AppState } from '../../types'
 import {
   ApiError,
   createPost,
-  clubs as clubApi,
-  deletePost,
   fetchFeed,
   fetchMediaAvailability,
-  reportPost,
   uploadPostVideo,
   type Post,
   type PostKind,
@@ -22,29 +19,16 @@ import {
   kindMeta,
   preparePostImage,
   readVideoFile,
+  refKey,
+  clearShareDraft,
+  readShareDraft,
   shareMoments,
-  timeAgo,
   type ShareMoment,
+  type ShareRef,
 } from '../../lib/social'
-import { PlayerAvatar } from '../ChallengeParts'
 import PlayerCardSheet from '../PlayerCardSheet'
+import PostCard from './PostCard'
 import { useGame } from '../../game/GameProvider'
-
-const removeClubPost = (slug: string, id: string) => clubApi.removePost(slug, id)
-
-/** A draft handed over from Focus Mode's "Share progress". */
-function takeShareDraft(): ShareMoment | null {
-  try {
-    const raw = sessionStorage.getItem('questly:share')
-    if (!raw) return null
-    sessionStorage.removeItem('questly:share')
-    const parsed = JSON.parse(raw) as { kind?: PostKind; text?: string }
-    if (!parsed.text) return null
-    return { id: 'focus-share', kind: parsed.kind ?? 'progress', label: 'From Focus Mode', text: String(parsed.text).slice(0, 1000) }
-  } catch {
-    return null
-  }
-}
 
 /**
  * The feed: what other ambitious people are doing and learning, and a place to
@@ -74,18 +58,28 @@ export default function FeedScreen({
   const [more, setMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [viewing, setViewing] = useState<string | null>(null)
-  const [composing, setComposing] = useState<ShareMoment | 'blank' | null>(() => (startSharing ? takeShareDraft() ?? 'blank' : null))
+  const [viewing, setViewing] = useState<{ username: string; challenge: boolean } | null>(null)
+  /** Records this player has already posted about, so they are not offered again. */
+  const [shared, setShared] = useState<Set<string>>(() => new Set())
+  const [composing, setComposing] = useState<ShareMoment | 'blank' | null>(() => (startSharing ? readShareDraft() ?? 'blank' : null))
+  // The draft is spent once the composer has actually opened with it.
+  useEffect(() => {
+    if (startSharing) clearShareDraft()
+  }, [startSharing])
   const [media, setMedia] = useState<MediaAvailability | null>(null)
   const { snapshot, applyRewards } = useGame()
 
-  const moments = useMemo(() => (username || club ? [] : shareMoments(state, snapshot)), [state, snapshot, username, club])
+  const moments = useMemo(
+    () => (username || club ? [] : shareMoments(state, snapshot).filter((m) => !m.ref || !shared.has(refKey(m.ref)))),
+    [state, snapshot, username, club, shared],
+  )
 
   const load = useCallback(async () => {
     try {
       const res = await fetchFeed(undefined, username, club?.slug)
       setPosts(res.posts)
       setMore(res.more)
+      if (res.shared) setShared(new Set(res.shared))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the feed.')
@@ -146,6 +140,7 @@ export default function FeedScreen({
               onPosted={(post, rewards) => {
                 setPosts((p) => [post, ...(p ?? [])])
                 setComposing(null)
+                if (post.ref) setShared((s) => new Set(s).add(refKey(post.ref as { kind: string; id: string })))
                 applyRewards(rewards)
               }}
             />
@@ -183,7 +178,8 @@ export default function FeedScreen({
             <PostCard
               post={post}
               club={club}
-              onOpenAuthor={(u) => setViewing(u)}
+              onOpenAuthor={(u) => setViewing({ username: u, challenge: false })}
+              onChallenge={(u) => setViewing({ username: u, challenge: true })}
               onDeleted={() => setPosts((p) => (p ?? []).filter((x) => x.id !== post.id))}
             />
           </motion.div>
@@ -202,7 +198,7 @@ export default function FeedScreen({
       )}
 
       <AnimatePresence>
-        {viewing && <PlayerCardSheet username={viewing} myName={myName} onClose={() => setViewing(null)} />}
+        {viewing && <PlayerCardSheet username={viewing.username} myName={myName} startChallenge={viewing.challenge} onClose={() => setViewing(null)} />}
       </AnimatePresence>
     </div>
   )
@@ -246,6 +242,7 @@ function Composer({
 }) {
   const [kind, setKind] = useState<PostKind>(seed?.kind ?? 'update')
   const [body, setBody] = useState(seed?.text ?? '')
+  const [record, setRecord] = useState<ShareRef | null>(seed?.ref ?? null)
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -332,12 +329,19 @@ function Composer({
         ...(club ? { club: club.slug } : {}),
         ...(attachment?.type === 'photo' ? { imageBase64: attachment.base64, mediaType: attachment.mediaType } : {}),
         ...(attachment?.type === 'video' && attachment.video ? { videoId: attachment.video.id } : {}),
+        ...(record ? { ref: { kind: record.kind, id: record.id } } : {}),
       })
       if (previewRef.current) URL.revokeObjectURL(previewRef.current)
       previewRef.current = null
       onPosted(created, rewards ?? null)
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : 'Could not post that.')
+      setError(
+        err instanceof ApiError && err.code === 'already_shared'
+          ? 'You have already posted about this. Remove the attachment to post anyway.'
+          : err instanceof Error
+            ? err.message
+            : 'Could not post that.',
+      )
     } finally {
       setBusy(false)
     }
@@ -376,6 +380,21 @@ function Composer({
           </button>
         ))}
       </div>
+
+      {record && (
+        <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-gold-500/35 bg-gold-500/5 px-3 py-2">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-gold-400" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold text-slate-100">{record.title}</span>
+            <span className="block truncate text-[11px] text-slate-400">
+              {record.detail ? `${record.detail} · ` : ''}attached from your record
+            </span>
+          </span>
+          <button type="button" onClick={() => setRecord(null)} aria-label="Remove attachment" className="rounded-lg p-1 text-slate-500 hover:bg-ink-800 hover:text-slate-200">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <textarea
         autoFocus
@@ -522,114 +541,5 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
     <button type="button" onClick={onClick} aria-label={label} className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white">
       <X className="h-3.5 w-3.5" />
     </button>
-  )
-}
-
-/* --- a post ---------------------------------------------------------------- */
-
-function PostCard({
-  post,
-  club,
-  onOpenAuthor,
-  onDeleted,
-}: {
-  post: Post
-  club?: { slug: string; canModerate: boolean }
-  onOpenAuthor: (username: string) => void
-  onDeleted: () => void
-}) {
-  const [menu, setMenu] = useState(false)
-  const [reported, setReported] = useState(false)
-  const meta = kindMeta(post.kind)
-  const author = post.author
-
-  return (
-    <article className="rounded-2xl border border-ink-600 bg-ink-850 p-3.5">
-      <header className="flex items-start gap-2.5">
-        {author && (
-          <button type="button" onClick={() => !post.mine && onOpenAuthor(author.username)} className="shrink-0" aria-label={`Open ${author.name}'s card`}>
-            <PlayerAvatar player={author} size={38} />
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
-            <button type="button" onClick={() => author && !post.mine && onOpenAuthor(author.username)} className="font-semibold text-slate-100 hover:underline">
-              {author?.name ?? 'Someone'}
-            </button>
-            {author && <span className="text-[11px] text-slate-500">@{author.username}</span>}
-          </p>
-          <p className="text-[11px] text-slate-500">
-            {author ? `${author.rank} · Level ${author.level} · ` : ''}
-            {timeAgo(post.createdAt)}
-          </p>
-        </div>
-        <span className="shrink-0 rounded-full border border-ink-600 bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
-          {meta.emoji} {meta.label}
-        </span>
-        <div className="relative">
-          <button type="button" onClick={() => setMenu((v) => !v)} aria-label="Post options" className="rounded-lg p-1 text-slate-500 hover:bg-ink-800 hover:text-slate-200">
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {menu && (
-            <div className="absolute right-0 top-7 z-10 w-36 overflow-hidden rounded-xl border border-ink-600 bg-ink-900 shadow-xl">
-              {post.mine ? (
-                <button
-                  type="button"
-                  onClick={() => void deletePost(post.id).then(onDeleted)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ember-400 hover:bg-ink-800"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete post
-                </button>
-              ) : club?.canModerate ? (
-                <button
-                  type="button"
-                  onClick={() => void removeClubPost(club.slug, post.id).then(onDeleted)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ember-400 hover:bg-ink-800"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Remove from club
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={reported}
-                  onClick={() =>
-                    void reportPost(post.id, 'Reported from the feed').then(() => {
-                      setReported(true)
-                      setMenu(false)
-                    })
-                  }
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-ink-800 disabled:opacity-50"
-                >
-                  <Flag className="h-3.5 w-3.5" /> {reported ? 'Reported' : 'Report post'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
-      <p className="mt-2.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">{post.body}</p>
-
-      {post.image && (
-        <img src={post.image} alt="" loading="lazy" className="mt-2.5 max-h-[28rem] w-full rounded-xl border border-ink-600 object-cover" />
-      )}
-
-      {post.video && (
-        <div className="mt-2.5 overflow-hidden rounded-xl border border-ink-600 bg-black">
-          {/* Nothing downloads until play is pressed: the poster frame stands in. */}
-          <video
-            src={post.video.url}
-            poster={post.video.poster}
-            controls
-            playsInline
-            preload="none"
-            className="mx-auto block max-h-[28rem] w-full object-contain"
-            style={{ aspectRatio: `${post.video.width} / ${post.video.height}` }}
-          />
-        </div>
-      )}
-
-      {reported && <p className="mt-2 text-[11px] text-slate-500">Thanks — this was sent to the admins.</p>}
-    </article>
   )
 }
