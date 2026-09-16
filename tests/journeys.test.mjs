@@ -256,4 +256,25 @@ describe('journeys', () => {
     assert.equal(peek.headers.get('access-control-allow-origin'), null, 'and no other site may read an answer')
     assert.ok(!(await ada.client('GET', '/api/feed')).body.posts.some((p) => p.body.includes('somewhere else')))
   })
+
+  it('opens the website to a visitor and the app to everyone else', async (t) => {
+    const visitor = await fetch(url('/'))
+    // Only when there is a build to serve; a clean checkout has no dist yet.
+    if (!visitor.ok) return t.skip('nothing built to serve')
+    const page = await visitor.text()
+    assert.match(page, /Turn your goals into quests/, 'a visitor gets the website')
+    assert.doesNotMatch(page, /id="root"/, 'which is a page, not the app')
+    assert.equal(visitor.headers.get('x-questly-shell'), null)
+
+    for (const [path, headers] of [
+      ['/?app=1', {}],
+      ['/', { Cookie: `questly_session=${ada.token}` }],
+      ['/signin', {}],
+      ['/join', {}],
+    ]) {
+      const res = await fetch(url(path), { headers })
+      assert.match(await res.text(), /id="root"/, `${path} serves the app`)
+      assert.equal(res.headers.get('x-questly-shell'), 'app', `${path} is marked as the app, for the service worker`)
+    }
+  })
 })

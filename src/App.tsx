@@ -64,6 +64,9 @@ const PublicLegalPage = lazy(() => import('./screens/legal/PublicLegalPage'))
 /** Pages anyone can open, signed in or not: the policies and Contact & support. */
 const isLegalPath = (path: string) => path === '/legal' || path.startsWith('/legal/') || path === '/support'
 
+/** Where the website sends people: join, or sign in. Both land on the hub once they are in. */
+const DOORS = new Set(['/join', '/signin'])
+
 type Boot =
   | { phase: 'loading' }
   | { phase: 'anonymous' }
@@ -108,12 +111,15 @@ export default function App() {
 function Root() {
   const [route] = useState(standalonePath)
   const [boot, setBoot] = useState<Boot>({ phase: 'loading' })
-  const { path } = useRouter()
+  const { path, navigate } = useRouter()
   // Keeps a system-theme choice following the device while the app is open.
   useTheme()
 
   const loadForUser = useCallback(async (user: AuthUser) => {
     rememberUser({ id: user.id, email: user.email })
+    // In by one of the website's doors: the hub is where they land. Any other
+    // path is a deep link they asked for, and is left alone.
+    if (DOORS.has(window.location.pathname.replace(/\/+$/, ''))) navigate('/', { replace: true })
     try {
       const { state } = await fetchState()
       setBoot({ phase: 'ready', user, initialState: state })
@@ -122,7 +128,7 @@ function Root() {
       // app still opens offline.
       setBoot({ phase: 'ready', user, initialState: loadCachedState(user.id) })
     }
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     // The claim page is reached before any account can sign in, so it must not
@@ -183,7 +189,7 @@ function Root() {
   if (boot.phase === 'anonymous') {
     return (
       <Suspense fallback={<Spinner />}>
-        <AuthScreen onAuthed={(user) => void loadForUser(user)} />
+        <AuthScreen start={path === '/signin' ? 'login' : 'signup'} onAuthed={(user) => void loadForUser(user)} />
       </Suspense>
     )
   }
@@ -261,6 +267,8 @@ function SignedInApp({
     // session the user just signed out of.
     forgetUser()
     onSignedOut()
+    // A full load, so the front door — the website, when signed out — is served afresh.
+    window.location.assign('/')
   }, [onSignedOut, user.id])
 
   if (!state.onboarded) {

@@ -10,12 +10,14 @@ import ProfileCard from './ProfileCard'
 
 interface Props {
   onAuthed: (user: AuthUser) => void
+  /** Which side of the door they came in by: /signin asks for the password, everything else offers to join. */
+  start?: Mode
 }
 
 type Mode = 'login' | 'signup' | 'reset'
 
-export default function AuthScreen({ onAuthed }: Props) {
-  const [mode, setMode] = useState<Mode>('signup')
+export default function AuthScreen({ onAuthed, start = 'signup' }: Props) {
+  const [mode, setMode] = useState<Mode>(start)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [inviteRequired, setInviteRequired] = useState(false)

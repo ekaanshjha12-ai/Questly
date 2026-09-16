@@ -2,7 +2,7 @@
   "name": "Questly — Turn goals into quests",
   "short_name": "Questly",
   "description": "Turn your goals into daily, weekly and monthly quests. Rank up, prove it with a photo, and unlock characters.",
-  "start_url": "/",
+  "start_url": "/?app=1",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

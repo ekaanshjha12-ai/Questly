@@ -74,6 +74,18 @@ Privacy Policy.
 Keep the service at **1 instance**. Two containers writing the same SQLite file
 will corrupt it.
 
+### What is at that URL
+
+One address serves both the website and the app, so there is nothing else to
+host:
+
+| Path | Who gets what |
+|---|---|
+| `/` | The website, to anyone not signed in: a static page, no JavaScript, about 4 kB over the wire. Someone signed in goes straight to the app. |
+| `/join`, `/signin` | Sign-up and sign-in, then the hub. The website's buttons point here. |
+| `/?app=1` | Always the app. The installed app starts here, so it opens on the sign-in screen rather than a page about itself. |
+| `/legal/…`, `/support` | The policies and Contact & support, readable signed in or out. |
+
 ---
 
 ## Costs
@@ -108,8 +120,9 @@ honesty mechanism, not security.
 
 - **Give it a week.** Daily quests refresh once a day and streaks need
   consecutive days, so one sitting won't show much.
-- **There is no password reset.** Tell them to save their password — recovery
-  means deleting their row from the database by hand.
+- **Save the recovery code.** It is shown once at sign-up and is the only way
+  back in without the password. Using it sets a new password and issues a
+  fresh code; the old one stops working.
 - Share the invite code privately along with the link.
 
 ## Redeploying

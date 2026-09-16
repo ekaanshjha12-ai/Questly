@@ -130,6 +130,7 @@ import {
   findUserByEmail,
   findUserById,
   findUserByUsername,
+  findSession,
   avatarVersion,
   getAvatar,
   putAvatar,
@@ -3572,6 +3573,40 @@ const distDir = join(here, '..', 'dist')
 const hasBuild = existsSync(join(distDir, 'index.html'))
 
 if (hasBuild) {
+  const siteFile = join(distDir, 'site', 'index.html')
+  const appFile = join(distDir, 'index.html')
+  const hasSite = existsSync(siteFile)
+
+  /** Sends a built page, using its Brotli or gzip copy when the browser takes one. */
+  function sendPage(req, res, file, { shell = false } = {}) {
+    res.setHeader('Cache-Control', 'no-cache')
+    // Tells the service worker which of the two pages this is, so it only ever
+    // keeps the app shell for its offline fallback.
+    if (shell) res.setHeader('X-Questly-Shell', 'app')
+    const accepts = String(req.headers['accept-encoding'] ?? '')
+    for (const [encoding, suffix] of [['br', '.br'], ['gzip', '.gz']]) {
+      if (!new RegExp(`\\b${encoding}\\b`).test(accepts) || !existsSync(file + suffix)) continue
+      res.setHeader('Content-Encoding', encoding)
+      res.setHeader('Vary', 'Accept-Encoding')
+      res.type('html')
+      res.sendFile(file + suffix)
+      return
+    }
+    res.sendFile(file)
+  }
+
+  /**
+   * The front door. Someone signed in lands in the app; everyone else gets the
+   * website, which is a static page with no JavaScript. An installed app opens
+   * at `/?app=1` and always gets the app, even signed out, so it can show the
+   * sign-in screen rather than a page about itself.
+   */
+  app.get('/', (req, res, next) => {
+    if (!hasSite || req.query.app !== undefined) return next()
+    if (findSession(req.cookies?.[SESSION_COOKIE])) return next()
+    sendPage(req, res, siteFile)
+  })
+
   // The build keeps Brotli and gzip copies of every text file beside it
   // (scripts/compress.mjs). Send one when the browser takes it; the static
   // handler below then serves that file under the original's type and caching.
@@ -3618,8 +3653,7 @@ if (hasBuild) {
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
     if (req.path.startsWith('/api/')) return next()
-    res.setHeader('Cache-Control', 'no-cache')
-    res.sendFile(join(distDir, 'index.html'))
+    sendPage(req, res, appFile, { shell: true })
   })
 }
 

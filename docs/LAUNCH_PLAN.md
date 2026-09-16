@@ -132,6 +132,31 @@ drops metadata, cross-age messaging protections, account export and deletion.
 - **Requests themselves:** cross-site changes refused, no CORS, malformed URLs and bodies answered in JSON without internals, oversized bodies refused, uploaded pictures stripped of metadata, sessions stored hashed.
 - **World, legal, retention:** region locks and quests, events paid once, policy versions and re-acceptance, support for signed-out visitors, the retention sweep.
 
+## After the plan
+
+Work that came after the sixteen phases, in the order it shipped.
+
+- **Home is a room.** The drawn 160 × 84 base scene gives way to three painted
+  studies that follow the player's clock — sunrise, lamplight, rain at night —
+  running edge to edge behind the top of Home. The fade behind the title is set
+  from measured contrast: the greeting holds 4.5:1 over the brightest and
+  darkest pixel of any room, in either theme, from 375 px to 1920 px.
+- **Every region has its own buildings.** Sixty new pictures, a four-step ladder
+  per region matched to how that land is painted on the map, and the editor grid
+  removed from the screenshots by fitting and inverting each line's blend.
+- **One quest scale, and quests written for the player's age.** A quest's level
+  is its length; reward follows from that and its type, rarity from the reward,
+  everywhere. Goal quests take their length from their own wording. Players
+  under 18 get school, pocket money and eight to ten hours of sleep instead of
+  resumes, debt and progress photos; over 65, gentler exercise. The AI writer
+  and planner are told the age group and nothing more.
+- **Phones keep up.** The server reports the build it serves; an app that has
+  been open or installed for a while checks when it comes back into view and
+  reloads onto a newer build, or switches at the next change of screen.
+- **A website.** `/` serves a static page about Questly to anyone not signed in
+  — the app to everyone else — built as a second entry point of the same build
+  and served from the same deployment.
+
 ## Remaining
 
 Kept up to date as phases land.

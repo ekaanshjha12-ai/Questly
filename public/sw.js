@@ -14,12 +14,14 @@
  * from the server, and a stale reply would show wrong progress.
  */
 
-const VERSION = 'questly-v2'
+const VERSION = 'questly-v3'
 const SHELL = `${VERSION}-shell`
 const ASSETS = `${VERSION}-assets`
 
-// Enough to render something useful on a cold, offline start.
-const PRECACHE = ['/', '/theme-init.js', '/manifest.webmanifest', '/icons/icon-64.png', '/icons/icon-192.png']
+// Enough to render something useful on a cold, offline start. The app's own
+// page, not `/`: signed out, `/` is the website, which is no use offline to
+// someone who has the app installed.
+const PRECACHE = ['/index.html', '/theme-init.js', '/manifest.webmanifest', '/icons/icon-64.png', '/icons/icon-192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -101,15 +103,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Navigations: try the network so deploys land, fall back to the cached shell.
+  // Only the app's own page is kept — the server marks it — so the offline
+  // fallback is never the website.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(SHELL).then((c) => c.put('/', copy))
+          if (res.ok && res.headers.get('x-questly-shell') === 'app') {
+            const copy = res.clone()
+            caches.open(SHELL).then((c) => c.put('/index.html', copy))
+          }
           return res
         })
-        .catch(() => caches.match('/').then((hit) => hit ?? Response.error())),
+        .catch(() => caches.match('/index.html').then((hit) => hit ?? Response.error())),
     )
   }
 })

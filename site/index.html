@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#090b0c" />
+    <title>Questly — turn your goals into quests</title>
+    <meta
+      name="description"
+      content="Questly turns your goals into daily, weekly and monthly quests. Focus time is timed by the server, XP is earned rather than claimed, and your character, your base and your club grow with it."
+    />
+    <link rel="canonical" href="/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Questly" />
+    <meta property="og:title" content="Questly — turn your goals into quests" />
+    <meta property="og:description" content="Habits and goals, played like an RPG. Free, no ads, nothing to buy." />
+    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=Silkscreen&display=swap"
+    />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="/">
+          <img src="../src/assets/brand/questly-mark.webp" width="34" height="34" alt="" />
+          Questly
+        </a>
+        <nav class="site-nav" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#features">What's inside</a>
+          <a href="#world">The world</a>
+          <a href="#fair">Fair play</a>
+        </nav>
+        <div class="header-actions">
+          <a class="btn btn-quiet" href="/signin">Sign in</a>
+          <a class="btn btn-primary" href="/join">Start free</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="eyebrow">Habits and goals, played like an RPG</p>
+            <h1>Turn your goals into quests.</h1>
+            <p class="lede">
+              Tell Questly what you are trying to do. It writes the daily, weekly and monthly quests that get you there,
+              times your focus sessions on its own clock, and pays XP only for what it can see you do. Level up, kit out
+              your character, join a club, and put a building on the world map.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="/join">Start your adventure</a>
+              <a class="btn btn-quiet" href="/signin">I already have an account</a>
+            </div>
+            <ul class="hero-notes">
+              <li>Free, with no ads</li>
+              <li>Nothing to buy</li>
+              <li>Ages 15 and up</li>
+            </ul>
+          </div>
+
+          <!-- The Home screen as it looks in the app. -->
+          <div class="phone" role="img" aria-label="The Questly home screen: a lamplit study at dusk, with today's quest beneath it.">
+            <div class="phone-room">
+              <img src="../src/assets/home/room-evening-960.webp" width="960" height="640" alt="" />
+              <div class="phone-title">
+                <strong>Questly</strong>
+                <span>Good evening, Mira</span>
+              </div>
+              <span class="tag tag-base">Apprentice's base</span>
+              <span class="tag tag-streak">12 day streak</span>
+            </div>
+            <div class="phone-card">
+              <p class="eyebrow">Your next quest</p>
+              <h3>Read chapter one of the textbook</h3>
+              <p style="color: var(--text-quiet); font-size: 0.78rem">For your goal: Pass my chemistry exam</p>
+              <p class="meta"><span>25 min · Normal</span><b>Reward: +40 XP</b></p>
+              <span class="phone-cta">Enter Focus Mode</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">How it works</p>
+            <h2>Three steps, and the rest is the game.</h2>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <h3>Set a goal</h3>
+              <p>
+                Pass an exam, run a half marathon, finish the portfolio. Each goal hands out its own quests — four a day,
+                one a week, three a month — written for what you are actually going for, and for your age.
+              </p>
+            </div>
+            <div class="step">
+              <h3>Do the work</h3>
+              <p>
+                Start a focus session and Questly runs the clock on its own server. Minutes counted that way cannot be
+                typed in, so what you earn is what you did.
+              </p>
+            </div>
+            <div class="step">
+              <h3>Level up</h3>
+              <p>
+                XP, coins, ranks and gear your character actually wears. Your base changes with the hour, and your club's
+                hall grows from a workshop into a landmark as everyone shows up.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">What's inside</p>
+            <h2>A whole game built around getting things done.</h2>
+          </div>
+          <div class="cards">
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" />
+              </svg>
+              <h3>Quest Board</h3>
+              <p>Main, side and optional quests with real states — in progress, locked, expired — each levelled by how long it takes.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <circle cx="12" cy="13" r="8" /><path d="M12 9v4l3 2M9 2h6" />
+              </svg>
+              <h3>Focus Mode</h3>
+              <p>Timer or stopwatch, a plan for the session, ambient sound. Timed on the server, so the XP is never self-reported.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M5 3l6 6M19 3l-6 6M7 21l5-5 5 5" /><path d="M12 9v7" />
+              </svg>
+              <h3>Duels</h3>
+              <p>Challenge another player on focus minutes or daily check-ins. The server settles it. XP and bragging rights only — never money.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M4 20V9l8-5 8 5v11" /><path d="M9 20v-6h6v6" />
+              </svg>
+              <h3>Clubs</h3>
+              <p>Entry trials, club challenges, chat and Club XP — with a hall on the map that grows as the club does.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" /><path d="M9 4v14M15 6v14" />
+              </svg>
+              <h3>World map</h3>
+              <p>Nine regions with weekly quests and monthly events, lit for your time of day and locked until you have earned them.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z" />
+              </svg>
+              <h3>Adventure Log</h3>
+              <p>Share a finished quest, a duel result or a focus session. Appreciation, comments, and a moderation queue behind it all.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M4 5h16v12H4z" /><path d="M9 21h6M12 17v4" />
+              </svg>
+              <h3>Study and habits</h3>
+              <p>Flashcards, a coach that makes you explain it back, a habit grid, moods, and a planner you can drag a week around in.</p>
+            </article>
+            <article class="card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" />
+              </svg>
+              <h3>AI planner</h3>
+              <p>Turn a goal into a dated plan in a few minutes, then put the whole thing on your board in one go.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="world">
+        <div class="wrap split">
+          <div>
+            <p class="eyebrow">The world</p>
+            <h2>Nine regions, and a hall of your own.</h2>
+            <p class="lede">
+              Every region offers two quests a week and hosts a monthly event, and the map is lit for the hour you are
+              playing in. Found a club and its building stands in the region you founded it in — growing from a workshop
+              to a hall, a stronghold and finally a landmark as the club levels up.
+            </p>
+            <ul class="regions">
+              <li>Verdant Woods</li>
+              <li>Mistveil Swamp</li>
+              <li>Frostpeak</li>
+              <li>Golden Plains</li>
+              <li>Coastal Crown</li>
+              <li>The Lost Ruins</li>
+              <li>Emberlands</li>
+              <li>Sunscorch</li>
+              <li>The Summit</li>
+            </ul>
+            <ul class="ladder">
+              <li>
+                <figure>
+                  <img src="../src/assets/buildings/herbalist-hut-sm.webp" width="112" height="112" alt="A herbalist's hut among the trees" loading="lazy" />
+                  <figcaption>Workshop</figcaption>
+                </figure>
+              </li>
+              <li>
+                <figure>
+                  <img src="../src/assets/buildings/ranger-lodge-sm.webp" width="112" height="112" alt="A ranger's lodge" loading="lazy" />
+                  <figcaption>Hall</figcaption>
+                </figure>
+              </li>
+              <li>
+                <figure>
+                  <img src="../src/assets/buildings/timber-hall-sm.webp" width="112" height="112" alt="A great timber hall" loading="lazy" />
+                  <figcaption>Stronghold</figcaption>
+                </figure>
+              </li>
+              <li>
+                <figure>
+                  <img src="../src/assets/buildings/elder-tree-shrine-sm.webp" width="112" height="112" alt="A shrine beneath an ancient tree" loading="lazy" />
+                  <figcaption>Landmark</figcaption>
+                </figure>
+              </li>
+            </ul>
+          </div>
+          <div class="framed">
+            <img
+              src="../src/assets/world/questly-world-768.webp"
+              width="768"
+              height="512"
+              alt="The Questly world: forests, snowy peaks, a volcano, a desert of pyramids, farmland, a harbour city, old ruins and islands around a great central guild hall"
+              loading="lazy"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="fair">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Fair play</p>
+            <h2>Earned, not claimed.</h2>
+            <p>
+              A game about doing the work only means something if the work is what counts. These are the rules Questly
+              holds itself to, and they are enforced on the server rather than asked of you.
+            </p>
+          </div>
+          <div class="pledges">
+            <article class="pledge">
+              <h3>XP comes from what happened</h3>
+              <p>
+                Focus minutes are timed by the server, every reward is paid once, and anything you simply tell Questly you
+                did counts against a daily ceiling. Nothing can be typed straight into your level.
+              </p>
+            </article>
+            <article class="pledge">
+              <h3>No stakes, ever</h3>
+              <p>
+                No gambling, betting or money on the line — anywhere. Duels and club challenges are worth XP, standing and
+                recognition, and the strongest consequence a club can set is a warning or losing your place in it.
+              </p>
+            </article>
+            <article class="pledge">
+              <h3>Written for your age</h3>
+              <p>
+                Questly is for 15 and up. Quests for players under 18 keep to school, pocket money and healthy habits, an
+                under-18 can close contact from adults entirely, and phone numbers, links and risky messages are stopped in
+                chat.
+              </p>
+            </article>
+            <article class="pledge">
+              <h3>Your data is yours</h3>
+              <p>
+                No ads, and nothing sold. Download everything Questly holds about you whenever you like, or delete the
+                account for good — it takes your posts, messages, duels and progress with it.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Questions</p>
+            <h2>Before you start.</h2>
+          </div>
+          <div class="faq">
+            <details>
+              <summary>Is it free?</summary>
+              <p>Yes. There are no ads, nothing to buy with real money, and no paid tier holding features back.</p>
+            </details>
+            <details>
+              <summary>Do I need to install anything?</summary>
+              <p>
+                No. Questly runs in your browser. On a phone you can add it to your home screen, and it opens like an app
+                from then on.
+              </p>
+            </details>
+            <details>
+              <summary>How old do you have to be?</summary>
+              <p>Fifteen. Your date of birth is asked at sign-up, shapes the quests you are given, and cannot be changed afterwards.</p>
+            </details>
+            <details>
+              <summary>What if I forget my password?</summary>
+              <p>
+                You are given a recovery code when you sign up — keep it somewhere safe. It sets a new password, works once,
+                and is replaced with a fresh one each time it is used.
+              </p>
+            </details>
+            <details>
+              <summary>Does it work offline?</summary>
+              <p>Questly opens offline and shows the progress it last saved. New quests, XP and anything social need a connection.</p>
+            </details>
+            <details>
+              <summary>Can I delete everything?</summary>
+              <p>
+                Yes, in Settings → Account and data, with your password. Download your data first if you want to keep a copy.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="wrap">
+          <h2>Your first quest is waiting.</h2>
+          <p class="lede" style="margin-inline: auto; margin-top: 1rem">
+            Set a goal, start the timer, and see what a week of it is worth.
+          </p>
+          <a class="btn btn-primary" href="/join">Start your adventure</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Questly</span>
+        <nav aria-label="Legal and support">
+          <a href="/legal/terms">Terms</a>
+          <a href="/legal/privacy">Privacy</a>
+          <a href="/legal/guidelines">Guidelines</a>
+          <a href="/legal/safety">Safety</a>
+          <a href="/support">Contact &amp; support</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
