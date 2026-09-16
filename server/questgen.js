@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { noteUsage } from './meter.js'
+import { AGE_GUIDANCE } from './game/ages.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -50,7 +51,9 @@ Rules:
 - Keep each under 90 characters.
 - Never mention the app, XP, levels or quests themselves.
 
-If the person gave extra detail about their goal, treat it as the most important input — it tells you their level, constraints and intent.`
+If the person gave extra detail about their goal, treat it as the most important input — it tells you their level, constraints and intent.
+
+You are also told roughly how old they are. Write for that age: it changes what is suitable and realistic, not just the tone, and any safety rules given for that age are firm.`
 
 let cached = null
 
@@ -79,7 +82,7 @@ function clean(list, cap) {
   return out
 }
 
-export async function generateQuestPool({ title, detail, category }) {
+export async function generateQuestPool({ title, detail, category, ageGroup = 'adult' }) {
   const anthropic = client()
   if (!anthropic) {
     const err = new Error('Quest generation is not configured on this server.')
@@ -90,6 +93,7 @@ export async function generateQuestPool({ title, detail, category }) {
   const parts = [`Goal: "${title}"`]
   if (category) parts.push(`Area: ${category}`)
   if (detail) parts.push(`What they said about it: "${detail}"`)
+  parts.push(`Who it is for: ${AGE_GUIDANCE[ageGroup] ?? AGE_GUIDANCE.adult}`)
   parts.push('\nWrite the quests for this goal.')
 
   const response = await anthropic.messages.create({

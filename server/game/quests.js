@@ -8,6 +8,10 @@ import { notify } from './notify.js'
 import { SELF_REPORTED_DAILY_XP, getProgressRow, paidToday, startRewards, transaction } from './rewards.js'
 import { GOAL_CATEGORIES } from './templates.js'
 import { levelFromXp } from './levels.js'
+import { difficultyFor, estimateMinutes, questScale, questXp, rarityFor } from './scale.js'
+
+// The scale lives in scale.js; these are re-exported for the modules that reach it through here.
+export { CADENCE_MINUTES, DIFFICULTIES, difficultyFor, estimateMinutes, questScale, questXp, rarityFor } from './scale.js'
 
 /**
  * The quest system.
@@ -28,13 +32,9 @@ import { levelFromXp } from './levels.js'
 
 export const QUEST_TYPES = ['main', 'side', 'daily', 'club', 'challenge', 'optional']
 export const PLAYER_TYPES = ['main', 'side', 'optional']
-export const DIFFICULTIES = ['easy', 'normal', 'hard', 'heroic']
 export const PROGRESS_KINDS = ['check', 'minutes', 'count', 'milestones']
 const TERMINAL = new Set(['completed', 'failed', 'expired'])
 const OPEN = new Set(['active', 'in_progress'])
-
-const RATE = { main: 2, side: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge: 1.5 }
-const DIFFICULTY = { easy: 0.75, normal: 1, hard: 1.25, heroic: 1.5 }
 
 /** Most open quests a player can hold, and create in a day. */
 export const MAX_OPEN_QUESTS = 100
@@ -43,31 +43,18 @@ export const MAX_CREATED_PER_DAY = 40
 export const MAX_PLAN_ITEMS = 40
 export const MAX_PLAN_QUESTS_PER_DAY = 80
 
-/** What each part of a generated plan becomes on the board. */
+/** What each part of a generated plan becomes on the board, and the cadence its length is read against. */
 const PLAN_SHAPE = {
-  todo: { type: 'optional', durationMin: 15, difficulty: 'normal' },
-  daily: { type: 'optional', durationMin: 20, difficulty: 'normal' },
-  weekly: { type: 'side', durationMin: 45, difficulty: 'normal' },
-  monthly: { type: 'main', durationMin: 90, difficulty: 'hard' },
+  todo: { type: 'optional', cadence: 'daily' },
+  daily: { type: 'optional', cadence: 'daily' },
+  weekly: { type: 'side', cadence: 'weekly' },
+  monthly: { type: 'main', cadence: 'monthly' },
 }
 
 /** Quests the player put on the board themselves, and so may edit or delete. */
 const OWN_ORIGINS = new Set(['user', 'legacy_todo', 'plan'])
 
 export const VERIFY_BONUS = { photo: 15, voice: 8 }
-
-export function questXp({ type, difficulty, durationMin }) {
-  const minutes = Math.min(480, Math.max(5, Math.round(durationMin)))
-  const raw = minutes * (RATE[type] ?? 1) * (DIFFICULTY[difficulty] ?? 1)
-  return Math.min(900, Math.max(10, Math.round(raw / 5) * 5))
-}
-
-export function rarityFor(xp) {
-  if (xp >= 300) return 'legendary'
-  if (xp >= 150) return 'epic'
-  if (xp >= 60) return 'rare'
-  return 'common'
-}
 
 function cleanLine(value, { min, max, label, field }) {
   const text = String(value ?? '').trim().replace(/\s+/g, ' ')
@@ -96,11 +83,12 @@ export function validateQuestInput(input, now = Date.now()) {
   const title = cleanLine(input?.title, { min: 3, max: 80, label: 'The title', field: 'title' })
   const description = cleanLine(input?.description ?? '', { min: 0, max: 400, label: 'The description', field: 'description' }) || null
   const category = GOAL_CATEGORIES.includes(input?.category) ? input.category : 'general'
-  const difficulty = DIFFICULTIES.includes(input?.difficulty) ? input.difficulty : 'normal'
   const durationMin = Math.round(Number(input?.durationMin))
   if (!Number.isFinite(durationMin) || durationMin < 5 || durationMin > 480) {
     throw invalid('Estimate between 5 minutes and 8 hours.', 'durationMin')
   }
+  // The level comes from the length, whatever the request says it is.
+  const difficulty = difficultyFor(durationMin)
 
   const progressKind = PROGRESS_KINDS.includes(input?.progressKind) ? input.progressKind : 'check'
   let target = null
@@ -128,7 +116,7 @@ export function validateQuestInput(input, now = Date.now()) {
     throw invalid('The deadline has to come after the start.', 'deadlineAt')
   }
   const goalId = typeof input?.goalId === 'string' && /^[\w-]{1,64}$/.test(input.goalId) ? input.goalId : null
-  const xp = questXp({ type, difficulty, durationMin })
+  const xp = questXp({ type, durationMin })
   return { type, title, description, category, difficulty, durationMin, progressKind, target, unit, milestones, startsAt, deadlineAt, goalId, xp, rarity: rarityFor(xp) }
 }
 
@@ -263,8 +251,9 @@ export function createPlanQuests(userId, items) {
     const shape = PLAN_SHAPE[item?.kind] ?? PLAN_SHAPE.todo
     // Plans write longer lines than the board shows; cut at a word.
     let title = String(item?.title ?? '').trim().replace(/\s+/g, ' ')
+    const durationMin = estimateMinutes(title, shape.cadence)
     if (title.length > 80) title = title.slice(0, 80).replace(/\s+\S*$/, '') || title.slice(0, 80)
-    return validateQuestInput({ ...shape, title, category: item?.category }, now)
+    return validateQuestInput({ type: shape.type, durationMin, title, category: item?.category }, now)
   })
 
   const open = db.get(
@@ -296,7 +285,6 @@ export function updateQuest(userId, questId, input) {
     title: input?.title ?? row.title,
     description: input?.description === undefined ? row.description : input.description,
     category: input?.category ?? row.category,
-    difficulty: input?.difficulty ?? row.difficulty,
     durationMin: input?.durationMin ?? row.duration_min,
     progressKind: input?.progressKind ?? row.progress_kind,
     target: input?.target ?? row.progress_target,
@@ -311,14 +299,16 @@ export function updateQuest(userId, questId, input) {
 
   const touchesReward =
     value.type !== row.type ||
-    value.difficulty !== row.difficulty ||
     value.durationMin !== row.duration_min ||
     value.progressKind !== row.progress_kind ||
     (value.target ?? null) !== (row.progress_target ?? null) ||
     JSON.stringify(value.milestones?.map((m) => m.title) ?? null) !== JSON.stringify(parseMilestones(row)?.map((m) => m.title) ?? null)
-  if (touchesReward && (row.progress_value > 0 || row.xp_paid > 0 || row.started_at)) {
+  const underWay = row.progress_value > 0 || row.xp_paid > 0 || row.started_at
+  if (touchesReward && underWay) {
     throw conflict('Once a quest is under way, its type, size and progress are fixed.', 'reward_locked')
   }
+  // Editing words or dates never moves what a quest already under way was promised.
+  if (!touchesReward && underWay) Object.assign(value, { difficulty: row.difficulty, xp: row.xp_reward, rarity: row.rarity })
 
   db.run(
     `UPDATE quests SET type = ?, title = ?, description = ?, category = ?, difficulty = ?, duration_min = ?, xp_reward = ?, rarity = ?,
@@ -333,6 +323,29 @@ export function updateQuest(userId, questId, input) {
     ],
   )
   return questView(loadQuest(userId, row.id), { level: playerLevel(userId) })
+}
+
+/**
+ * Brings quests nobody has touched onto the one scale: level from length,
+ * reward from level and type, rarity from reward. Anything started,
+ * progressed, verified or paid keeps what it was promised. Cheap enough to
+ * run at every start, and does nothing once everything already fits.
+ */
+export function rescaleOpenQuests() {
+  const rows = db.all(
+    `SELECT id, type, duration_min, difficulty, xp_reward, rarity FROM quests
+     WHERE status IN ('active', 'upcoming', 'locked') AND started_at IS NULL AND progress_value = 0 AND xp_paid = 0 AND verified_at IS NULL`,
+  )
+  let changed = 0
+  transaction(() => {
+    for (const row of rows) {
+      const scale = questScale({ type: row.type, durationMin: row.duration_min })
+      if (scale.difficulty === row.difficulty && scale.xp === row.xp_reward && scale.rarity === row.rarity) continue
+      db.run('UPDATE quests SET difficulty = ?, xp_reward = ?, rarity = ? WHERE id = ?', [scale.difficulty, scale.xp, scale.rarity, row.id])
+      changed += 1
+    }
+  })
+  return changed
 }
 
 export function deleteQuest(userId, questId) {

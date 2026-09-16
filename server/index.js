@@ -68,7 +68,9 @@ import {
 } from './engagement.js'
 import { ACHIEVEMENTS } from './game/achievements.js'
 import { ensureGame, stripServerOwned } from './game/migrate.js'
-import { rewardProof } from './game/quests.js'
+import { rescaleOpenQuests, rewardProof } from './game/quests.js'
+import { questAgeGroup } from './game/ages.js'
+import { suitableForAge } from './game/templates.js'
 import { getProgressRow, startRewards, transaction } from './game/rewards.js'
 import { notify } from './game/notify.js'
 import { track } from './game/analytics.js'
@@ -275,6 +277,13 @@ function purgeOldRecords() {
 purgeExpiredSessions()
 purgeLoginFailures()
 purgeOldRecords()
+try {
+  // Quests issued before the one scale, and not yet touched, take its figures.
+  const rescaled = rescaleOpenQuests()
+  if (rescaled) console.log('quests rescaled', rescaled)
+} catch (err) {
+  console.error('quest rescale failed', err)
+}
 setInterval(() => {
   purgeExpiredSessions()
   purgeLoginFailures()
@@ -330,6 +339,11 @@ function blockedByModeration(req, res, fields, { allowLength = 6000 } = {}) {
     }
   }
   return false
+}
+
+/** Which age group a player's quests and plans are written for. Only the group leaves this function. */
+function ageGroupOf(userId) {
+  return questAgeGroup(findUserById(userId)?.birthdate)
 }
 
 /** Screens generated content before it is returned and stored. */
@@ -1027,12 +1041,16 @@ app.post('/api/goals/quests', ...aiGuard, async (req, res) => {
   }
 
   try {
-    const pool = await meter({ userId: req.user.id, endpoint: 'goals.quests' }, () => generateQuestPool({
+    const ageGroup = ageGroupOf(req.user.id)
+    const written = await meter({ userId: req.user.id, endpoint: 'goals.quests' }, () => generateQuestPool({
       title: title.trim().slice(0, 200),
       detail: typeof detail === 'string' ? detail.trim().slice(0, 500) : '',
       category: typeof category === 'string' ? category : '',
+      ageGroup,
     }))
-    if (blockedOutput(req, res, pool)) return
+    if (blockedOutput(req, res, written)) return
+    // Stored on the goal and filtered again when quests are handed out; dropping unsuitable lines here keeps them off the device too.
+    const pool = Object.fromEntries(Object.entries(written).map(([period, lines]) => [period, lines.filter((line) => suitableForAge(line, ageGroup))]))
     res.json({ pool })
   } catch (err) {
     if (err?.code === 'not_configured') {
@@ -1195,6 +1213,7 @@ app.post('/api/planner/questions', ...aiGuard, async (req, res) => {
         goal.trim().slice(0, 200),
         typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
         attached.documents,
+        ageGroupOf(req.user.id),
       ),
     )
     if (blockedOutput(req, res, questions)) return
@@ -1249,15 +1268,24 @@ app.post('/api/planner/plan', ...aiGuard, async (req, res) => {
   }
 
   try {
-    const plan = await meter({ userId: req.user.id, endpoint: 'planner.plan' }, () =>
+    const ageGroup = ageGroupOf(req.user.id)
+    const written = await meter({ userId: req.user.id, endpoint: 'planner.plan' }, () =>
       generatePlan(
         goal.trim().slice(0, 200),
         typeof detail === 'string' ? detail.trim().slice(0, 400) : '',
         cleaned,
         attached.documents,
+        ageGroup,
       ),
     )
-    if (blockedOutput(req, res, plan)) return
+    if (blockedOutput(req, res, written)) return
+    // The writer is told the player's age; this catches anything it let through anyway.
+    const plan = {
+      todos: written.todos.filter((line) => suitableForAge(line, ageGroup)),
+      daily: written.daily.filter((item) => suitableForAge(item.title, ageGroup)),
+      weekly: written.weekly.filter((item) => suitableForAge(item.title, ageGroup)),
+      monthly: written.monthly.filter((item) => suitableForAge(item.title, ageGroup)),
+    }
     res.json({ plan })
   } catch (err) {
     if (err?.code === 'not_configured') {

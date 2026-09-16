@@ -266,7 +266,7 @@ function SignedInApp({
   if (!state.onboarded) {
     return (
       <Suspense fallback={<Spinner />}>
-        <Onboarding name={user.displayName ?? state.player.name} onComplete={notebook.onboard} />
+        <Onboarding name={user.displayName ?? state.player.name} birthdate={user.birthdate} onComplete={notebook.onboard} />
       </Suspense>
     )
   }

@@ -46,16 +46,30 @@ const RATE = { main: 2, side: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge
 const DIFFICULTY = { easy: 0.75, normal: 1, hard: 1.25, heroic: 1.5 } as const
 
 /**
+ * A quest's level from how long it takes: up to 20 minutes Easy, up to an hour
+ * Normal, up to two and a half hours Hard, longer Heroic. The server uses the
+ * same scale for every quest, wherever it came from.
+ */
+export function difficultyFor(minutes: number): Difficulty {
+  const m = Math.round(minutes || 0)
+  if (m <= 20) return 'easy'
+  if (m <= 60) return 'normal'
+  if (m <= 150) return 'hard'
+  return 'heroic'
+}
+
+/**
  * What the server will pay for a quest of this shape — shown while writing
  * one. It mirrors the server's formula for the preview only; the server works
  * the reward out again when the quest is saved.
  */
-export function previewXp(input: Pick<QuestInput, 'type' | 'durationMin'> & { difficulty?: Difficulty }): { xp: number; rarity: Rarity } {
+export function previewXp(input: Pick<QuestInput, 'type' | 'durationMin'>): { xp: number; rarity: Rarity; difficulty: Difficulty } {
   const minutes = Math.min(480, Math.max(5, Math.round(input.durationMin || 0)))
-  const raw = minutes * RATE[input.type] * DIFFICULTY[input.difficulty ?? 'normal']
+  const difficulty = difficultyFor(minutes)
+  const raw = minutes * RATE[input.type] * DIFFICULTY[difficulty]
   const xp = Math.min(900, Math.max(10, Math.round(raw / 5) * 5))
   const rarity: Rarity = xp >= 300 ? 'legendary' : xp >= 150 ? 'epic' : xp >= 60 ? 'rare' : 'common'
-  return { xp, rarity }
+  return { xp, rarity, difficulty }
 }
 
 export function formatMinutes(minutes: number): string {

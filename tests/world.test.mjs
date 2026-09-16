@@ -57,7 +57,9 @@ describe('world', () => {
     assert.equal(taken.status, 201)
     assert.equal(taken.body.quest.origin, 'world')
     assert.equal(taken.body.quest.progress.kind, 'minutes')
-    assert.equal(taken.body.quest.xp, 135)
+    // Ninety minutes is Hard on the one scale: 90 × 1.5 (side) × 1.25.
+    assert.equal(taken.body.quest.xp, 170)
+    assert.equal(taken.body.quest.difficulty, 'hard')
     assert.ok(taken.body.quest.deadlineAt, 'due by the end of the week')
 
     const again = await wanderer.client('POST', '/api/world/regions/focus_sanctum/quests/vigil')

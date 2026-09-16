@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, Trash2 } from 'lucide-react'
 import type { GoalCategory } from '../../types'
-import { ApiError, type Difficulty, type GameQuest, type ProgressKind, type QuestInput } from '../../lib/api'
+import { ApiError, type GameQuest, type ProgressKind, type QuestInput } from '../../lib/api'
 import { CATEGORY_LABEL, DIFFICULTY_LABEL, formatMinutes, previewXp } from '../../lib/questFormat'
 import { useGame } from '../../game/GameProvider'
 import { Sheet } from '../../components/ui/Sheet'
@@ -56,7 +56,6 @@ export default function QuestComposer({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<GoalCategory>('general')
-  const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [durationMin, setDurationMin] = useState(60)
   const [kind, setKind] = useState<ProgressKind>('minutes')
   const [target, setTarget] = useState(10)
@@ -77,7 +76,6 @@ export default function QuestComposer({
       setTitle(editing.title)
       setDescription(editing.description ?? '')
       setCategory(editing.category)
-      setDifficulty(editing.difficulty)
       setDurationMin(editing.durationMin)
       setKind(editing.progress.kind)
       setTarget(editing.progress.target)
@@ -90,7 +88,6 @@ export default function QuestComposer({
       setTitle('')
       setDescription('')
       setCategory('general')
-      setDifficulty('normal')
       setDurationMin(60)
       setKind('minutes')
       setTarget(10)
@@ -101,7 +98,11 @@ export default function QuestComposer({
     }
   }, [open, editing])
 
-  const preview = useMemo(() => previewXp({ type, durationMin, difficulty }), [type, durationMin, difficulty])
+  // A quest under way keeps what it was promised, whatever the scale says now.
+  const preview = useMemo(
+    () => (locked && editing ? { xp: editing.xp, rarity: editing.rarity, difficulty: editing.difficulty } : previewXp({ type, durationMin })),
+    [locked, editing, type, durationMin],
+  )
 
   async function save() {
     const next: Record<string, string> = {}
@@ -117,7 +118,6 @@ export default function QuestComposer({
       title: title.trim(),
       description: description.trim() || undefined,
       category,
-      difficulty,
       durationMin,
       progressKind: kind,
       ...(kind === 'count' ? { target, unit: unit.trim() || 'units' } : {}),
@@ -205,15 +205,8 @@ export default function QuestComposer({
               </Select>
             )}
           </Field>
-          <Field label="Difficulty" hint={locked ? 'Fixed once a quest is under way.' : undefined}>
-            {() => (
-              <ChoiceChips
-                label="Difficulty"
-                options={(Object.keys(DIFFICULTY_LABEL) as Difficulty[]).map((d) => ({ id: d, label: DIFFICULTY_LABEL[d] }))}
-                value={difficulty}
-                onChange={(v) => !locked && setDifficulty(v)}
-              />
-            )}
+          <Field label="Level" hint="Set by the estimated time, the same scale as every quest.">
+            {() => <p className="flex min-h-[40px] items-center font-display text-lg font-bold text-slate-100">{DIFFICULTY_LABEL[preview.difficulty]}</p>}
           </Field>
         </div>
 

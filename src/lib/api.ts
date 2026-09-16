@@ -1277,7 +1277,7 @@ export interface QuestInput {
   title: string
   description?: string
   category?: GoalCategory
-  difficulty?: Difficulty
+  /** The level is set by the server from `durationMin`; there is no choosing it. */
   durationMin: number
   progressKind?: ProgressKind
   target?: number

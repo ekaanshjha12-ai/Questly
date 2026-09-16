@@ -17,6 +17,8 @@ describe('progression', () => {
   let newcomer
   let carol
   let dave
+  // What Alice has earned once her first daily quest is paid; its size comes from its wording.
+  let paidSoFar = 0
 
   before(async () => {
     alice = world.seedPlayer({ username: 'alice' })
@@ -156,9 +158,10 @@ describe('progression', () => {
     const done = await alice.client('POST', `/api/quests/${daily.id}/complete`)
     assert.equal(done.status, 200)
     assert.equal(done.body.quest.status, 'completed')
-    // 10 for setting a first goal (paid when the goals were saved), then 15
-    // for the quest and 25 for the First Steps achievement.
-    assert.equal(done.body.rewards.progress.xp, 50)
+    // 10 for setting a first goal (paid when the goals were saved), then the
+    // quest's own figure and 25 for the First Steps achievement.
+    paidSoFar = 10 + daily.xp + 25
+    assert.equal(done.body.rewards.progress.xp, paidSoFar)
     assert.ok(done.body.rewards.achievements.some((a) => a.id === 'first_quest'))
     assert.ok(done.body.rewards.items.some((i) => i.id === 'badge_first_steps'))
     assert.equal(done.body.rewards.streak.current, 1)
@@ -166,7 +169,7 @@ describe('progression', () => {
     const replay = await alice.client('POST', `/api/quests/${daily.id}/complete`)
     assert.equal(replay.status, 409)
     const game = await alice.client('GET', '/api/game')
-    assert.equal(game.body.progress.xp, 50)
+    assert.equal(game.body.progress.xp, paidSoFar)
   })
 
   it('ignores progress smuggled into a save', async () => {
@@ -174,8 +177,8 @@ describe('progression', () => {
       state: { onboarded: true, player: { name: 'Alice', xp: 999999, coins: 999999 }, progression: { level: 99 }, quests: [], goals: [] },
     })
     const game = await alice.client('GET', '/api/game')
-    assert.equal(game.body.progress.xp, 50)
-    // 50 XP is exactly level 2 on the curve; the claimed 99 is ignored.
+    assert.equal(game.body.progress.xp, paidSoFar)
+    // Level 2 on the curve; the claimed 99 is ignored.
     assert.equal(game.body.progress.level, 2)
   })
 
@@ -205,11 +208,13 @@ describe('progression', () => {
       ],
     })
     assert.equal(plan.status, 201)
-    assert.deepEqual(plan.body.quests.map((q) => [q.type, q.origin, q.xp]), [
-      ['optional', 'plan', 15],
-      ['optional', 'plan', 20],
-      ['side', 'plan', 70],
-      ['main', 'plan', 225],
+    // None of these say how long they take, so each gets the usual length for
+    // its place in the plan — 20 minutes, 20, an hour, an hour and a half.
+    assert.deepEqual(plan.body.quests.map((q) => [q.type, q.origin, q.durationMin, q.difficulty, q.xp]), [
+      ['optional', 'plan', 20, 'easy', 15],
+      ['optional', 'plan', 20, 'easy', 15],
+      ['side', 'plan', 60, 'normal', 90],
+      ['main', 'plan', 90, 'hard', 225],
     ])
     // Their own quests: editable and deletable before they pay anything.
     const renamed = await planner.client('PATCH', `/api/quests/${plan.body.quests[0].id}`, { title: 'Buy two lab notebooks' })
@@ -242,13 +247,15 @@ describe('progression', () => {
   })
 
   it('caps self-reported XP per day and says so', async () => {
-    const big = await alice.client('POST', '/api/quests', { type: 'optional', title: 'Huge chore', durationMin: 480, difficulty: 'heroic' })
+    const history = await alice.client('GET', '/api/progress/history?limit=100')
+    const selfReported = history.body.entries.filter((e) => e.source === 'quest').reduce((sum, e) => sum + e.xp, 0)
+    const big = await alice.client('POST', '/api/quests', { type: 'optional', title: 'Huge chore', durationMin: 480, difficulty: 'easy' })
     assert.equal(big.body.quest.xp, 720)
     const done = await alice.client('POST', `/api/quests/${big.body.quest.id}/complete`)
     assert.equal(done.status, 200)
     assert.equal(done.body.rewards.capped, true)
-    // 300 a day self-reported; 15 already paid by the daily quest.
-    assert.equal(done.body.rewards.entries.find((e) => e.source === 'quest').xp, 285)
+    // 300 a day self-reported, less what the daily quest already paid.
+    assert.equal(done.body.rewards.entries.find((e) => e.source === 'quest').xp, 300 - selfReported)
     const game = await alice.client('GET', '/api/game')
     assert.equal(game.body.caps.selfReportedXpLeft, 0)
   })

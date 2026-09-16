@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { noteUsage } from './meter.js'
 import { toContentBlocks } from './documents.js'
+import { AGE_GUIDANCE } from './game/ages.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -99,6 +100,7 @@ Rules:
 - Be specific enough to act on immediately: numbers, quantities, durations, named steps. "Do research" is not a task; "Compare 3 beginner routines and pick one" is.
 - Build a realistic progression: easier or foundational things earlier, harder or dependent things later.
 - Respect whatever the person said about their level, time, constraints and deadline — it matters more than the goal title.
+- Write for the age you are told: it changes what is suitable and realistic, and any safety rules given for that age are firm.
 - Keep titles under 90 characters, written as an instruction, not a description.
 - Never mention the app, XP, levels or quests.`
 
@@ -153,9 +155,10 @@ async function ask({ system, prompt, schema, maxTokens, documents = [] }) {
 
 const text = (value, cap) => String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, cap)
 
-export async function askPlannerQuestions(goal, detail, documents = []) {
+export async function askPlannerQuestions(goal, detail, documents = [], ageGroup = 'adult') {
   const parts = [`Goal: "${goal}"`]
   if (detail) parts.push(`Extra context: "${detail}"`)
+  parts.push(`Who it is for: ${AGE_GUIDANCE[ageGroup] ?? AGE_GUIDANCE.adult}`)
   if (documents.length) {
     parts.push('They attached reference material — do not ask for anything it already answers.')
   }
@@ -208,9 +211,10 @@ function cleanDated(list, cap, maxOffset) {
   return out
 }
 
-export async function generatePlan(goal, detail, answers, documents = []) {
+export async function generatePlan(goal, detail, answers, documents = [], ageGroup = 'adult') {
   const parts = [`Goal: "${goal}"`]
   if (detail) parts.push(`Extra context: "${detail}"`)
+  parts.push(`Who it is for: ${AGE_GUIDANCE[ageGroup] ?? AGE_GUIDANCE.adult}`)
   if (answers?.length) {
     parts.push('\nQuestions and answers:')
     for (const a of answers) parts.push(`Q: ${a.question}\nA: ${a.answer || '(skipped)'}`)

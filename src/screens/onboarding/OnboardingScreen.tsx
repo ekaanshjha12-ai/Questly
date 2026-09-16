@@ -5,7 +5,8 @@ import type { CharacterId, GoalCategory, NewGoalInput } from '../../types'
 import { game, type Appearance } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
 import { CATEGORIES, detectCategory, getCategoryMeta } from '../../data/categories'
-import { GOAL_PRESETS, type GoalPreset } from '../../data/goalPresets'
+import { presetsForAge, type GoalPreset } from '../../data/goalPresets'
+import { ageFromBirthdate } from '../../lib/profile'
 import { PATHS, type PathId } from '../../data/paths'
 import { DEFAULT_APPEARANCE } from '../../art/hero'
 import HeroSprite from '../../components/art/HeroSprite'
@@ -34,9 +35,12 @@ interface ChosenGoal {
 
 export default function OnboardingScreen({
   name,
+  birthdate = null,
   onComplete,
 }: {
   name: string
+  /** Picks goal ideas that fit: a player under 18 is not offered promotions or debt. */
+  birthdate?: string | null
   onComplete: (name: string, character: CharacterId, goals: NewGoalInput[]) => void
 }) {
   const reduce = useReducedMotion()
@@ -54,6 +58,10 @@ export default function OnboardingScreen({
   const [allIdeas, setAllIdeas] = useState(false)
 
   const index = STEPS.indexOf(step)
+  const ideas = useMemo(() => {
+    const age = birthdate ? ageFromBirthdate(birthdate) : null
+    return presetsForAge(age !== null && age < 18)
+  }, [birthdate])
   const pathMeta = PATHS.find((p) => p.id === path) ?? null
 
   // The path's own categories first; the rest on request, since a Scholar
@@ -62,9 +70,9 @@ export default function OnboardingScreen({
     const own = pathMeta?.categories.length ? pathMeta.categories : CATEGORIES.map((c) => c.id)
     const categories = allIdeas ? [...own, ...CATEGORIES.map((c) => c.id).filter((id) => !own.includes(id))] : own
     return categories
-      .map((id) => ({ category: getCategoryMeta(id), presets: GOAL_PRESETS.filter((p) => p.category === id) }))
+      .map((id) => ({ category: getCategoryMeta(id), presets: ideas.filter((p) => p.category === id) }))
       .filter((group) => group.presets.length > 0)
-  }, [pathMeta, allIdeas])
+  }, [pathMeta, allIdeas, ideas])
   const hasMoreIdeas = Boolean(pathMeta?.categories.length) && !allIdeas
 
   const chosenKeys = new Set(chosen.map((g) => g.key))

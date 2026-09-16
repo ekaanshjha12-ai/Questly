@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { db, getState } from '../db.js'
+import { db, findUserById, getState } from '../db.js'
 import { screenInput } from '../moderation.js'
 import { periodEnd, periodKey, periodOrdinal, safeTimezone } from './clock.js'
-import { rarityFor } from './quests.js'
+import { questAgeGroup } from './ages.js'
+import { setFlag } from './onboarding.js'
+import { estimateMinutes, questScale } from './quests.js'
 import { getProgressRow, transaction } from './rewards.js'
-import { GOAL_CATEGORIES, TASK_TEMPLATES, fillTemplate, seededShuffle } from './templates.js'
+import { GOAL_CATEGORIES, fillTemplate, seededShuffle, suitableForAge, templatesFor } from './templates.js'
 
 /**
  * The quests a player's goals hand out each day, week and month.
@@ -23,11 +25,12 @@ export const PERIODS = ['daily', 'weekly', 'monthly']
 export const QUESTS_PER_PERIOD = { daily: 4, weekly: 1, monthly: 3 }
 const FILL_ORDER = ['monthly', 'weekly', 'daily']
 
-const SHAPE = {
-  daily: { type: 'daily', xp: 15, durationMin: 20, difficulty: 'easy' },
-  weekly: { type: 'side', xp: 60, durationMin: 90, difficulty: 'normal' },
-  monthly: { type: 'main', xp: 200, durationMin: 240, difficulty: 'hard' },
-}
+/**
+ * What each cadence's quests are. Their length is read from their own wording
+ * (see estimateMinutes), and their level, reward and rarity follow from that
+ * on the same scale as every other quest.
+ */
+const TYPE = { daily: 'daily', weekly: 'side', monthly: 'main' }
 
 /** Goals from the notebook document, cleaned — it is written by the client. */
 export function readGoals(state) {
@@ -54,20 +57,22 @@ export function readGoals(state) {
   return goals
 }
 
-function titleFor(goal, period, key, index) {
-  const written = goal.pool[period]
-  const templates = written.length ? written : TASK_TEMPLATES[goal.category][period]
+function titleFor(goal, period, key, index, ageGroup) {
+  const plain = templatesFor(goal.category, period, ageGroup)
+  // A goal's own written quests, less any line unsuited to the player's age.
+  const written = goal.pool[period].filter((line) => suitableForAge(line, ageGroup))
+  const templates = written.length ? written : plain
   const ordered = seededShuffle(templates, `${goal.id}:${period}:${key}`)
   const template = ordered[index]
   if (!template) return null
   const title = fillTemplate(template, goal.title).slice(0, 160)
-  if (screenInput(title, { allowLength: 400 }).ok) return title
-  // A written pool line the filter refuses falls back to the plain wording.
-  const fallback = seededShuffle(TASK_TEMPLATES[goal.category][period], `${goal.id}:${period}:${key}`)[index]
+  if (screenInput(title, { allowLength: 400 }).ok && suitableForAge(title, ageGroup)) return title
+  // A line the filters refuse (the goal's own title can be the problem) falls back to the plain wording.
+  const fallback = seededShuffle(plain, `${goal.id}:${period}:${key}`)[index]
   return fallback ? fillTemplate(fallback, 'your goal') : null
 }
 
-function slateFor(goals, period, key, ordinal, covered) {
+function slateFor(goals, period, key, ordinal, covered, ageGroup) {
   const active = goals.filter((g) => !g.archived)
   const cap = QUESTS_PER_PERIOD[period]
   if (!active.length) return []
@@ -79,7 +84,7 @@ function slateFor(goals, period, key, ordinal, covered) {
     let added = 0
     for (const goal of pool) {
       if (picked.length >= cap) break
-      const title = titleFor(goal, period, key, round)
+      const title = titleFor(goal, period, key, round, ageGroup)
       if (!title) continue
       picked.push({ goal, index: round, title })
       added += 1
@@ -129,8 +134,28 @@ export function ensurePeriodicQuests(userId, now = new Date()) {
   }
   const goals = readGoals(state)
   const activeIds = new Set(goals.filter((g) => !g.archived).map((g) => g.id))
+  const ageGroup = questAgeGroup(findUserById(userId)?.birthdate, now)
+  let flags = {}
+  try {
+    flags = JSON.parse(progress.flags ?? '{}') ?? {}
+  } catch {
+    flags = {}
+  }
 
   transaction(() => {
+    // Written for a different age group, or before the one scale: this period's
+    // untouched quests are handed out again, worded for who the player is now.
+    if (flags.slateFor !== `${ageGroup}|scale1`) {
+      for (const period of PERIODS) {
+        db.run(
+          `DELETE FROM quests WHERE user_id = ? AND period = ? AND period_key = ? AND origin = 'generated'
+             AND status = 'active' AND started_at IS NULL AND xp_paid = 0 AND progress_value = 0 AND pinned = 0`,
+          [userId, period, periodKey(period, tz, now)],
+        )
+      }
+      setFlag(userId, 'slateFor', `${ageGroup}|scale1`)
+    }
+
     const covered = new Set()
     for (const period of FILL_ORDER) {
       const key = periodKey(period, tz, now)
@@ -151,21 +176,22 @@ export function ensurePeriodicQuests(userId, now = new Date()) {
       if (slots <= 0 || !activeIds.size) continue
 
       const avoid = period === 'daily' ? new Set() : covered
-      const shape = SHAPE[period]
       const deadline = periodEnd(period, tz, now)
       const taken = new Set(existing.map((q) => q.gen_key))
-      for (const pick of slateFor(goals, period, key, periodOrdinal(period, tz, now), avoid)) {
+      for (const pick of slateFor(goals, period, key, periodOrdinal(period, tz, now), avoid, ageGroup)) {
         if (slots <= 0) break
         const genKey = `${pick.goal.id}|${period}|${key}|${pick.index}`
         if (taken.has(genKey)) continue
         const iso = now.toISOString()
+        const durationMin = estimateMinutes(pick.title, period)
+        const scale = questScale({ type: TYPE[period], durationMin })
         const inserted = db.run(
           `INSERT OR IGNORE INTO quests (id, user_id, type, origin, gen_key, goal_id, period, period_key, title, description, category,
              difficulty, duration_min, xp_reward, rarity, progress_kind, status, deadline_at, created_at, updated_at)
            VALUES (?, ?, ?, 'generated', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'check', 'active', ?, ?, ?)`,
           [
-            randomUUID(), userId, shape.type, genKey, pick.goal.id, period, key, pick.title, `For your goal: ${pick.goal.title}`, pick.goal.category,
-            shape.difficulty, shape.durationMin, shape.xp, rarityFor(shape.xp), deadline, iso, iso,
+            randomUUID(), userId, TYPE[period], genKey, pick.goal.id, period, key, pick.title, `For your goal: ${pick.goal.title}`, pick.goal.category,
+            scale.difficulty, durationMin, scale.xp, scale.rarity, deadline, iso, iso,
           ],
         )
         if (inserted.changes) {

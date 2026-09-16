@@ -21,7 +21,9 @@ let nextPort = 5600 + Math.floor(Math.random() * 300)
 
 export function makeWorld() {
   const dataDir = mkdtempSync(join(tmpdir(), 'questly-test-'))
-  const port = nextPort++
+  // Suites run side by side, each with its own server, so a port can be taken
+  // by another one between choosing it and binding it; start() moves on.
+  let port = nextPort++
   let child = null
   let logs = ''
 
@@ -38,7 +40,9 @@ export function makeWorld() {
     return out.stdout.trim()
   }
 
-  async function start() {
+  async function listen() {
+    logs = ''
+    let exited = false
     child = spawn(process.execPath, ['server/index.js'], {
       cwd: ROOT,
       env: { ...process.env, DATA_DIR: dataDir, API_PORT: String(port), NODE_ENV: 'test', ANTHROPIC_API_KEY: '', INVITE_CODE: '' },
@@ -46,15 +50,26 @@ export function makeWorld() {
     })
     child.stdout.on('data', (d) => (logs += d))
     child.stderr.on('data', (d) => (logs += d))
+    child.once('exit', () => (exited = true))
     const deadline = Date.now() + 20_000
     while (Date.now() < deadline) {
+      if (exited || /EADDRINUSE/.test(logs)) return false
       try {
         const res = await fetch(`http://127.0.0.1:${port}/api/health`)
-        if (res.ok) return
+        if (res.ok) return true
       } catch {
         // not up yet
       }
       await new Promise((r) => setTimeout(r, 150))
+    }
+    return false
+  }
+
+  async function start() {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (await listen()) return
+      await stop()
+      port = nextPort++
     }
     throw new Error(`server did not start:\n${logs}`)
   }
@@ -110,5 +125,17 @@ export function makeWorld() {
     }
   }
 
-  return { dataDir, port, seed, start, stop, destroy, seedPlayer, client, logs: () => logs }
+  return {
+    dataDir,
+    get port() {
+      return port
+    },
+    seed,
+    start,
+    stop,
+    destroy,
+    seedPlayer,
+    client,
+    logs: () => logs,
+  }
 }
