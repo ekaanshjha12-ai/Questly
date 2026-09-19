@@ -276,5 +276,11 @@ describe('journeys', () => {
       assert.match(await res.text(), /id="root"/, `${path} serves the app`)
       assert.equal(res.headers.get('x-questly-shell'), 'app', `${path} is marked as the app, for the service worker`)
     }
+
+    // The update check names the build by the same script the app page loads.
+    const app = await (await fetch(url('/?app=1'))).text()
+    const { build } = await (await fetch(url('/api/version'))).json()
+    assert.ok(build, 'the served build has a name')
+    assert.ok(app.includes(`src="${build}"`), 'and it is the script the app page loads')
   })
 })

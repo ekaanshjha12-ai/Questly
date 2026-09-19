@@ -21,8 +21,8 @@ import { GOAL_CATEGORIES } from './templates.js'
 
 const PERIOD_SHAPE = {
   daily: { type: 'daily', durationMin: 20, difficulty: 'easy', xp: 15 },
-  weekly: { type: 'side', durationMin: 90, difficulty: 'normal', xp: 60 },
-  monthly: { type: 'main', durationMin: 240, difficulty: 'hard', xp: 200 },
+  weekly: { type: 'weekly', durationMin: 90, difficulty: 'normal', xp: 60 },
+  monthly: { type: 'monthly', durationMin: 240, difficulty: 'hard', xp: 200 },
 }
 
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)

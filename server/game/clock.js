@@ -149,6 +149,14 @@ export function periodEndForKey(period, key, timeZone) {
   return new Date(localMidnight(tz, next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate())).toISOString()
 }
 
+/** The midnight that ends a run of `days` local days starting today: 1 is the end of today, 7 a week from now. */
+export function endOfDays(days, timeZone, date = new Date()) {
+  const tz = safeTimezone(timeZone)
+  const { year, month, day } = localParts(tz, date)
+  const next = new Date(Date.UTC(year, month - 1, day + days))
+  return new Date(localMidnight(tz, next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate())).toISOString()
+}
+
 /** When the current day, week (Monday start) or month ends for this player. */
 export function periodEnd(period, timeZone, date = new Date()) {
   const tz = safeTimezone(timeZone)

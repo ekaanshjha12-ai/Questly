@@ -63,8 +63,8 @@ export function pickFeatured(quests: GameQuest[]): GameQuest | null {
   const open = quests.filter((q) => q.status === 'active' || q.status === 'in_progress')
   return (
     open.find((q) => q.pinned) ??
-    open.find((q) => q.type === 'main' && q.status === 'in_progress') ??
-    open.find((q) => q.type === 'main') ??
+    open.find((q) => q.type === 'monthly' && q.status === 'in_progress') ??
+    open.find((q) => q.type === 'monthly') ??
     open.find((q) => q.status === 'in_progress') ??
     [...open].sort((a, b) => b.xp - a.xp)[0] ??
     null

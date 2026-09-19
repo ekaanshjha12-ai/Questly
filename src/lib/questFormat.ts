@@ -42,7 +42,7 @@ export function questIcon(quest: Pick<GameQuest, 'category' | 'type'>): LucideIc
 
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard', heroic: 'Heroic' }
 
-const RATE = { main: 2, side: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge: 1.5 } as const
+const RATE = { monthly: 2, weekly: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge: 1.5 } as const
 const DIFFICULTY = { easy: 0.75, normal: 1, hard: 1.25, heroic: 1.5 } as const
 
 /**
@@ -96,7 +96,10 @@ export function dueLabel(iso: string | null, now = new Date()): string | null {
   const endOfTomorrow = new Date(endOfToday)
   endOfTomorrow.setDate(endOfTomorrow.getDate() + 1)
   if (due.toDateString() === tomorrow.toDateString() || due.getTime() === endOfTomorrow.getTime()) return 'Due tomorrow'
-  return `Due ${due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+  // Midnight is the end of the day before: a week's quests end on Sunday, not Monday.
+  const atMidnight = due.getHours() === 0 && due.getMinutes() === 0 && due.getSeconds() === 0
+  const day = atMidnight ? new Date(due.getTime() - 1) : due
+  return `Due ${day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
 }
 
 /** "45% complete", "4 / 7 milestones", "52 / 100 km", "20 / 60 min". */
@@ -115,9 +118,19 @@ export function progressLabel(quest: GameQuest): string {
   }
 }
 
-/** Whether Focus Mode is the natural way to work on this quest. */
-export function isFocusQuest(quest: GameQuest): boolean {
+/**
+ * Whether this quest is started and finished in one go, so the timer can count
+ * toward it. The timer is always optional: such a quest can be started and
+ * marked complete without it.
+ */
+export function isTimeable(quest: GameQuest): boolean {
   return (quest.status === 'active' || quest.status === 'in_progress') && (quest.progress.kind === 'minutes' || quest.progress.kind === 'check')
+}
+
+/** What a stretch of timed focus pays, mirroring the server: an XP a minute, from five minutes, up to 120. */
+export function focusXp(ms: number): number {
+  if (ms < 5 * 60_000) return 0
+  return Math.min(120, Math.floor(ms / 60_000))
 }
 
 export function greeting(date = new Date()): string {

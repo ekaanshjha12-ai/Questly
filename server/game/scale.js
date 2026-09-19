@@ -16,7 +16,7 @@
 
 export const DIFFICULTIES = ['easy', 'normal', 'hard', 'heroic']
 
-const RATE = { main: 2, side: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge: 1.5 }
+const RATE = { monthly: 2, weekly: 1.5, daily: 1.5, optional: 1, club: 1.5, challenge: 1.5 }
 const DIFFICULTY = { easy: 0.75, normal: 1, hard: 1.25, heroic: 1.5 }
 
 export function difficultyFor(durationMin) {

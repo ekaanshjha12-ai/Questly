@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { m as motion } from 'framer-motion'
-import { ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy } from 'lucide-react'
+import { Check, ChevronRight, Flame, Play, Plus, ScrollText, Swords, Timer, Trophy, Watch } from 'lucide-react'
 import type { Challenge } from '../../lib/api'
 import { useGame } from '../../game/GameProvider'
 import { Link, useRouter } from '../../app/router'
@@ -7,8 +8,10 @@ import { HeaderActions, PageHeader } from '../../app/AppShell'
 import Button from '../../components/ui/Button'
 import { XpBar } from '../../components/ui/Bars'
 import { ErrorState, LoadingState } from '../../components/ui/States'
+import { messageOf, useToast } from '../../components/ui/Toast'
+import { useSettled } from '../../hooks/useSettled'
 import { useTimeOfDay } from '../../hooks/useTimeOfDay'
-import { formatDurationMs, formatMinutes, greeting, isFocusQuest, questIcon } from '../../lib/questFormat'
+import { formatDurationMs, formatMinutes, greeting, isTimeable, questIcon } from '../../lib/questFormat'
 import worldBanner from '../../assets/world/questly-world-banner.webp'
 import BaseBackdrop from './BaseBackdrop'
 
@@ -20,6 +23,14 @@ import BaseBackdrop from './BaseBackdrop'
 /** The open stretch of the room between the title and the quest card. */
 const STAGE = 'relative h-[13.5rem] sm:h-[17rem] lg:h-[clamp(20rem,26vw,27rem)]'
 
+/** One tap from Home to a running clock. Everything else is in the Timer. */
+const QUICK: { kind: 'timer' | 'stopwatch'; minutes?: number; label: string }[] = [
+  { kind: 'timer', minutes: 15, label: '15 min' },
+  { kind: 'timer', minutes: 25, label: '25 min' },
+  { kind: 'timer', minutes: 45, label: '45 min' },
+  { kind: 'stopwatch', label: 'Stopwatch' },
+]
+
 /**
  * Home: today's adventure.
  *
@@ -29,9 +40,26 @@ const STAGE = 'relative h-[13.5rem] sm:h-[17rem] lg:h-[clamp(20rem,26vw,27rem)]'
  * not the point.
  */
 export default function HomeScreen({ name, challenges }: { name: string; challenges: Challenge[] | null }) {
-  const { snapshot, status, error, refresh } = useGame()
+  const { snapshot, status, error, refresh, startQuest, completeQuest, startFocus } = useGame()
   const { navigate } = useRouter()
+  const toast = useToast()
   const time = useTimeOfDay()
+  const [busy, setBusy] = useState<string | null>(null)
+  // The quest button changes meaning where it stands (Start quest, then Mark
+  // complete), and another quest can take its place: either way, a moment's pause.
+  const next = snapshot?.quests.find((q) => q.id === snapshot.featuredQuestId)
+  const settled = useSettled(next ? next.id + '|' + next.status : null)
+
+  async function run(key: string, work: () => Promise<unknown>, failure: string) {
+    setBusy(key)
+    try {
+      await work()
+    } catch (err) {
+      toast.error(failure, messageOf(err))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (!snapshot) {
     return (
@@ -53,6 +81,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
   const doneToday = quests.filter((q) => q.status === 'completed').length
   const recent = achievements.recent[0] ?? null
   const FeaturedIcon = featured ? questIcon(featured) : ScrollText
+  const timeable = featured ? isTimeable(featured) : false
 
   return (
     <div className="relative isolate">
@@ -79,7 +108,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
               </p>
               <p className="mt-1 font-display text-2xl font-bold text-slate-50">{focus.label}</p>
               <Button block icon={Play} className="mt-3 !min-h-[50px]" onClick={() => navigate('/focus')}>
-                Return to Focus Mode
+                Back to your session
               </Button>
             </div>
           ) : featured ? (
@@ -100,32 +129,108 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
                 <span className="text-slate-400">{formatMinutes(featured.durationMin)}</span>
                 <span className="font-display text-base font-bold text-reward-400">Reward: +{featured.xp} XP</span>
               </div>
-              <Button
-                block
-                icon={Play}
-                className="mt-3 !min-h-[52px] text-[14px]"
-                onClick={() => navigate(isFocusQuest(featured) ? `/focus?quest=${encodeURIComponent(featured.id)}` : `/quests/${encodeURIComponent(featured.id)}`)}
-              >
-                {isFocusQuest(featured) ? 'Enter Focus Mode' : 'Open quest'}
-              </Button>
+              {/* Starting a quest only marks it under way; the timer beside it is optional. */}
+              <div className="mt-3 flex gap-2">
+                {!timeable ? (
+                  <Button icon={Play} className="flex-1 !min-h-[52px] text-[14px]" onClick={() => navigate(`/quests/${encodeURIComponent(featured.id)}`)}>
+                    Open quest
+                  </Button>
+                ) : featured.status === 'in_progress' ? (
+                  <Button
+                    icon={Check}
+                    loading={busy === 'complete'}
+                    disabled={!settled}
+                    className="flex-1 !min-h-[52px] text-[14px]"
+                    onClick={() => void run('complete', () => completeQuest(featured.id), 'Could not complete the quest')}
+                  >
+                    Mark complete
+                  </Button>
+                ) : (
+                  <Button
+                    icon={Play}
+                    loading={busy === 'start'}
+                    disabled={!settled}
+                    className="flex-1 !min-h-[52px] text-[14px]"
+                    onClick={() =>
+                      void run(
+                        'start',
+                        async () => {
+                          await startQuest(featured.id)
+                          toast.success('Quest started', 'Mark it complete when it is done. The timer is there if you want it.')
+                        },
+                        'Could not start the quest',
+                      )
+                    }
+                  >
+                    Start quest
+                  </Button>
+                )}
+                {timeable && (
+                  <Button
+                    variant="secondary"
+                    icon={Timer}
+                    className="!min-h-[52px]"
+                    aria-label={`Time ${featured.title} with the timer`}
+                    onClick={() => navigate(`/timer?quest=${encodeURIComponent(featured.id)}`)}
+                  >
+                    Timer
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-ink-600 bg-ink-900/95 p-4 shadow-[0_24px_48px_-24px_rgba(0,0,0,0.8)] backdrop-blur-md">
               <p className="eyebrow text-reward-300">Your next quest</p>
               <h2 className="mt-1 font-display text-2xl font-bold text-slate-50">Write today&apos;s adventure</h2>
-              <p className="mt-1 text-sm text-slate-400">Your board is clear. Add a quest, or start a focus block and earn XP for the time.</p>
+              <p className="mt-1 text-sm text-slate-400">Your board is clear. Add a quest, or start the timer and earn XP for the time.</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button icon={Plus} onClick={() => navigate('/quests/new')}>
                   New quest
                 </Button>
-                <Button variant="secondary" icon={Timer} onClick={() => navigate('/focus')}>
-                  Focus
+                <Button variant="secondary" icon={Timer} onClick={() => navigate('/timer')}>
+                  Timer
                 </Button>
               </div>
             </div>
           )}
         </div>
       </section>
+
+      {/* --- timer ---------------------------------------------------------------------- */}
+      {!focus && (
+        <section className="mt-6" aria-label="Timer">
+          <div className="mb-2.5 flex items-center justify-between">
+            <h2 className="eyebrow">Timer</h2>
+            <Link to="/timer" className="text-xs font-semibold text-gold-400 hover:text-gold-300">
+              More options
+            </Link>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {QUICK.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                disabled={busy !== null}
+                onClick={() =>
+                  void run(
+                    q.label,
+                    async () => {
+                      await startFocus({ kind: q.kind, targetMinutes: q.minutes })
+                      navigate('/focus')
+                    },
+                    'Could not start the timer',
+                  )
+                }
+                className="panel flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-center hover:border-ink-500 disabled:opacity-60"
+                aria-label={q.kind === 'timer' ? `Start a ${q.label} timer` : 'Start a stopwatch'}
+              >
+                {q.kind === 'timer' ? <Timer className="h-4 w-4 text-gold-400" aria-hidden /> : <Watch className="h-4 w-4 text-gold-400" aria-hidden />}
+                <span className="text-[12px] font-bold text-slate-100">{q.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* --- standing ------------------------------------------------------------------ */}
       <section className="mt-6" aria-label="Performance">
@@ -137,7 +242,7 @@ export default function HomeScreen({ name, challenges }: { name: string; challen
             <XpBar value={progress.xpIntoLevel} max={progress.xpForNext} className="mt-2 !h-2" label={`XP toward level ${progress.level + 1}`} />
             <p className="mt-1 text-[11px] text-slate-500">{Math.round((progress.xpIntoLevel / progress.xpForNext) * 100)}% to level {progress.level + 1}</p>
           </Link>
-          <Link to="/focus" className="panel block px-4 py-3 hover:border-ink-500">
+          <Link to="/timer" className="panel block px-4 py-3 hover:border-ink-500">
             <p className="eyebrow">Today&apos;s work</p>
             <p className="mt-1 font-display text-2xl font-bold tabular-nums text-slate-50">{formatDurationMs(focusTotals.todayMs)}</p>
             <p className="mt-2 text-[11px] font-semibold text-gold-400">+{snapshot.todayXp} XP gained today</p>

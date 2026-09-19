@@ -382,7 +382,8 @@ app.get('/api/version', (_req, res) => {
   if (servedBuild === undefined) {
     try {
       const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.html'), 'utf8')
-      servedBuild = html.match(/src="(\/assets\/index-[\w-]+\.js)"/)?.[1] ?? null
+      // The app's entry script, whatever the bundler names it.
+      servedBuild = html.match(/<script type="module"[^>]*\ssrc="(\/assets\/[\w.-]+\.js)"/)?.[1] ?? null
     } catch {
       // No build (development): nothing to compare against.
       servedBuild = null

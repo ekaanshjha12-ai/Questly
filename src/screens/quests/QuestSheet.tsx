@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Check, Flag, Pencil, Pin, PinOff, Play, ShieldCheck, Trash2, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Flag, Pencil, Pin, PinOff, Play, ShieldCheck, Timer, Trash2, XCircle } from 'lucide-react'
 import type { GameQuest } from '../../lib/api'
-import { CATEGORY_LABEL, DIFFICULTY_LABEL, dueLabel, formatMinutes, isFocusQuest, progressLabel, questIcon } from '../../lib/questFormat'
+import { CATEGORY_LABEL, DIFFICULTY_LABEL, dueLabel, formatMinutes, isTimeable, progressLabel, questIcon } from '../../lib/questFormat'
 import { useGame } from '../../game/GameProvider'
 import { Sheet, ConfirmDialog } from '../../components/ui/Sheet'
 import Button from '../../components/ui/Button'
@@ -10,6 +10,7 @@ import { QuestStatusTag, QuestTypeTag, RarityTag } from '../../components/ui/Tag
 import { TextInput } from '../../components/ui/Field'
 import { messageOf, useToast } from '../../components/ui/Toast'
 import { VerifyModalHost } from '../../components/VerifyModal'
+import { useSettled } from '../../hooks/useSettled'
 
 /**
  * Everything about one quest, and everything that can be done with it.
@@ -18,28 +19,36 @@ import { VerifyModalHost } from '../../components/VerifyModal'
  * time the server measured and proof it accepted pay in full; a tick is
  * self-reported and counts toward a daily limit. The sheet says so where it
  * matters, rather than surprising anyone afterwards.
+ *
+ * The timer is offered, never required: a quest can be started, worked on and
+ * marked complete without it.
  */
 export default function QuestSheet({
   quest,
   onClose,
-  onStartFocus,
+  onOpenTimer,
   onEdit,
 }: {
   quest: GameQuest | null
   onClose: () => void
-  onStartFocus: (quest: GameQuest) => void
+  onOpenTimer: (quest: GameQuest) => void
   onEdit: (quest: GameQuest) => void
 }) {
   const game = useGame()
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [amount, setAmount] = useState('1')
+  // Minutes are logged in bigger steps than units.
+  const kind = quest?.progress.kind
+  useEffect(() => setAmount(kind === 'minutes' ? '15' : '1'), [quest?.id, kind])
   const [confirm, setConfirm] = useState<'abandon' | 'delete' | null>(null)
   const [proving, setProving] = useState(false)
 
   // Always show the freshest copy of the quest from the store.
   const live = quest ? game.snapshot?.quests.find((q) => q.id === quest.id) ?? quest : null
   const caps = game.snapshot?.caps
+  // Once started, Mark complete moves up to where Start quest was.
+  const settled = useSettled(live?.status, live?.id)
 
   async function run(key: string, work: () => Promise<unknown>, success?: string) {
     setBusy(key)
@@ -60,6 +69,8 @@ export default function QuestSheet({
   const editable = live.origin === 'user' || live.origin === 'plan' || live.origin === 'legacy_todo'
   const deletable = editable && live.status !== 'completed' && live.xpPaid === 0
   const due = dueLabel(live.deadlineAt)
+  const timeable = isTimeable(live)
+  const unit = live.progress.kind === 'minutes' ? 'minutes' : live.progress.unit ?? 'progress'
 
   return (
     <>
@@ -128,7 +139,7 @@ export default function QuestSheet({
               </ul>
             )}
 
-            {live.progress.kind === 'count' && open && (
+            {(live.progress.kind === 'count' || live.progress.kind === 'minutes') && open && (
               <form
                 className="mt-4 flex gap-2"
                 onSubmit={(e) => {
@@ -141,9 +152,9 @@ export default function QuestSheet({
                   void run('log', () => game.logProgress(live.id, delta))
                 }}
               >
-                <TextInput aria-label={`Amount of ${live.progress.unit ?? 'progress'}`} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} className="!w-28" />
+                <TextInput aria-label={`Amount of ${unit}`} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} className="!w-28" />
                 <Button type="submit" variant="secondary" loading={busy === 'log'} className="flex-1">
-                  Log {live.progress.unit ?? 'progress'}
+                  Log {unit}
                 </Button>
               </form>
             )}
@@ -151,22 +162,32 @@ export default function QuestSheet({
 
           {open && (
             <div className="space-y-2">
-              {isFocusQuest(live) && (
-                <Button block icon={Play} onClick={() => onStartFocus(live)}>
-                  {live.progress.kind === 'minutes' ? 'Enter Focus Mode' : 'Do it in Focus Mode'}
+              {timeable && live.status === 'active' && (
+                <Button block icon={Play} loading={busy === 'start'} onClick={() => run('start', () => game.startQuest(live.id), 'Quest started')}>
+                  Start quest
                 </Button>
               )}
-              {live.progress.kind === 'check' && (
-                <Button block variant="secondary" icon={Check} loading={busy === 'complete'} onClick={() => run('complete', () => game.completeQuest(live.id))}>
+              {timeable && (
+                <Button
+                  block
+                  variant={live.status === 'in_progress' ? 'primary' : 'secondary'}
+                  icon={Check}
+                  loading={busy === 'complete'}
+                  disabled={!settled}
+                  onClick={() => run('complete', () => game.completeQuest(live.id))}
+                >
                   Mark complete
                 </Button>
               )}
-              {live.progress.kind !== 'minutes' && (
-                <p className="text-center text-[11px] text-slate-500">
-                  Self-reported progress earns up to {caps?.selfReportedXpDaily ?? 300} XP a day
-                  {caps ? ` (${caps.selfReportedXpLeft} left today)` : ''}. Focus time and accepted proof are never capped.
-                </p>
+              {timeable && (
+                <Button block variant="secondary" icon={Timer} onClick={() => onOpenTimer(live)}>
+                  Use the timer <span className="normal-case tracking-normal text-slate-400">(optional)</span>
+                </Button>
               )}
+              <p className="text-center text-[11px] text-slate-500">
+                Ticked or logged progress earns up to {caps?.selfReportedXpDaily ?? 300} XP a day
+                {caps ? ` (${caps.selfReportedXpLeft} left today)` : ''}. Time the timer measures and accepted proof are never capped.
+              </p>
             </div>
           )}
 

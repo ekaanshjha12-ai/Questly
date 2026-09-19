@@ -18,7 +18,8 @@ const CHECK_EVERY_MS = 15 * 60_000
 let newerBuild = false
 
 function ownBuild(): string | null {
-  const script = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')
+  // The built entry script; in development it is served from /src, and there is nothing to compare.
+  const script = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')
   return script ? new URL(script.src, window.location.origin).pathname : null
 }
 

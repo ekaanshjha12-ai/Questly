@@ -30,7 +30,7 @@ const FILL_ORDER = ['monthly', 'weekly', 'daily']
  * (see estimateMinutes), and their level, reward and rarity follow from that
  * on the same scale as every other quest.
  */
-const TYPE = { daily: 'daily', weekly: 'side', monthly: 'main' }
+const TYPE = { daily: 'daily', weekly: 'weekly', monthly: 'monthly' }
 
 /** Goals from the notebook document, cleaned — it is written by the client. */
 export function readGoals(state) {

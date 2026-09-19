@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { m as motion, useReducedMotion } from 'framer-motion'
-import { Check, Clock, Lock, Play, Plus, ListChecks, Sparkles, CalendarClock } from 'lucide-react'
+import { Check, Clock, Lock, Play, Plus, ListChecks, Sparkles, CalendarClock, Timer } from 'lucide-react'
 import type { GameQuest } from '../../lib/api'
-import { CATEGORY_LABEL, dueLabel, formatMinutes, isFocusQuest, progressLabel, questIcon } from '../../lib/questFormat'
+import { CATEGORY_LABEL, dueLabel, formatMinutes, isTimeable, progressLabel, questIcon } from '../../lib/questFormat'
 import { ProgressBar } from '../../components/ui/Bars'
 import { Parchment } from '../../components/ui/Panel'
 import Tag, { QUEST_STATUS_LABEL, QUEST_TYPE_LABEL, RARITY_LABEL } from '../../components/ui/Tag'
+import { useSettled } from '../../hooks/useSettled'
 
 const RARITY_EDGE: Record<GameQuest['rarity'], string> = {
   common: 'before:bg-[#8f8a7d]',
@@ -24,30 +26,56 @@ const RARITY_GEM: Record<GameQuest['rarity'], string> = {
  * A quest, drawn as a contract on parchment: what it is, what it pays, how far
  * along it is, and the one thing to do next. The coloured edge and gem are its
  * rarity.
+ *
+ * Starting a quest only marks it under way; the timer sits beside it for
+ * anyone who wants to time the work, and is never required.
  */
 export default function QuestContract({
   quest,
   onOpen,
   onStart,
+  onComplete,
+  onTimer,
   index = 0,
 }: {
   quest: GameQuest
   onOpen: (quest: GameQuest) => void
-  onStart: (quest: GameQuest) => void
+  onStart: (quest: GameQuest) => Promise<unknown> | void
+  onComplete: (quest: GameQuest) => Promise<unknown> | void
+  onTimer: (quest: GameQuest) => void
   index?: number
 }) {
   const reduce = useReducedMotion()
+  const [busy, setBusy] = useState(false)
   const Icon = questIcon(quest)
   const done = quest.status === 'completed'
   const closed = done || quest.status === 'failed' || quest.status === 'expired'
   const due = dueLabel(quest.deadlineAt)
   const statusTone = done ? 'solid-green' : quest.status === 'in_progress' || quest.status === 'active' ? 'green' : quest.status === 'locked' ? 'neutral' : 'danger'
+  const timeable = isTimeable(quest)
+  // "Start quest" turns into "Mark complete" in the same place.
+  const settled = useSettled(quest.status, quest.id)
 
-  let action: { label: string; icon: typeof Play } | null = null
-  if (!closed && quest.status !== 'locked' && quest.status !== 'upcoming') {
-    if (isFocusQuest(quest)) action = { label: quest.status === 'in_progress' ? 'Continue quest' : 'Start quest', icon: Play }
-    else if (quest.progress.kind === 'count') action = { label: 'Log progress', icon: Plus }
-    else if (quest.progress.kind === 'milestones') action = { label: 'Milestones', icon: ListChecks }
+  const workable = !closed && quest.status !== 'locked' && quest.status !== 'upcoming'
+  const action: { label: string; icon: typeof Play; run: () => Promise<unknown> | void } | null = !workable
+    ? null
+    : timeable
+      ? quest.status === 'in_progress'
+        ? { label: 'Mark complete', icon: Check, run: () => onComplete(quest) }
+        : { label: 'Start quest', icon: Play, run: () => onStart(quest) }
+      : quest.progress.kind === 'count'
+        ? { label: 'Log progress', icon: Plus, run: () => onOpen(quest) }
+        : quest.progress.kind === 'milestones'
+          ? { label: 'Milestones', icon: ListChecks, run: () => onOpen(quest) }
+          : null
+
+  async function act(run: () => Promise<unknown> | void) {
+    setBusy(true)
+    try {
+      await run()
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -132,15 +160,17 @@ export default function QuestContract({
         </button>
 
         {action && (
-          <div className="px-4 pb-4">
-            <button
-              type="button"
-              onClick={() => (isFocusQuest(quest) ? onStart(quest) : onOpen(quest))}
-              className="btn-ink w-full"
-            >
+          <div className="flex gap-2 px-4 pb-4">
+            <button type="button" disabled={busy || !settled} onClick={() => void act(action.run)} className="btn-ink min-w-0 flex-1">
               <action.icon className="h-4 w-4" aria-hidden />
               {action.label}
             </button>
+            {timeable && (
+              <button type="button" onClick={() => onTimer(quest)} className="btn-ink-outline shrink-0 px-3" aria-label={`Time ${quest.title} with the timer`}>
+                <Timer className="h-4 w-4" aria-hidden />
+                Timer
+              </button>
+            )}
           </div>
         )}
       </Parchment>

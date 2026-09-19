@@ -43,46 +43,46 @@ export const REGIONS = [
 const REGION_IDS = new Set(REGIONS.map((r) => r.id))
 
 /**
- * Two quests a week per region, the same for everyone. Minutes are filled only
- * by focus sessions the server timed; checks, counts and steps are
- * self-reported and share the daily ceiling like any other.
+ * Two quests a week per region, the same for everyone. Minutes fill from focus
+ * sessions the server timed, or from time logged by hand; anything logged,
+ * ticked or counted is self-reported and shares the daily ceiling like any other.
  */
 const REGION_QUESTS = {
   focus_sanctum: [
-    { key: 'vigil', title: 'Sanctum Vigil', description: 'Ninety minutes of timed focus this week, on anything that matters.', type: 'side', durationMin: 90, progressKind: 'minutes', target: 90, category: 'wellness' },
-    { key: 'deep-current', title: 'The Deep Current', description: 'Forty-five minutes of deep, distraction-free focus.', type: 'side', durationMin: 45, progressKind: 'minutes', target: 45, category: 'wellness' },
+    { key: 'vigil', title: 'Sanctum Vigil', description: 'Ninety minutes of focus this week, on anything that matters.', type: 'weekly', durationMin: 90, progressKind: 'minutes', target: 90, category: 'wellness' },
+    { key: 'deep-current', title: 'The Deep Current', description: 'Forty-five minutes of deep, distraction-free focus.', type: 'weekly', durationMin: 45, progressKind: 'minutes', target: 45, category: 'wellness' },
   ],
   scholars_sanctuary: [
-    { key: 'tome', title: 'Tome of Recall', description: 'An hour of study timed in Focus Mode: flashcards, reading or practice.', type: 'side', durationMin: 60, progressKind: 'minutes', target: 60, category: 'learning' },
-    { key: 'lecture', title: 'Lecture Notes', description: 'Take one topic from this week and make it yours.', type: 'side', durationMin: 30, progressKind: 'milestones', milestones: ['Pick a topic', 'Summarise it in five points', 'Test yourself on it'], category: 'learning' },
+    { key: 'tome', title: 'Tome of Recall', description: 'An hour of study: flashcards, reading or practice.', type: 'weekly', durationMin: 60, progressKind: 'minutes', target: 60, category: 'learning' },
+    { key: 'lecture', title: 'Lecture Notes', description: 'Take one topic from this week and make it yours.', type: 'weekly', durationMin: 30, progressKind: 'milestones', milestones: ['Pick a topic', 'Summarise it in five points', 'Test yourself on it'], category: 'learning' },
   ],
   builders_district: [
-    { key: 'blueprint', title: 'The Blueprint', description: 'Plan the week: place five quests on days in the Planner.', type: 'side', durationMin: 20, progressKind: 'check', category: 'career' },
-    { key: 'foundation', title: 'Lay a Foundation', description: 'Two hours on your biggest project, timed in Focus Mode.', type: 'side', durationMin: 120, progressKind: 'minutes', target: 120, category: 'career' },
+    { key: 'blueprint', title: 'The Blueprint', description: 'Plan the week: place five quests on days in the Planner.', type: 'weekly', durationMin: 20, progressKind: 'check', category: 'career' },
+    { key: 'foundation', title: 'Lay a Foundation', description: 'Two hours on your biggest project.', type: 'weekly', durationMin: 120, progressKind: 'minutes', target: 120, category: 'career' },
   ],
   creators_quarter: [
-    { key: 'make', title: 'Make Something', description: 'Finish one small creative piece and share it on the Adventure Log.', type: 'side', durationMin: 45, progressKind: 'check', category: 'creative' },
-    { key: 'studio', title: 'Studio Hours', description: 'Ninety minutes of creative work, timed in Focus Mode.', type: 'side', durationMin: 90, progressKind: 'minutes', target: 90, category: 'creative' },
+    { key: 'make', title: 'Make Something', description: 'Finish one small creative piece and share it on the Adventure Log.', type: 'weekly', durationMin: 45, progressKind: 'check', category: 'creative' },
+    { key: 'studio', title: 'Studio Hours', description: 'Ninety minutes of creative work.', type: 'weekly', durationMin: 90, progressKind: 'minutes', target: 90, category: 'creative' },
   ],
   training_grounds: [
-    { key: 'drills', title: 'Daily Drills', description: 'Train on four days this week and log each one.', type: 'side', durationMin: 80, progressKind: 'count', target: 4, unit: 'sessions', category: 'fitness' },
-    { key: 'endurance', title: 'Endurance Trial', description: 'One long session: an hour of training.', type: 'side', durationMin: 60, progressKind: 'check', category: 'fitness' },
+    { key: 'drills', title: 'Daily Drills', description: 'Train on four days this week and log each one.', type: 'weekly', durationMin: 80, progressKind: 'count', target: 4, unit: 'sessions', category: 'fitness' },
+    { key: 'endurance', title: 'Endurance Trial', description: 'One long session: an hour of training.', type: 'weekly', durationMin: 60, progressKind: 'check', category: 'fitness' },
   ],
   archive: [
-    { key: 'chronicle', title: "Chronicler's Duty", description: 'Look back on your week before the next one starts.', type: 'side', durationMin: 20, progressKind: 'milestones', milestones: ['What worked', 'What did not', 'What comes next'], category: 'wellness' },
-    { key: 'restore', title: 'Restore an Old Quest', description: 'Finish something you abandoned or kept putting off.', type: 'side', durationMin: 45, progressKind: 'check', category: 'general' },
+    { key: 'chronicle', title: "Chronicler's Duty", description: 'Look back on your week before the next one starts.', type: 'weekly', durationMin: 20, progressKind: 'milestones', milestones: ['What worked', 'What did not', 'What comes next'], category: 'wellness' },
+    { key: 'restore', title: 'Restore an Old Quest', description: 'Finish something you abandoned or kept putting off.', type: 'weekly', durationMin: 45, progressKind: 'check', category: 'general' },
   ],
   digital_workshop: [
-    { key: 'automate', title: 'Automate the Grind', description: 'Turn a goal into a dated plan with the AI Planner.', type: 'side', durationMin: 20, progressKind: 'check', category: 'career' },
-    { key: 'forge', title: 'Code Forge', description: 'Two focused hours building something digital.', type: 'side', durationMin: 120, progressKind: 'minutes', target: 120, category: 'learning' },
+    { key: 'automate', title: 'Automate the Grind', description: 'Turn a goal into a dated plan with the AI Planner.', type: 'weekly', durationMin: 20, progressKind: 'check', category: 'career' },
+    { key: 'forge', title: 'Code Forge', description: 'Two focused hours building something digital.', type: 'weekly', durationMin: 120, progressKind: 'minutes', target: 120, category: 'learning' },
   ],
   innovation_district: [
-    { key: 'prototype', title: 'Prototype', description: 'Two and a half hours of timed work on a new idea.', type: 'side', durationMin: 150, progressKind: 'minutes', target: 150, category: 'career' },
-    { key: 'pitch', title: 'The Pitch', description: 'Put your idea on one page.', type: 'side', durationMin: 60, progressKind: 'milestones', milestones: ['The problem', 'Your idea', 'The first step'], category: 'career' },
+    { key: 'prototype', title: 'Prototype', description: 'Two and a half hours of work on a new idea.', type: 'weekly', durationMin: 150, progressKind: 'minutes', target: 150, category: 'career' },
+    { key: 'pitch', title: 'The Pitch', description: 'Put your idea on one page.', type: 'weekly', durationMin: 60, progressKind: 'milestones', milestones: ['The problem', 'Your idea', 'The first step'], category: 'career' },
   ],
   elite_region: [
-    { key: 'trial', title: 'Elite Trial', description: 'Four hours of timed focus in a single week.', type: 'main', durationMin: 240, progressKind: 'minutes', target: 240, category: 'general' },
-    { key: 'mastery', title: 'Mark of Mastery', description: 'Finish a legendary quest from your board.', type: 'main', durationMin: 120, progressKind: 'check', category: 'general' },
+    { key: 'trial', title: 'Elite Trial', description: 'Four hours of focus in a single week.', type: 'monthly', durationMin: 240, progressKind: 'minutes', target: 240, category: 'general' },
+    { key: 'mastery', title: 'Mark of Mastery', description: 'Finish a legendary quest from your board.', type: 'monthly', durationMin: 120, progressKind: 'check', category: 'general' },
   ],
 }
 

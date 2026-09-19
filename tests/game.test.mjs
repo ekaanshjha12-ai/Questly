@@ -145,8 +145,8 @@ describe('progression', () => {
     const { body } = await alice.client('GET', '/api/quests')
     const byType = (t) => body.quests.filter((q) => q.type === t && q.origin === 'generated').length
     assert.equal(byType('daily'), 4)
-    assert.equal(byType('side'), 1)
-    assert.equal(byType('main'), 3)
+    assert.equal(byType('weekly'), 1)
+    assert.equal(byType('monthly'), 3)
     // Asking again adds nothing.
     const again = await alice.client('GET', '/api/quests')
     assert.equal(again.body.quests.length, body.quests.length)
@@ -184,18 +184,43 @@ describe('progression', () => {
 
   it('computes XP and rarity for player-written quests and refuses unfit input', async () => {
     const created = await alice.client('POST', '/api/quests', {
-      type: 'main', title: 'Master the Elements', category: 'learning', difficulty: 'normal', durationMin: 60, progressKind: 'minutes', xp: 99999,
+      type: 'monthly', title: 'Master the Elements', category: 'learning', difficulty: 'normal', durationMin: 60, progressKind: 'minutes', xp: 99999,
     })
     assert.equal(created.status, 201)
     assert.equal(created.body.quest.xp, 120)
     assert.equal(created.body.quest.rarity, 'rare')
-    const tooLong = await alice.client('POST', '/api/quests', { type: 'side', title: 'x'.repeat(200), durationMin: 30 })
+    const tooLong = await alice.client('POST', '/api/quests', { type: 'weekly', title: 'x'.repeat(200), durationMin: 30 })
     assert.equal(tooLong.status, 400)
     const badType = await alice.client('POST', '/api/quests', { type: 'legendary', title: 'Hack the planet', durationMin: 30 })
     assert.equal(badType.status, 400)
-    const focusOnly = await alice.client('POST', `/api/quests/${created.body.quest.id}/complete`)
-    assert.equal(focusOnly.status, 409)
-    assert.equal(focusOnly.body.code, 'needs_focus')
+    // No deadline given: a monthly quest is due at the end of its thirtieth day.
+    const days = (Date.parse(created.body.quest.deadlineAt) - Date.now()) / 86_400_000
+    assert.ok(days > 29 && days <= 30, `due in ${days} days`)
+  })
+
+  it('never makes the timer a requirement: a focus quest can be started, logged and completed by hand', async () => {
+    const quest = await planner.client('POST', '/api/quests', { type: 'weekly', title: 'Practise scales', durationMin: 60, progressKind: 'minutes' })
+    assert.equal(quest.status, 201)
+    const days = (Date.parse(quest.body.quest.deadlineAt) - Date.now()) / 86_400_000
+    assert.ok(days > 6 && days <= 7, `a weekly quest is due within the week, got ${days} days`)
+
+    const started = await planner.client('POST', `/api/quests/${quest.body.quest.id}/start`)
+    assert.equal(started.status, 200)
+    assert.equal(started.body.quest.status, 'in_progress')
+
+    const logged = await planner.client('POST', `/api/quests/${quest.body.quest.id}/progress`, { delta: 20 })
+    assert.equal(logged.status, 200)
+    assert.equal(logged.body.quest.progress.value, 20)
+    const step = logged.body.rewards.entries.find((e) => e.source === 'quest_step')
+    assert.equal(step.xp, Math.floor((quest.body.quest.xp * 20) / 60), 'paid in proportion')
+
+    const done = await planner.client('POST', `/api/quests/${quest.body.quest.id}/complete`)
+    assert.equal(done.status, 200)
+    assert.equal(done.body.quest.status, 'completed')
+    assert.equal(done.body.quest.xpPaid, quest.body.quest.xp)
+    const history = await planner.client('GET', '/api/progress/history?limit=20')
+    const paid = history.body.entries.filter((e) => e.label?.startsWith('Practise scales'))
+    assert.ok(paid.length >= 2 && paid.every((e) => !e.verified), 'nothing timed, so nothing counts as measured')
   })
 
   it('adds a generated plan as quests, all or none, at the server’s rates', async () => {
@@ -213,8 +238,8 @@ describe('progression', () => {
     assert.deepEqual(plan.body.quests.map((q) => [q.type, q.origin, q.durationMin, q.difficulty, q.xp]), [
       ['optional', 'plan', 20, 'easy', 15],
       ['optional', 'plan', 20, 'easy', 15],
-      ['side', 'plan', 60, 'normal', 90],
-      ['main', 'plan', 90, 'hard', 225],
+      ['weekly', 'plan', 60, 'normal', 90],
+      ['monthly', 'plan', 90, 'hard', 225],
     ])
     // Their own quests: editable and deletable before they pay anything.
     const renamed = await planner.client('PATCH', `/api/quests/${plan.body.quests[0].id}`, { title: 'Buy two lab notebooks' })
@@ -262,7 +287,7 @@ describe('progression', () => {
 
   it('pays count quests as they grow and milestone quests step by step', async () => {
     const count = await alice.client('POST', '/api/quests', {
-      type: 'side', title: 'Run 100 km', durationMin: 120, progressKind: 'count', target: 100, unit: 'km',
+      type: 'weekly', title: 'Run 100 km', durationMin: 120, progressKind: 'count', target: 100, unit: 'km',
     })
     const logged = await alice.client('POST', `/api/quests/${count.body.quest.id}/progress`, { delta: 40 })
     assert.equal(logged.status, 200)
@@ -272,7 +297,7 @@ describe('progression', () => {
     assert.equal(tooMuch.status, 400)
 
     const steps = await alice.client('POST', '/api/quests', {
-      type: 'main', title: 'Launch MVP', durationMin: 240, progressKind: 'milestones', milestones: ['Landing page', 'Signup', 'Payments'],
+      type: 'monthly', title: 'Launch MVP', durationMin: 240, progressKind: 'milestones', milestones: ['Landing page', 'Signup', 'Payments'],
     })
     const first = await alice.client('POST', `/api/quests/${steps.body.quest.id}/milestones/0`, { done: true })
     assert.equal(first.status, 200)
@@ -283,7 +308,7 @@ describe('progression', () => {
 
   it('times focus on the server and completes a linked quest', async () => {
     const quest = await alice.client('POST', '/api/quests', {
-      type: 'main', title: 'Deep chemistry block', durationMin: 25, progressKind: 'minutes',
+      type: 'monthly', title: 'Deep chemistry block', durationMin: 25, progressKind: 'minutes',
     })
     const started = await alice.client('POST', '/api/focus', { kind: 'timer', targetMinutes: 25, questId: quest.body.quest.id })
     assert.equal(started.status, 201)

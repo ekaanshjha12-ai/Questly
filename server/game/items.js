@@ -37,7 +37,7 @@ export const ITEMS = [
   { id: 'plain_tunic', name: 'Plain Tunic', slot: 'clothing', rarity: 'common', description: 'Every legend starts in one.', unlock: { type: 'starter' } },
   { id: 'ranger_jacket', name: 'Ranger Jacket', slot: 'clothing', rarity: 'rare', description: 'Many pockets, all of them useful.', unlock: purchase(300, 6) },
   { id: 'scholar_robe', name: 'Scholar’s Robe', slot: 'clothing', rarity: 'rare', description: 'Ink stains are a mark of honour.', unlock: level(8) },
-  { id: 'forge_apron', name: 'Forge Apron', slot: 'clothing', rarity: 'rare', description: 'Scorched at the hem from a finished main quest.', unlock: achievement('monthly_complete') },
+  { id: 'forge_apron', name: 'Forge Apron', slot: 'clothing', rarity: 'rare', description: 'Scorched at the hem from a finished monthly quest.', unlock: achievement('monthly_complete') },
   { id: 'architect_hoodie', name: 'Architect Hoodie', slot: 'clothing', rarity: 'epic', description: 'Worn by people who plan, then build.', unlock: achievement('focus_10') },
   { id: 'duelist_coat', name: 'Duelist’s Coat', slot: 'clothing', rarity: 'epic', description: 'Tailored for the arena.', unlock: achievement('duel_5') },
   { id: 'sage_vestments', name: 'Sage Vestments', slot: 'clothing', rarity: 'legendary', description: 'Quiet authority, earned over thirty levels.', unlock: level(30) },

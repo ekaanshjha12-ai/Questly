@@ -105,6 +105,10 @@ export function createGameSchema(db) {
   db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_quests_gen ON quests(user_id, gen_key) WHERE gen_key IS NOT NULL')
   db.run('CREATE INDEX IF NOT EXISTS idx_quests_user_status ON quests(user_id, status)')
   db.run('CREATE INDEX IF NOT EXISTS idx_quests_user_period ON quests(user_id, period_key)')
+  // Main and side quests became monthly and weekly quests: the old names
+  // said nothing about when a quest was due.
+  db.run("UPDATE quests SET type = 'monthly' WHERE type = 'main'")
+  db.run("UPDATE quests SET type = 'weekly' WHERE type = 'side'")
 
   /**
    * Focus sessions, timed by the server. The client shows a clock; these

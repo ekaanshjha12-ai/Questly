@@ -161,7 +161,7 @@ export default function ChallengeRoom({
                   body={
                     challenge.status === 'active'
                       ? challenge.mode === 'focus'
-                        ? `It has started. You and ${them.name} have ${challenge.durationDays} days — focus ${challenge.dailyMinutes} minutes a day in Focus Mode.`
+                        ? `It has started. You and ${them.name} have ${challenge.durationDays} days — focus ${challenge.dailyMinutes} minutes a day, timed with the Timer.`
                         : `It has started. You and ${them.name} have ${challenge.durationDays} days — check in each day you do it.`
                       : `It starts ${formatWhen(challenge.startsAt)}. You can already chat with ${them.name}.`
                   }
@@ -584,10 +584,10 @@ function ProgressView({
           ) : (
             <button
               type="button"
-              onClick={() => navigate('/focus')}
+              onClick={() => navigate('/timer')}
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-gold-500 to-ember-500 py-2.5 text-xs font-bold uppercase tracking-wider text-onAccent"
             >
-              <Play className="h-3.5 w-3.5" /> Enter Focus Mode — {target - todayValue} min to go
+              <Play className="h-3.5 w-3.5" /> Start the timer — {target - todayValue} min to go
             </button>
           )}
         </div>

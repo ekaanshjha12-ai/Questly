@@ -249,7 +249,7 @@ function WayIn({ club, onChanged }: { club: ClubDetail; onChanged: (club: ClubDe
       </ul>
       {status === 'trial' ? (
         <>
-          <p className="mt-3 text-[11px] text-slate-500">Only what you do after starting counts. Focus in Focus Mode, finish quests — progress updates here.</p>
+          <p className="mt-3 text-[11px] text-slate-500">Only what you do after starting counts. Time your focus with the Timer, finish quests — progress updates here.</p>
           <div className="mt-3 flex gap-2">
             <Button block loading={busy} disabled={!allMet || tooLow} onClick={() => void run(() => clubApi.completeTrials(club.slug), `Welcome to ${club.name}`)}>
               {allMet ? 'Complete trials and join' : 'Trials in progress'}
@@ -431,8 +431,8 @@ function ClubChallenges({ club }: { club: ClubDetail }) {
                     </Button>
                   )}
                   {c.mine?.status === 'joined' && c.kind === 'focus_minutes' && (
-                    <Button size="sm" icon={Play} variant="secondary" onClick={() => navigate('/focus')}>
-                      Focus now
+                    <Button size="sm" icon={Play} variant="secondary" onClick={() => navigate('/timer')}>
+                      Start the timer
                     </Button>
                   )}
                 </div>

@@ -56,11 +56,11 @@ describe('one scale', () => {
 
   it('gives the same level and reward to quests of the same size', () => {
     assert.deepEqual([20, 21, 60, 61, 150, 151].map(difficultyFor), ['easy', 'normal', 'normal', 'hard', 'hard', 'heroic'])
-    assert.equal(questXp({ type: 'main', durationMin: 60 }), 120)
-    assert.equal(questXp({ type: 'side', durationMin: 90 }), 170)
+    assert.equal(questXp({ type: 'monthly', durationMin: 60 }), 120)
+    assert.equal(questXp({ type: 'weekly', durationMin: 90 }), 170)
     assert.equal(rarityFor(questXp({ type: 'daily', durationMin: 20 })), 'common')
     // Longer is always worth more, whatever the type.
-    for (const type of ['main', 'side', 'daily', 'optional']) {
+    for (const type of ['monthly', 'weekly', 'daily', 'optional']) {
       const paid = [15, 25, 45, 60, 90, 120, 180, 240].map((durationMin) => questXp({ type, durationMin }))
       assert.deepEqual([...paid].sort((a, b) => a - b), paid, `${type} pays more for longer`)
     }
@@ -87,10 +87,10 @@ describe('quests on the board', () => {
   it('puts every quest on the board on that one scale, whoever wrote it', async () => {
     assert.equal((await ada.client('PUT', '/api/state', { state: stateWith(GOALS) })).status, 200)
     const written = await ada.client('POST', '/api/quests', {
-      type: 'side', title: 'Sort out the garage', durationMin: 15, difficulty: 'heroic', xp: 9999,
+      type: 'weekly', title: 'Sort out the garage', durationMin: 15, difficulty: 'heroic', xp: 9999,
     })
     assert.equal(written.body.quest.difficulty, 'easy', 'fifteen minutes is Easy, whatever the request said')
-    assert.equal(written.body.quest.xp, questXp({ type: 'side', durationMin: 15 }))
+    assert.equal(written.body.quest.xp, questXp({ type: 'weekly', durationMin: 15 }))
 
     const planned = await ada.client('POST', '/api/quests/plan', {
       items: [
@@ -112,7 +112,7 @@ describe('quests on the board', () => {
   })
 
   it('keeps a quest already under way on the terms it started with', async () => {
-    const quest = await ada.client('POST', '/api/quests', { type: 'main', title: 'Build the shed', durationMin: 60 })
+    const quest = await ada.client('POST', '/api/quests', { type: 'monthly', title: 'Build the shed', durationMin: 60 })
     const id = quest.body.quest.id
     assert.equal((await ada.client('POST', `/api/quests/${id}/start`)).status, 200)
     const renamed = await ada.client('PATCH', `/api/quests/${id}`, { title: 'Build the bigger shed' })

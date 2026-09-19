@@ -16,7 +16,7 @@ export const ACHIEVEMENTS = [
   { id: 'quests_10', title: 'Quest Runner', description: 'Complete 10 quests.', icon: 'map', xp: 50, test: (s) => s.questsCompleted >= 10 },
   { id: 'quests_50', title: 'Quest Master', description: 'Complete 50 quests.', icon: 'trophy', xp: 150, test: (s) => s.questsCompleted >= 50 },
   { id: 'quests_100', title: 'Legendary Adventurer', description: 'Complete 100 quests.', icon: 'crown', xp: 300, test: (s) => s.questsCompleted >= 100 },
-  { id: 'monthly_complete', title: 'Boss Slayer', description: 'Complete a main quest.', icon: 'dragon', xp: 50, test: (s) => s.mainCompleted >= 1 },
+  { id: 'monthly_complete', title: 'Boss Slayer', description: 'Complete a monthly quest.', icon: 'dragon', xp: 50, test: (s) => s.monthlyCompleted >= 1 },
   { id: 'legendary_quest', title: 'Legend in the Making', description: 'Complete a legendary quest.', icon: 'elixir', xp: 100, test: (s) => s.legendaryCompleted >= 1 },
   { id: 'streak_3', title: 'Warming Up', description: 'Reach a 3-day streak.', icon: 'flame', xp: 25, test: (s) => s.streakLongest >= 3 },
   { id: 'streak_7', title: 'On Fire', description: 'Reach a 7-day streak.', icon: 'flame', xp: 75, test: (s) => s.streakLongest >= 7 },

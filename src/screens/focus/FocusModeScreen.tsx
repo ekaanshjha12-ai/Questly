@@ -1,51 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { m as motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, Headphones, ListChecks, Pause, Play, Plus, Square, Timer, Watch, X } from 'lucide-react'
-import type { Goal, PlanItem } from '../../types'
+import { Check, Headphones, Pause, Play, Square } from 'lucide-react'
+import type { PlanItem } from '../../types'
 import type { FocusSessionView, GameQuest, Look } from '../../lib/api'
 import { useGame, type FinishedFocus } from '../../game/GameProvider'
 import { useRouter } from '../../app/router'
 import Button from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/Bars'
 import { ConfirmDialog } from '../../components/ui/Sheet'
+import { LoadingState } from '../../components/ui/States'
 import { messageOf, useToast } from '../../components/ui/Toast'
-import { Parchment } from '../../components/ui/Panel'
 import HeroSprite from '../../components/art/HeroSprite'
 import { formatClock } from '../../lib/time'
-import { formatMinutes, isFocusQuest } from '../../lib/questFormat'
+import { focusXp } from '../../lib/questFormat'
 import { putShareDraft } from '../../lib/social'
 import VictoryScreen from './VictoryScreen'
 
-const PRESETS = [15, 25, 45, 60, 90, 120]
-/** Quests listed before "Show more". */
-const SHORT_LIST = 4
 /** Server grace for "completed" is two seconds; finish a little after zero. */
 const AUTO_FINISH_MS = 2500
 
-/** Mirrors the server: a minute of focus is an XP, from five minutes, to 120. */
-function focusXp(ms: number) {
-  if (ms < 5 * 60_000) return 0
-  return Math.min(120, Math.floor(ms / 60_000))
-}
-
 /**
- * Focus Mode.
+ * Focus Mode: a running timer or stopwatch, full screen.
  *
- * The clock on screen is only a display: the session is started, paused and
- * finished on the server, and what it pays is worked out there from the
- * server's own timestamps. The display follows the server's clock too, so a
- * device clock that is off does not make the timer lie.
+ * Sessions are set up in the Timer; this screen only runs them. The clock on
+ * screen is only a display: the session is started, paused and finished on the
+ * server, and what it pays is worked out there from the server's own
+ * timestamps. The display follows the server's clock too, so a device clock
+ * that is off does not make the timer lie.
  */
-export default function FocusModeScreen({ goals, nowPlaying }: { goals: Goal[]; nowPlaying: string | null }) {
-  const { snapshot, startFocus, pauseFocus, resumeFocus, finishFocus, abandonFocus, updateFocusPlan, celebrate } = useGame()
+export default function FocusModeScreen({ nowPlaying }: { nowPlaying: string | null }) {
+  const { snapshot, pauseFocus, resumeFocus, finishFocus, abandonFocus, updateFocusPlan, celebrate } = useGame()
   const { search, navigate, back } = useRouter()
   const toast = useToast()
   const session = snapshot?.focus ?? null
   const [finished, setFinished] = useState<FinishedFocus | null>(null)
+  // Set while this screen ends the session itself, so the result is shown
+  // rather than the Timer the moment the session closes.
+  const leaving = useRef(false)
 
   const quests = snapshot?.quests ?? []
   const questId = session?.questId ?? search.get('quest')
   const quest = quests.find((q) => q.id === questId) ?? null
+
+  // Nothing running: sessions are set up in the Timer.
+  const idle = Boolean(snapshot) && !session && !finished
+  useEffect(() => {
+    if (idle && !leaving.current) navigate(`/timer${questId ? `?quest=${encodeURIComponent(questId)}` : ''}`, { replace: true })
+  }, [idle, questId, navigate])
 
   if (finished) {
     return (
@@ -54,7 +55,7 @@ export default function FocusModeScreen({ goals, nowPlaying }: { goals: Goal[]; 
         onContinue={() => {
           celebrate(finished.rewards, { includeXp: false })
           setFinished(null)
-          navigate('/', { replace: true })
+          back('/timer')
         }}
         onShare={() => {
           celebrate(finished.rewards, { includeXp: false })
@@ -80,302 +81,38 @@ export default function FocusModeScreen({ goals, nowPlaying }: { goals: Goal[]; 
     )
   }
 
-  if (session) {
-    return (
-      <RunningFocus
-        session={session}
-        quest={quest}
-        look={snapshot?.look ?? null}
-        nowPlaying={nowPlaying}
-        onPause={() => pauseFocus().catch((err) => toast.error('Could not pause', messageOf(err)))}
-        onResume={() => resumeFocus().catch((err) => toast.error('Could not resume', messageOf(err)))}
-        onPlan={(plan) => updateFocusPlan(plan).catch((err) => toast.error('Could not update the plan', messageOf(err)))}
-        onFinish={async () => {
-          try {
-            setFinished(await finishFocus())
-          } catch (err) {
-            toast.error('Could not finish the session', messageOf(err))
-          }
-        }}
-        onAbandon={async () => {
-          try {
-            await abandonFocus()
-            toast.show({ title: 'Session abandoned', body: 'No XP was recorded for it.' })
-            back('/')
-          } catch (err) {
-            toast.error('Could not abandon the session', messageOf(err))
-          }
-        }}
-      />
-    )
-  }
+  if (!session) return idle ? null : <div className="mx-auto max-w-xl px-5 safe-header"><LoadingState lines={2} label="Opening Focus Mode" /></div>
 
   return (
-    <FocusSetup
-      quests={quests.filter(isFocusQuest)}
-      initialQuest={quest && isFocusQuest(quest) ? quest : null}
-      goals={goals.filter((g) => !g.archived)}
+    <RunningFocus
+      session={session}
+      quest={quest}
+      look={snapshot?.look ?? null}
       nowPlaying={nowPlaying}
-      onBack={() => back('/')}
-      onStart={async (input) => {
+      onPause={() => pauseFocus().catch((err) => toast.error('Could not pause', messageOf(err)))}
+      onResume={() => resumeFocus().catch((err) => toast.error('Could not resume', messageOf(err)))}
+      onPlan={(plan) => updateFocusPlan(plan).catch((err) => toast.error('Could not update the plan', messageOf(err)))}
+      onFinish={async () => {
+        leaving.current = true
         try {
-          await startFocus(input)
+          setFinished(await finishFocus())
         } catch (err) {
-          toast.error('Could not start focusing', messageOf(err))
+          leaving.current = false
+          toast.error('Could not finish the session', messageOf(err))
+        }
+      }}
+      onAbandon={async () => {
+        leaving.current = true
+        try {
+          await abandonFocus()
+          toast.show({ title: 'Session abandoned', body: 'No XP was recorded for it.' })
+          back('/timer')
+        } catch (err) {
+          leaving.current = false
+          toast.error('Could not abandon the session', messageOf(err))
         }
       }}
     />
-  )
-}
-
-/* --- setting up ------------------------------------------------------------ */
-
-function FocusSetup({
-  quests,
-  initialQuest,
-  goals,
-  nowPlaying,
-  onBack,
-  onStart,
-}: {
-  quests: GameQuest[]
-  initialQuest: GameQuest | null
-  goals: Goal[]
-  nowPlaying: string | null
-  onBack: () => void
-  onStart: (input: { kind: 'timer' | 'stopwatch'; targetMinutes?: number; label?: string; questId?: string | null; goalId?: string | null; plan?: PlanItem[] }) => Promise<void>
-}) {
-  const { navigate } = useRouter()
-  const [questId, setQuestId] = useState<string | null>(initialQuest?.id ?? null)
-  const selected = quests.find((q) => q.id === questId) ?? null
-  const suggested = (q: GameQuest | null) => {
-    if (!q) return 25
-    if (q.progress.kind === 'minutes') return Math.min(240, Math.max(5, q.progress.target - q.progress.value))
-    return Math.min(240, Math.max(5, q.durationMin))
-  }
-  const [minutes, setMinutes] = useState(() => suggested(initialQuest))
-  const [kind, setKind] = useState<'timer' | 'stopwatch'>('timer')
-  const [label, setLabel] = useState('')
-  const [goalId, setGoalId] = useState('')
-  const [plan, setPlan] = useState<PlanItem[]>([])
-  const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
-  // A long board would push the rest of the setup off the screen; the first
-  // few are shown, plus the chosen one wherever it sits.
-  const [showAll, setShowAll] = useState(false)
-  const shown = showAll ? quests : quests.filter((q, i) => i < SHORT_LIST || q.id === questId)
-  const hidden = quests.length - shown.length
-
-  useEffect(() => {
-    setMinutes(suggested(selected))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questId])
-
-  const focusReward = kind === 'timer' ? focusXp(minutes * 60_000) : 0
-  const completesQuest =
-    selected && kind === 'timer' && (selected.progress.kind === 'minutes' ? minutes >= selected.progress.target - selected.progress.value : minutes >= Math.floor(selected.durationMin * 0.9))
-
-  return (
-    <div className="mx-auto max-w-2xl px-4 safe-header">
-      <div className="mb-5 flex items-center gap-3 lg:pt-8">
-        <button type="button" onClick={onBack} aria-label="Back" className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-700 bg-ink-900 text-slate-300 hover:text-slate-100">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <h1 className="page-title">Focus Mode</h1>
-          <p className="text-[13px] text-slate-400">Choose your quest, set the block, begin.</p>
-        </div>
-      </div>
-
-      <section className="mb-6">
-        <h2 className="eyebrow mb-2.5">Quest</h2>
-        <div className="space-y-2">
-          {shown.map((q) => (
-            <button
-              key={q.id}
-              type="button"
-              onClick={() => setQuestId(q.id)}
-              aria-pressed={q.id === questId}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
-                q.id === questId ? 'border-gold-500/60 bg-gold-500/10' : 'border-ink-700 bg-ink-900 hover:border-ink-500'
-              }`}
-            >
-              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${q.id === questId ? 'border-gold-400 bg-gold-500 text-onAccent' : 'border-ink-500'}`}>
-                {q.id === questId && <Check className="h-3 w-3" strokeWidth={3} />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-slate-100">{q.title}</span>
-                <span className="text-[11px] text-slate-500">
-                  {q.progress.kind === 'minutes' ? `${q.progress.value} / ${q.progress.target} min focused` : formatMinutes(q.durationMin)} · +{q.xp} XP
-                </span>
-              </span>
-            </button>
-          ))}
-          {hidden > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-dashed border-ink-600 text-xs font-semibold text-slate-400 hover:border-ink-500 hover:text-slate-200"
-            >
-              Show {hidden} more quest{hidden === 1 ? '' : 's'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setQuestId(null)}
-            aria-pressed={questId === null}
-            className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
-              questId === null ? 'border-gold-500/60 bg-gold-500/10' : 'border-ink-700 bg-ink-900 hover:border-ink-500'
-            }`}
-          >
-            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${questId === null ? 'border-gold-400 bg-gold-500 text-onAccent' : 'border-ink-500'}`}>
-              {questId === null && <Check className="h-3 w-3" strokeWidth={3} />}
-            </span>
-            <span className="text-sm font-semibold text-slate-100">Free focus — no quest</span>
-          </button>
-        </div>
-        {questId === null && (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <input className="field" placeholder="What are you working on?" maxLength={80} value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Session label" />
-            {goals.length > 0 && (
-              <select className="field" value={goalId} onChange={(e) => setGoalId(e.target.value)} aria-label="Toward goal">
-                <option value="">No goal</option>
-                {goals.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.title}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="mb-6">
-        <div className="mb-2.5 flex items-center justify-between">
-          <h2 className="eyebrow">Focus block</h2>
-          <div role="radiogroup" aria-label="Clock" className="flex gap-1 rounded-lg border border-ink-700 bg-ink-900 p-0.5">
-            {(['timer', 'stopwatch'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                role="radio"
-                aria-checked={kind === k}
-                onClick={() => setKind(k)}
-                className={`flex min-h-[32px] items-center gap-1.5 rounded-md px-2.5 text-[11px] font-bold uppercase tracking-[0.08em] ${kind === k ? 'bg-gold-500/15 text-gold-300' : 'text-slate-400'}`}
-              >
-                {k === 'timer' ? <Timer className="h-3.5 w-3.5" /> : <Watch className="h-3.5 w-3.5" />}
-                {k}
-              </button>
-            ))}
-          </div>
-        </div>
-        {kind === 'timer' ? (
-          <>
-            <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMinutes(m)}
-                  className={`min-h-[40px] min-w-[60px] rounded-xl border px-3 text-sm font-semibold ${minutes === m ? 'border-gold-500/60 bg-gold-500/15 text-gold-300' : 'border-ink-700 bg-ink-900 text-slate-300'}`}
-                >
-                  {formatMinutes(m)}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <input
-                type="range"
-                min={5}
-                max={240}
-                step={5}
-                value={minutes}
-                onChange={(e) => setMinutes(Number(e.target.value))}
-                className="h-2 flex-1 accent-[rgb(var(--gold-500))]"
-                aria-label="Minutes"
-              />
-              <span className="w-16 text-right font-display text-lg font-bold tabular-nums text-slate-100">{minutes}m</span>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-slate-400">Counts up until you finish — up to four hours. One XP a focused minute, from five minutes.</p>
-        )}
-      </section>
-
-      <section className="mb-6">
-        <h2 className="eyebrow mb-2.5 flex items-center gap-2">
-          <ListChecks className="h-3.5 w-3.5" /> Plan <span className="normal-case tracking-normal text-slate-500">(optional)</span>
-        </h2>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const text = draft.trim()
-            if (!text || plan.length >= 12) return
-            setPlan((p) => [...p, { id: crypto.randomUUID(), text: text.slice(0, 120), done: false }])
-            setDraft('')
-          }}
-        >
-          <input className="field" placeholder="First, outline the chapter…" value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Add a plan step" />
-          <Button type="submit" variant="secondary" icon={Plus} aria-label="Add step" />
-        </form>
-        {plan.length > 0 && (
-          <ul className="mt-2 space-y-1">
-            {plan.map((item) => (
-              <li key={item.id} className="flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm text-slate-300">
-                <span className="flex-1">{item.text}</span>
-                <button type="button" onClick={() => setPlan((p) => p.filter((x) => x.id !== item.id))} aria-label={`Remove ${item.text}`} className="text-slate-500 hover:text-slate-200">
-                  <X className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <button
-        type="button"
-        onClick={() => navigate('/sounds')}
-        className="mb-6 flex w-full items-center gap-3 rounded-xl border border-ink-700 bg-ink-900 px-3.5 py-3 text-left hover:border-ink-500"
-      >
-        <Headphones className="h-5 w-5 text-gold-400" />
-        <span className="min-w-0 flex-1 text-sm text-slate-300">{nowPlaying ? `Ambient: ${nowPlaying}` : 'Add ambient sound or music'}</span>
-      </button>
-
-      {/* The reward and the start stay in reach however long the setup gets. */}
-      <div className="sticky bottom-0 -mx-4 border-t border-ink-800 bg-ink-950/95 px-4 pb-[max(0.875rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <Parchment className="mb-2.5 flex items-center justify-between gap-2 px-3.5 py-2">
-          <p className="min-w-0 font-display text-base font-bold text-parch-ink">
-            <span className="mr-1.5 align-middle text-[10px] font-bold uppercase tracking-[0.14em] text-parch-soft">On completion</span>
-            {kind === 'timer' ? `+${focusReward} XP` : '+1 XP a minute'}
-            {completesQuest && selected ? <span className="text-[#a8741a]"> · +{selected.xp - selected.xpPaid} quest</span> : null}
-          </p>
-          {completesQuest && <span className="tag shrink-0 border-[#1f7a52]/40 bg-[#1f7a52]/10 text-[#1c6a47]">Completes quest</span>}
-        </Parchment>
-
-        <Button
-          block
-          icon={Play}
-          loading={busy}
-          className="!min-h-[52px] text-[15px]"
-          onClick={async () => {
-            setBusy(true)
-            await onStart({
-              kind,
-              targetMinutes: kind === 'timer' ? minutes : undefined,
-              label: questId ? undefined : label.trim() || undefined,
-              questId,
-              goalId: questId ? null : goalId || null,
-              plan,
-            })
-            setBusy(false)
-          }}
-        >
-          Begin focus
-        </Button>
-      </div>
-    </div>
   )
 }
 

@@ -10,22 +10,32 @@ import { ChoiceChips, Field, Select, TextArea, TextInput } from '../../component
 import { RarityTag } from '../../components/ui/Tag'
 import { useToast } from '../../components/ui/Toast'
 
-type PlayerType = 'main' | 'side' | 'optional'
+type PlayerType = 'monthly' | 'weekly' | 'optional'
 
 const TYPES: { id: PlayerType; label: string; hint: string }[] = [
-  { id: 'main', label: 'Main quest', hint: 'Your big objective. Pays the most per minute.' },
-  { id: 'side', label: 'Side quest', hint: 'A worthwhile task alongside the main path.' },
+  { id: 'monthly', label: 'Monthly quest', hint: 'A milestone for the month. Pays the most per minute.' },
+  { id: 'weekly', label: 'Weekly quest', hint: 'Something worth finishing this week.' },
   { id: 'optional', label: 'Optional', hint: 'Small things. Quick to finish, small reward.' },
 ]
 
 const KINDS: { id: ProgressKind; label: string; hint: string }[] = [
-  { id: 'minutes', label: 'Focus time', hint: 'Fills with Focus Mode sessions. Measured, so never capped.' },
+  { id: 'minutes', label: 'Focus time', hint: 'Fill it with the timer, or log the minutes yourself. Timed minutes are never capped.' },
   { id: 'check', label: 'One task', hint: 'Tick it when it is done.' },
   { id: 'count', label: 'Count', hint: 'Log units as you go: pages, km, problems.' },
   { id: 'milestones', label: 'Milestones', hint: 'A list of steps, paid as you tick them.' },
 ]
 
 const DURATIONS = [15, 25, 45, 60, 90, 120, 180, 240]
+
+/** Days a new weekly or monthly quest has when no deadline is picked — the server's rule. */
+const CADENCE_DAYS: Partial<Record<PlayerType, number>> = { weekly: 7, monthly: 30 }
+
+/** The last day of a run of `days` days starting today, e.g. "Sun 27 Sep". */
+function lastDayOf(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days - 1)
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return ''
@@ -52,7 +62,7 @@ export default function QuestComposer({
 }) {
   const { createQuest, updateQuest } = useGame()
   const toast = useToast()
-  const [type, setType] = useState<PlayerType>('main')
+  const [type, setType] = useState<PlayerType>('weekly')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<GoalCategory>('general')
@@ -72,7 +82,7 @@ export default function QuestComposer({
     if (!open) return
     setErrors({})
     if (editing) {
-      setType(editing.type === 'main' || editing.type === 'side' ? editing.type : 'optional')
+      setType(editing.type === 'monthly' || editing.type === 'weekly' ? editing.type : 'optional')
       setTitle(editing.title)
       setDescription(editing.description ?? '')
       setCategory(editing.category)
@@ -84,7 +94,7 @@ export default function QuestComposer({
       setDeadline(toLocalInput(editing.deadlineAt))
       setGoalId(editing.goalId ?? '')
     } else {
-      setType('main')
+      setType('weekly')
       setTitle('')
       setDescription('')
       setCategory('general')
@@ -279,7 +289,15 @@ export default function QuestComposer({
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Deadline" hint="Optional. The quest expires if it is not done by then." error={errors.deadlineAt ?? errors.deadline}>
+          <Field
+            label="Deadline"
+            hint={
+              !editing && !deadline && CADENCE_DAYS[type]
+                ? `Leave it empty and it is due by the end of ${lastDayOf(CADENCE_DAYS[type] ?? 7)}.`
+                : 'Optional. The quest expires if it is not done by then.'
+            }
+            error={errors.deadlineAt ?? errors.deadline}
+          >
             {({ id, describedBy }) => (
               <div className="flex gap-2">
                 <TextInput id={id} aria-describedby={describedBy} type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, m as motion } from 'framer-motion'
-import { Brain, CalendarDays, History, Layers, ListTodo, Music, Plus, Scroll, Sparkles, Target, Map as MapIcon } from 'lucide-react'
+import { Brain, CalendarDays, History, Layers, ListTodo, Music, Plus, Scroll, Sparkles, Target, Timer, Map as MapIcon } from 'lucide-react'
 import type { GameQuest, QuestType } from '../../lib/api'
 import { game as gameApi } from '../../lib/api'
 import type { Goal } from '../../types'
@@ -10,21 +10,23 @@ import { PageHeader } from '../../app/AppShell'
 import Button from '../../components/ui/Button'
 import Tabs from '../../components/ui/Tabs'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States'
+import { messageOf, useToast } from '../../components/ui/Toast'
 import QuestContract from './QuestContract'
 import QuestSheet from './QuestSheet'
 import QuestComposer from './QuestComposer'
 
-type Filter = 'all' | 'main' | 'side' | 'daily' | 'optional'
+type Filter = 'all' | 'daily' | 'weekly' | 'monthly' | 'optional'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'main', label: 'Main' },
-  { id: 'side', label: 'Side' },
   { id: 'daily', label: 'Daily' },
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'monthly', label: 'Monthly' },
   { id: 'optional', label: 'Optional' },
 ]
 
 const TOOLS = [
+  { to: '/timer', label: 'Timer', icon: Timer },
   { to: '/world', label: 'World Map', icon: MapIcon },
   { to: '/planner', label: 'Planner', icon: CalendarDays },
   { to: '/goals', label: 'Goals', icon: Target },
@@ -39,7 +41,8 @@ const TOOLS = [
  * later, done — with the tools for planning around them one tap away.
  */
 export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
-  const { snapshot, status, error, refresh, refreshQuests } = useGame()
+  const { snapshot, status, error, refresh, refreshQuests, startQuest, completeQuest } = useGame()
+  const toast = useToast()
   const { navigate, path } = useRouter()
   const [filter, setFilter] = useState<Filter>('all')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -67,8 +70,26 @@ export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
   const done = filtered.filter((q) => q.status === 'completed')
   const open = quests.find((q) => q.id === openId) ?? null
 
-  function startFocus(quest: GameQuest) {
-    navigate(`/focus?quest=${encodeURIComponent(quest.id)}`)
+  /** Starting only marks the quest under way; the timer is a separate, optional step. */
+  async function start(quest: GameQuest) {
+    try {
+      await startQuest(quest.id)
+      toast.success('Quest started', 'Mark it complete when it is done. The timer is there if you want it.')
+    } catch (err) {
+      toast.error('Could not start the quest', messageOf(err))
+    }
+  }
+
+  async function complete(quest: GameQuest) {
+    try {
+      await completeQuest(quest.id)
+    } catch (err) {
+      toast.error('Could not complete the quest', messageOf(err))
+    }
+  }
+
+  function openTimer(quest: GameQuest) {
+    navigate(`/timer?quest=${encodeURIComponent(quest.id)}`)
   }
 
   function closeSheet() {
@@ -132,7 +153,7 @@ export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
                 {today.length ? (
                   <div className="grid gap-3 lg:grid-cols-2">
                     {today.map((q, i) => (
-                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={startFocus} />
+                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={start} onComplete={complete} onTimer={openTimer} />
                     ))}
                   </div>
                 ) : (
@@ -164,7 +185,7 @@ export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
                 <Group title="Upcoming" count={later.length}>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {later.map((q, i) => (
-                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={startFocus} />
+                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={start} onComplete={complete} onTimer={openTimer} />
                     ))}
                   </div>
                 </Group>
@@ -174,7 +195,7 @@ export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
                 <Group title="Completed today" count={done.length}>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {done.map((q, i) => (
-                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={startFocus} />
+                      <QuestContract key={q.id} quest={q} index={i} onOpen={(x) => setOpenId(x.id)} onStart={start} onComplete={complete} onTimer={openTimer} />
                     ))}
                   </div>
                 </Group>
@@ -187,9 +208,9 @@ export default function QuestBoardScreen({ goals }: { goals: Goal[] }) {
       <QuestSheet
         quest={open}
         onClose={closeSheet}
-        onStartFocus={(q) => {
+        onOpenTimer={(q) => {
           setOpenId(null)
-          startFocus(q)
+          openTimer(q)
         }}
         onEdit={(q) => {
           setOpenId(null)

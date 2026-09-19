@@ -54,7 +54,7 @@ const FILTERS: { id: BacklogFilter; label: string }[] = [
   { id: 'todo', label: 'Optional' },
 ]
 
-const TYPE_LABEL = { main: 'Main quest', side: 'Side quest', daily: 'Daily quest', club: 'Club quest', challenge: 'Challenge', optional: 'Optional' } as const
+const TYPE_LABEL = { monthly: 'Monthly quest', weekly: 'Weekly quest', daily: 'Daily quest', club: 'Club quest', challenge: 'Challenge', optional: 'Optional' } as const
 
 /**
  * The tasks still waiting for a place, as a searchable list that scrolls in a

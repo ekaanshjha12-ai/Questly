@@ -545,6 +545,16 @@ body::before {
     background: linear-gradient(180deg, rgb(52 43 30), rgb(34 28 19));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
   }
+  /* Its quieter partner, for a second action beside it. */
+  .btn-ink-outline {
+    @apply btn border;
+    color: rgb(43 34 22);
+    border-color: rgba(43, 34, 22, 0.4);
+    background: rgba(43, 34, 22, 0.04);
+  }
+  .btn-ink-outline:hover:not(:disabled) {
+    background: rgba(43, 34, 22, 0.1);
+  }
 
   /* Tags: quest types, statuses, counts. */
   .tag {

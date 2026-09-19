@@ -122,7 +122,7 @@ function achievementStats(userId, progress, readState) {
   return {
     questsCompleted: quest(''),
     questsVerified: count('SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND verified_at IS NOT NULL', [userId]),
-    mainCompleted: quest(" AND type = 'main'"),
+    monthlyCompleted: quest(" AND type = 'monthly'"),
     legendaryCompleted: quest(" AND rarity = 'legendary'"),
     focusSessions: count(
       "SELECT COUNT(*) AS n FROM focus_sessions WHERE user_id = ? AND status IN ('completed', 'ended') AND active_ms >= 60000",

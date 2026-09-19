@@ -44,7 +44,7 @@ describe('adventure log', () => {
         rewards.finish()
       })
       const quest = (id, userId, status) => db.db.run(
-        "INSERT INTO quests (id, user_id, type, origin, title, xp_reward, rarity, status, created_at, updated_at, completed_at, verified_by) VALUES (?, ?, 'side', 'user', 'Read three chapters', 60, 'rare', ?, ?, ?, ?, 'self')",
+        "INSERT INTO quests (id, user_id, type, origin, title, xp_reward, rarity, status, created_at, updated_at, completed_at, verified_by) VALUES (?, ?, 'weekly', 'user', 'Read three chapters', 60, 'rare', ?, ?, ?, ?, 'self')",
         [id, userId, status, now, now, status === 'completed' ? now : null],
       )
       quest('q-ana-done', ana, 'completed')

@@ -36,6 +36,7 @@ const Onboarding = lazy(() => import('./screens/onboarding/OnboardingScreen'))
 const AdminSetup = lazy(() => import('./components/AdminSetup'))
 const AdminConsole = lazy(() => import('./components/AdminConsole'))
 const FocusModeScreen = lazy(() => import('./screens/focus/FocusModeScreen'))
+const TimerScreen = lazy(() => import('./screens/focus/TimerScreen'))
 const SocialHome = lazy(() => import('./components/social/SocialHome'))
 const ChallengesScreen = lazy(() => import('./components/ChallengesScreen'))
 const Leaderboard = lazy(() => import('./components/Leaderboard'))
@@ -389,7 +390,8 @@ function Routes({
 
   if (path === '/') return <HomeScreen name={state.player.name} challenges={challengeFeed.challenges} />
   if (path === '/quests' || path === '/quests/new' || match('/quests/:id', path)) return <QuestBoardScreen goals={state.goals} />
-  if (path === '/focus') return <FocusModeScreen goals={state.goals} nowPlaying={nowPlaying} />
+  if (path === '/timer') return <TimerScreen goals={state.goals} nowPlaying={nowPlaying} />
+  if (path === '/focus') return <FocusModeScreen nowPlaying={nowPlaying} />
   if (path === '/notifications') return <ChronicleLogScreen />
   if (path === '/world') return <WorldMapScreen />
   if (path === '/clubs' || path === '/clubs/new') return <ClubsScreen />

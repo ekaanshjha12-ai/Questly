@@ -43,8 +43,8 @@ export function rarityBorder(rarity: Rarity): string {
 }
 
 export const QUEST_TYPE_LABEL: Record<QuestType, string> = {
-  main: 'Main quest',
-  side: 'Side quest',
+  monthly: 'Monthly quest',
+  weekly: 'Weekly quest',
   daily: 'Daily quest',
   club: 'Club quest',
   challenge: 'Challenge',
@@ -53,7 +53,7 @@ export const QUEST_TYPE_LABEL: Record<QuestType, string> = {
 
 export function QuestTypeTag({ type, onParchment = false }: { type: QuestType; onParchment?: boolean }) {
   if (onParchment) return <Tag tone="ink">{QUEST_TYPE_LABEL[type]}</Tag>
-  const tone: TagTone = type === 'main' ? 'gold' : type === 'challenge' ? 'danger' : type === 'club' ? 'arcane' : type === 'daily' ? 'info' : 'neutral'
+  const tone: TagTone = type === 'monthly' ? 'gold' : type === 'challenge' ? 'danger' : type === 'club' ? 'arcane' : type === 'daily' ? 'info' : 'neutral'
   return <Tag tone={tone}>{QUEST_TYPE_LABEL[type]}</Tag>
 }
 

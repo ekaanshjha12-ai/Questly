@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { db } from '../db.js'
 import { screenInput } from '../moderation.js'
 import { isFirst, track } from './analytics.js'
-import { dayKey, safeTimezone } from './clock.js'
+import { dayKey, endOfDays, safeTimezone } from './clock.js'
 import { conflict, invalid, notFound } from './errors.js'
 import { notify } from './notify.js'
 import { SELF_REPORTED_DAILY_XP, getProgressRow, paidToday, startRewards, transaction } from './rewards.js'
@@ -21,7 +21,8 @@ export { CADENCE_MINUTES, DIFFICULTIES, difficultyFor, estimateMinutes, questSca
  * how its progress is measured:
  *
  *   check       ticked when done. Self-reported.
- *   minutes     filled only by focus sessions the server timed.
+ *   minutes     filled by focus sessions the server timed, or logged by hand
+ *               (self-reported, like a count).
  *   count       logged in units (pages, km). Self-reported, paid as it grows.
  *   milestones  a list of steps. Self-reported, paid step by step.
  *
@@ -30,8 +31,8 @@ export { CADENCE_MINUTES, DIFFICULTIES, difficultyFor, estimateMinutes, questSca
  * step), so nothing pays twice.
  */
 
-export const QUEST_TYPES = ['main', 'side', 'daily', 'club', 'challenge', 'optional']
-export const PLAYER_TYPES = ['main', 'side', 'optional']
+export const QUEST_TYPES = ['monthly', 'weekly', 'daily', 'club', 'challenge', 'optional']
+export const PLAYER_TYPES = ['monthly', 'weekly', 'optional']
 export const PROGRESS_KINDS = ['check', 'minutes', 'count', 'milestones']
 const TERMINAL = new Set(['completed', 'failed', 'expired'])
 const OPEN = new Set(['active', 'in_progress'])
@@ -47,9 +48,12 @@ export const MAX_PLAN_QUESTS_PER_DAY = 80
 const PLAN_SHAPE = {
   todo: { type: 'optional', cadence: 'daily' },
   daily: { type: 'optional', cadence: 'daily' },
-  weekly: { type: 'side', cadence: 'weekly' },
-  monthly: { type: 'main', cadence: 'monthly' },
+  weekly: { type: 'weekly', cadence: 'weekly' },
+  monthly: { type: 'monthly', cadence: 'monthly' },
 }
+
+/** Days a weekly or monthly quest the player writes has, when they give it no deadline. */
+export const CADENCE_DAYS = { weekly: 7, monthly: 30 }
 
 /** Quests the player put on the board themselves, and so may edit or delete. */
 const OWN_ORIGINS = new Set(['user', 'legacy_todo', 'plan'])
@@ -79,7 +83,7 @@ function futureIso(value, { now, field, label, minLeadMs = 0 }) {
  */
 export function validateQuestInput(input, now = Date.now()) {
   const type = PLAYER_TYPES.includes(input?.type) ? input.type : null
-  if (!type) throw invalid('Choose Main, Side or Optional.', 'type')
+  if (!type) throw invalid('Choose Weekly, Monthly or Optional.', 'type')
   const title = cleanLine(input?.title, { min: 3, max: 80, label: 'The title', field: 'title' })
   const description = cleanLine(input?.description ?? '', { min: 0, max: 400, label: 'The description', field: 'description' }) || null
   const category = GOAL_CATEGORIES.includes(input?.category) ? input.category : 'general'
@@ -217,6 +221,12 @@ export function createQuest(userId, input) {
   const since = new Date(now - 86_400_000).toISOString()
   const recent = db.get("SELECT COUNT(*) AS n FROM quests WHERE user_id = ? AND origin = 'user' AND created_at > ?", [userId, since])?.n ?? 0
   if (recent >= MAX_CREATED_PER_DAY) throw conflict('That is a lot of new quests for one day. Try again tomorrow.', 'too_many_created')
+
+  // A weekly or monthly quest without a date of its own is due when its name says.
+  if (!value.deadlineAt && CADENCE_DAYS[value.type]) {
+    const from = value.startsAt ? new Date(value.startsAt) : new Date(now)
+    value.deadlineAt = endOfDays(CADENCE_DAYS[value.type], getProgressRow(userId)?.timezone, from)
+  }
 
   const id = insertQuest(userId, value, 'user', now)
   return questView(loadQuest(userId, id), { level: playerLevel(userId) })
@@ -460,21 +470,25 @@ export function finishQuest(userId, questId, via, { rewards: outer = null } = {}
   })
 }
 
+/**
+ * Completion the player reports. A focus-time quest can be finished this way
+ * too — the timer is never required — but what it pays is then self-reported.
+ */
 export function completeQuest(userId, questId) {
   const row = loadQuest(userId, questId)
-  if (row.progress_kind === 'minutes') {
-    throw conflict('This quest fills with focus time. Enter Focus Mode to complete it.', 'needs_focus')
-  }
   if (row.progress_kind === 'count') throw conflict(`Log your ${row.progress_unit ?? 'progress'} to complete this quest.`, 'needs_progress')
   if (row.progress_kind === 'milestones') throw conflict('Tick off its milestones to complete this quest.', 'needs_milestones')
   return finishQuest(userId, row.id, 'self')
 }
 
-/** Adds units to a count quest, paying in proportion as it grows. */
+/**
+ * Adds units to a count quest, or minutes worked without the timer to a
+ * focus-time quest, paying in proportion as it grows. Self-reported either way.
+ */
 export function logProgress(userId, questId, deltaInput) {
   return transaction(() => {
     const row = loadQuest(userId, questId)
-    if (row.progress_kind !== 'count') throw conflict('This quest is not measured in units.', 'wrong_kind')
+    if (row.progress_kind !== 'count' && row.progress_kind !== 'minutes') throw conflict('This quest is not measured in units.', 'wrong_kind')
     requireOpen(row, playerLevel(userId))
     const delta = Math.round(Number(deltaInput))
     const target = row.progress_target ?? 1
@@ -497,7 +511,7 @@ export function logProgress(userId, questId, deltaInput) {
       sourceId: `${row.id}:v${value}`,
       amount: Math.max(0, earnedSoFar - row.xp_paid),
       verified: false,
-      label: `${row.title} (${value}/${target} ${row.progress_unit ?? ''})`.trim(),
+      label: `${row.title} (${value}/${target} ${row.progress_kind === 'minutes' ? 'min' : row.progress_unit ?? ''})`.trim(),
     })
     const summary = rewards.finish()
     return { quest: questView(loadQuest(userId, row.id), { level: summary.progress.level }), rewards: summary }
@@ -663,8 +677,8 @@ export function featuredQuest(board) {
   const open = board.filter((q) => q.status === 'active' || q.status === 'in_progress')
   return (
     open.find((q) => q.pinned) ??
-    open.find((q) => q.type === 'main' && q.status === 'in_progress') ??
-    open.find((q) => q.type === 'main') ??
+    open.find((q) => q.type === 'monthly' && q.status === 'in_progress') ??
+    open.find((q) => q.type === 'monthly') ??
     open.find((q) => q.status === 'in_progress') ??
     [...open].sort((a, b) => b.xp - a.xp)[0] ??
     null

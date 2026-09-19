@@ -1201,7 +1201,7 @@ export function declineConversation(id: string) {
 /* --- the game: progress, quests, focus, inventory, Chronicle ------------------ */
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
-export type QuestType = 'main' | 'side' | 'daily' | 'club' | 'challenge' | 'optional'
+export type QuestType = 'monthly' | 'weekly' | 'daily' | 'club' | 'challenge' | 'optional'
 export type QuestStatus = 'locked' | 'upcoming' | 'active' | 'in_progress' | 'completed' | 'failed' | 'expired'
 export type ProgressKind = 'check' | 'minutes' | 'count' | 'milestones'
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'heroic'
@@ -1273,7 +1273,7 @@ export interface GameQuest {
 }
 
 export interface QuestInput {
-  type: 'main' | 'side' | 'optional'
+  type: 'monthly' | 'weekly' | 'optional'
   title: string
   description?: string
   category?: GoalCategory

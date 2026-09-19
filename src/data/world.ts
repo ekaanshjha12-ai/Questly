@@ -43,7 +43,7 @@ export const REGION_META: Record<RegionId, RegionMeta> = {
     name: 'Verdant Woods',
     tagline: 'Focus deeper',
     description: 'Ancient trees and quiet paths. Every minute of focus timed here counts toward quests, duels and events.',
-    destination: { to: '/focus', label: 'Enter Focus Mode' },
+    destination: { to: '/timer', label: 'Open the timer' },
     extra: { to: '/sounds', label: 'Ambient sounds' },
     accent: '#4ee39a',
     icon: Sparkles,

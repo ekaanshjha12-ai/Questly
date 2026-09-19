@@ -26,7 +26,7 @@ export interface NavItem {
 
 export function useNavItems({ socialBadge = 0, challengeBadge = 0 }: { socialBadge?: number; challengeBadge?: number }): NavItem[] {
   return [
-    { id: 'home', to: '/', label: 'Home', icon: House, match: (p) => p === '/' || p.startsWith('/focus') || p.startsWith('/notifications') || p.startsWith('/world') },
+    { id: 'home', to: '/', label: 'Home', icon: House, match: (p) => p === '/' || p.startsWith('/timer') || p.startsWith('/focus') || p.startsWith('/notifications') || p.startsWith('/world') },
     {
       id: 'quests',
       to: '/quests',
